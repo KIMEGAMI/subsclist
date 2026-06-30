@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireVerifiedUser } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
+import { isPremiumPlan } from "@/lib/plans";
 
 export const runtime = "nodejs";
 
@@ -78,6 +79,9 @@ const schema = {
 
 export async function POST(request: Request) {
   const user = await requireVerifiedUser();
+  if (!isPremiumPlan(user.plan)) {
+    return NextResponse.json({ message: "AI乗り換え診断はPremium限定です。" }, { status: 403 });
+  }
   if (!env.openaiApiKey) {
     return NextResponse.json({ message: "OPENAI_API_KEY が設定されていません。" }, { status: 500 });
   }

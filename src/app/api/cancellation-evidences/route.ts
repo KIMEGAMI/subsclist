@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isPremiumPlan } from "@/lib/plans";
 
 const schema = z.object({
   subscriptionId: z.string().min(1),
@@ -26,6 +27,7 @@ export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ message: "ログインしてください。" }, { status: 401 });
   if (!user.emailVerified) return NextResponse.json({ message: "メール認証が必要です。" }, { status: 403 });
+  if (!isPremiumPlan(user.plan)) return NextResponse.json({ message: "解約支援はPremium限定です。" }, { status: 403 });
 
   const parsed = schema.safeParse(await request.json().catch(() => ({})));
   if (!parsed.success) return NextResponse.json({ message: "入力内容を確認してください。" }, { status: 400 });

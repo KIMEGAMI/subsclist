@@ -98,7 +98,7 @@ export default function Home() {
           <Card className="border-fuchsia-300/40 bg-white text-slate-950">
             <h3 className="text-2xl font-bold">Premium</h3>
             <p className="mt-2 text-4xl font-black">480円/月</p>
-            <p className="mt-3 text-sm text-slate-600">登録無制限、CSV入出力、高度分析、AI提案、削減シミュレーション、解約支援。</p>
+            <p className="mt-3 text-sm text-slate-600">登録無制限、CSV入出力、CSV明細候補検出、高度分析、支払い累計、見直しレポート、AI診断、解約支援。</p>
           </Card>
         </div>
         <div className="mx-auto mt-8 flex max-w-7xl flex-wrap gap-4 text-sm font-bold text-slate-300">

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isPremiumPlan } from "@/lib/plans";
 
 const updateSchema = z.object({
   name: z.string().trim().min(1).max(100).optional(),
@@ -85,6 +86,13 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     cancellationMemo: z.string().max(1000).optional(),
   }).safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ message: "入力内容を確認してください。" }, { status: 400 });
+  const hasCancellationSupportUpdate =
+    parsed.data.cancellationStatus !== undefined ||
+    parsed.data.plannedCancelAt !== undefined ||
+    parsed.data.cancellationMemo !== undefined;
+  if (hasCancellationSupportUpdate && !isPremiumPlan(user.plan)) {
+    return NextResponse.json({ message: "解約支援はPremium限定です。" }, { status: 403 });
+  }
   await prisma.subscription.update({
     where: { id },
     data: {

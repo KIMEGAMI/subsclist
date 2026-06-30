@@ -192,18 +192,20 @@ export function PricingView() {
             <h2 className="text-2xl font-bold">Free</h2>
             <p className="mt-2 text-4xl font-black">0円</p>
             <ul className="mt-5 space-y-2 text-sm text-slate-600">
-              <li>サブスク10件まで</li>
+              <li>サブスク10件まで表示・管理</li>
               <li>カテゴリ5件まで</li>
-              <li>基本通知</li>
+              <li>基本ダッシュボード、一覧、カレンダー、通知確認</li>
+              <li>CSV、AI、高度分析、解約支援は利用不可</li>
             </ul>
           </Card>
           <Card className="border-blue-400">
             <h2 className="text-2xl font-bold">Premium</h2>
             <p className="mt-2 text-4xl font-black">480円/月</p>
             <ul className="mt-5 space-y-2 text-sm text-slate-600">
-              <li>登録無制限</li>
-              <li>CSV出力</li>
-              <li>高度分析、複数通知、カレンダー</li>
+              <li>サブスク登録・表示無制限</li>
+              <li>CSV入出力、CSV明細候補検出</li>
+              <li>高度分析、支払い累計、見直しレポート</li>
+              <li>AI乗り換え診断、解約チェックリスト、証跡管理</li>
             </ul>
           </Card>
         </div>

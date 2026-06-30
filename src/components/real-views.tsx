@@ -6,6 +6,7 @@ import { NotificationSendButton } from "@/components/notification-send-button";
 import { BudgetSettingsForm, CancellationChecklist, CancellationEvidenceForm, CancellationPlanForm, CategoryForm, CsvCandidateDetectorForm, CsvDownloadButton, CsvImportForm, DeleteCancellationEvidenceButton, DeletePaymentHistoryButton, LogoutButton, PasswordSettingsForm, PaymentHistoryForm, PaymentMethodForm, PlanSettingsForm, ProfileSettingsForm, SubscriptionActions, SubscriptionForm } from "@/components/real-forms";
 import { requireVerifiedUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { FREE_SUBSCRIPTION_LIMIT, hiddenByPlan, isPremiumPlan, limitByPlan } from "@/lib/plans";
 import { estimatedMonthlySaving, reviewScore } from "@/lib/subscription-insights";
 
 const yen = new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 });
@@ -117,6 +118,32 @@ function EmptyState({ text }: { text: string }) {
   return <p className="rounded-lg border border-dashed border-slate-200 bg-white/70 p-4 text-sm font-semibold text-slate-500">{text}</p>;
 }
 
+function PlanLimitBanner({ hiddenCount }: { hiddenCount: number }) {
+  if (hiddenCount <= 0) return null;
+  return (
+    <Card className="mb-5 border-amber-200 bg-amber-50/90">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="font-black text-amber-900">Freeプランではサブスクは{FREE_SUBSCRIPTION_LIMIT}件まで表示・管理できます。</p>
+          <p className="mt-1 text-sm font-semibold text-amber-800">現在 {hiddenCount}件 が非表示です。Premiumに変更すると全件表示、AI診断、CSV、高度分析、解約支援が使えます。</p>
+        </div>
+        <Link href="/settings" className="btn-primary shrink-0">Premiumに変更</Link>
+      </div>
+    </Card>
+  );
+}
+
+function PremiumOnlyNotice({ title, description }: { title: string; description: string }) {
+  return (
+    <Card className="border-blue-200 bg-blue-50/90">
+      <p className="text-sm font-black text-blue-700">Premium限定</p>
+      <h2 className="mt-2 text-2xl font-black text-blue-950">{title}</h2>
+      <p className="mt-3 text-sm font-semibold leading-6 text-blue-900">{description}</p>
+      <Link href="/settings" className="btn-primary mt-5 inline-flex">Premiumに変更</Link>
+    </Card>
+  );
+}
+
 function dateText(value?: Date | null) {
   return value ? value.toISOString().slice(0, 10) : "未設定";
 }
@@ -184,7 +211,7 @@ const defaultCancellationChecklist = [
 
 export async function DashboardView() {
   const user = await requireVerifiedUser();
-  const [subscriptions, preference] = (await Promise.all([
+  const [allSubscriptions, preference] = (await Promise.all([
     prisma.subscription.findMany({
       where: { userId: user.id, deletedAt: null },
       include: { category: true, paymentMethod: true },
@@ -192,6 +219,8 @@ export async function DashboardView() {
     }),
     prisma.userPreference.findUnique({ where: { userId: user.id } }),
   ])) as unknown as [SubscriptionView[], UserPreferenceView | null];
+  const subscriptions = limitByPlan(allSubscriptions, user.plan);
+  const hiddenCount = hiddenByPlan(allSubscriptions.length, user.plan);
   const active = subscriptions.filter((item) => item.status === "ACTIVE");
   const monthlyTotal = active.reduce((sum, item) => sum + monthly(item.price, item.billingCycle, item.customCycleDays), 0);
   const budget = preference?.monthlyBudget ?? null;
@@ -207,6 +236,7 @@ export async function DashboardView() {
   return (
     <AppShell>
       <PageHeader title="ダッシュボード" description="登録済みサブスクリプションの月額、年額、更新予定を確認します。" action={<Link href="/subscriptions/new" className="btn-primary">サブスク追加</Link>} />
+      <PlanLimitBanner hiddenCount={hiddenCount} />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
           ["月額合計", yen.format(monthlyTotal), "from-blue-600 to-cyan-500"],
@@ -292,14 +322,17 @@ export async function DashboardView() {
 
 export async function SubscriptionsView() {
   const user = await requireVerifiedUser();
-  const subscriptions = (await prisma.subscription.findMany({
+  const allSubscriptions = (await prisma.subscription.findMany({
     where: { userId: user.id, deletedAt: null },
     include: { category: true, paymentMethod: true },
     orderBy: { nextBillingDate: "asc" },
   })) as unknown as SubscriptionView[];
+  const subscriptions = limitByPlan(allSubscriptions, user.plan);
+  const hiddenCount = hiddenByPlan(allSubscriptions.length, user.plan);
   return (
     <AppShell>
       <PageHeader title="サブスク一覧" description="登録済みサブスクリプションだけを表示します。" action={<Link href="/subscriptions/new" className="btn-primary">新規登録</Link>} />
+      <PlanLimitBanner hiddenCount={hiddenCount} />
       {subscriptions.length === 0 ? <Card><EmptyState text="まだサブスクリプションが登録されていません。" /></Card> : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {subscriptions.map((item) => (
@@ -336,6 +369,12 @@ export async function SubscriptionFormView({ id }: { id?: string }) {
     prisma.paymentMethod.findMany({ where: { userId: user.id }, orderBy: { name: "asc" } }),
   ]);
   if (id && !subscription) notFound();
+  if (!id && !isPremiumPlan(user.plan)) {
+    const count = await prisma.subscription.count({ where: { userId: user.id, deletedAt: null } });
+    if (count >= FREE_SUBSCRIPTION_LIMIT) {
+      return <AppShell><PageHeader title="サブスク登録" description="Freeプランの登録上限に達しています。" /><PremiumOnlyNotice title="Freeプランの登録上限に達しています" description={`Freeプランではサブスク登録は${FREE_SUBSCRIPTION_LIMIT}件までです。Premiumに変更すると無制限に登録できます。`} /></AppShell>;
+    }
+  }
   return (
     <AppShell>
       <PageHeader title={subscription ? "サブスク編集" : "サブスク登録"} description="サブスクリプション情報をDBへ保存します。" />
@@ -418,51 +457,57 @@ export async function SubscriptionDetailView({ id }: { id: string }) {
           <h2 className="mb-4 font-bold">操作</h2>
           <SubscriptionActions id={item.id} />
           <div className="mt-5 border-t border-slate-200 pt-5">
-            <AiRecommendationsPanel subscriptionId={item.id} serviceName={item.name} />
+            {isPremiumPlan(user.plan) ? <AiRecommendationsPanel subscriptionId={item.id} serviceName={item.name} /> : <PremiumOnlyNotice title="AI乗り換え診断" description="AIによる代替候補、統合、解約検討はPremium限定です。" />}
           </div>
         </Card>
       </div>
-      <Card className="mt-5">
-        <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
-          <div>
-            <h2 className="text-lg font-bold">解約支援</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">解約を検討してから完了するまでの状態、予定日、問い合わせ番号や手順メモを残します。</p>
-            <div className="mt-4 rounded-lg border border-slate-100 bg-slate-50/80 p-3">
-              <p className="text-sm font-black text-slate-700">進捗 {completedChecklistCount}/{checklist.length}</p>
-              <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
-                <div className="h-full rounded-full bg-blue-600" style={{ width: `${checklist.length ? Math.round((completedChecklistCount / checklist.length) * 100) : 0}%` }} />
-              </div>
-            </div>
-            {cancellationPageUrl && <Link href={cancellationPageUrl} target="_blank" rel="noreferrer" className="btn-secondary mt-4 inline-flex">解約ページを開く</Link>}
-          </div>
-          <CancellationPlanForm id={item.id} status={item.cancellationStatus} plannedCancelAt={item.plannedCancelAt} memo={item.cancellationMemo} />
-        </div>
-      </Card>
-      <div className="mt-5 grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
-        <Card>
-          <h2 className="text-lg font-bold">解約チェックリスト</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">解約忘れ、証跡不足、次回請求の見落としを防ぐための手順です。</p>
-          <div className="mt-4"><CancellationChecklist items={checklist} /></div>
-        </Card>
-        <Card>
-          <h2 className="text-lg font-bold">解約証跡</h2>
-          <p className="mt-2 text-sm leading-6 text-slate-600">受付番号、完了メール、スクリーンショットURL、確認メモを残します。</p>
-          <div className="mt-5"><CancellationEvidenceForm subscriptionId={item.id} /></div>
-          <div className="mt-5 divide-y divide-slate-100">
-            {evidences.length === 0 ? <EmptyState text="証跡はまだ登録されていません。" /> : evidences.map((evidence) => (
-              <div key={evidence.id} className="flex items-start justify-between gap-3 py-3">
-                <div>
-                  <p className="font-bold">{evidence.title}</p>
-                  <p className="mt-1 text-sm text-slate-500">{evidence.recordedAt.toISOString().slice(0, 10)} / {evidenceKindLabel(evidence.kind)}</p>
-                  {evidence.referenceUrl && <Link href={evidence.referenceUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block text-sm font-semibold text-blue-700">参照URLを開く</Link>}
-                  {evidence.memo && <p className="mt-2 text-sm leading-6 text-slate-600">{evidence.memo}</p>}
+      {isPremiumPlan(user.plan) ? (
+        <>
+          <Card className="mt-5">
+            <div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]">
+              <div>
+                <h2 className="text-lg font-bold">解約支援</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">解約を検討してから完了するまでの状態、予定日、問い合わせ番号や手順メモを残します。</p>
+                <div className="mt-4 rounded-lg border border-slate-100 bg-slate-50/80 p-3">
+                  <p className="text-sm font-black text-slate-700">進捗 {completedChecklistCount}/{checklist.length}</p>
+                  <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-200">
+                    <div className="h-full rounded-full bg-blue-600" style={{ width: `${checklist.length ? Math.round((completedChecklistCount / checklist.length) * 100) : 0}%` }} />
+                  </div>
                 </div>
-                <DeleteCancellationEvidenceButton id={evidence.id} />
+                {cancellationPageUrl && <Link href={cancellationPageUrl} target="_blank" rel="noreferrer" className="btn-secondary mt-4 inline-flex">解約ページを開く</Link>}
               </div>
-            ))}
+              <CancellationPlanForm id={item.id} status={item.cancellationStatus} plannedCancelAt={item.plannedCancelAt} memo={item.cancellationMemo} />
+            </div>
+          </Card>
+          <div className="mt-5 grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+            <Card>
+              <h2 className="text-lg font-bold">解約チェックリスト</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">解約忘れ、証跡不足、次回請求の見落としを防ぐための手順です。</p>
+              <div className="mt-4"><CancellationChecklist items={checklist} /></div>
+            </Card>
+            <Card>
+              <h2 className="text-lg font-bold">解約証跡</h2>
+              <p className="mt-2 text-sm leading-6 text-slate-600">受付番号、完了メール、スクリーンショットURL、確認メモを残します。</p>
+              <div className="mt-5"><CancellationEvidenceForm subscriptionId={item.id} /></div>
+              <div className="mt-5 divide-y divide-slate-100">
+                {evidences.length === 0 ? <EmptyState text="証跡はまだ登録されていません。" /> : evidences.map((evidence) => (
+                  <div key={evidence.id} className="flex items-start justify-between gap-3 py-3">
+                    <div>
+                      <p className="font-bold">{evidence.title}</p>
+                      <p className="mt-1 text-sm text-slate-500">{evidence.recordedAt.toISOString().slice(0, 10)} / {evidenceKindLabel(evidence.kind)}</p>
+                      {evidence.referenceUrl && <Link href={evidence.referenceUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block text-sm font-semibold text-blue-700">参照URLを開く</Link>}
+                      {evidence.memo && <p className="mt-2 text-sm leading-6 text-slate-600">{evidence.memo}</p>}
+                    </div>
+                    <DeleteCancellationEvidenceButton id={evidence.id} />
+                  </div>
+                ))}
+              </div>
+            </Card>
           </div>
-        </Card>
-      </div>
+        </>
+      ) : (
+        <div className="mt-5"><PremiumOnlyNotice title="解約チェックリスト・証跡管理" description="解約予定、チェックリスト、受付番号や完了メールなどの証跡管理はPremium限定です。" /></div>
+      )}
       <Card className="mt-5">
         <div className="grid gap-5 lg:grid-cols-[0.9fr_1.1fr]">
           <div>
@@ -512,7 +557,7 @@ export async function PaymentsView() {
   const user = await requireVerifiedUser();
   const today = new Date();
   const currentKey = yearMonthKey(today);
-  const subscriptions = (await prisma.subscription.findMany({
+  const allSubscriptions = (await prisma.subscription.findMany({
     where: { userId: user.id, deletedAt: null, status: "ACTIVE" },
     include: {
       category: true,
@@ -521,6 +566,8 @@ export async function PaymentsView() {
     },
     orderBy: { nextBillingDate: "asc" },
   })) as unknown as SubscriptionView[];
+  const subscriptions = limitByPlan(allSubscriptions, user.plan);
+  const hiddenCount = hiddenByPlan(allSubscriptions.length, user.plan);
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
   const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
   const currentMonthHistories = (await prisma.paymentHistory.findMany({
@@ -537,6 +584,7 @@ export async function PaymentsView() {
   return (
     <AppShell>
       <PageHeader title="支払い確認" description="請求・カード明細・口座引落の確認結果を記録し、未確認の支払いを見逃さないようにします。" />
+      <PlanLimitBanner hiddenCount={hiddenCount} />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
           ["今月の支払い記録", yen.format(paidTotal)],
@@ -604,6 +652,7 @@ export async function PaymentsView() {
 
 export async function PaymentTotalsView() {
   const user = await requireVerifiedUser();
+  if (!isPremiumPlan(user.plan)) return <AppShell><PageHeader title="支払い累計" description="全期間の支払い累計を確認します。" /><PremiumOnlyNotice title="支払い累計はPremium限定です" description="月別累計グラフ、支払い方法別集計、サブスク別ランキングはPremiumで利用できます。" /></AppShell>;
   const todayEnd = new Date();
   todayEnd.setHours(23, 59, 59, 999);
   const histories = (await prisma.paymentHistory.findMany({
@@ -899,7 +948,7 @@ export async function CalendarView({ month }: { month?: string }) {
   const monthEnd = new Date(Date.UTC(year, monthIndex + 1, 1));
   const todayKey = dateKey(new Date());
 
-  const subscriptions = (await prisma.subscription.findMany({
+  const allSubscriptions = (await prisma.subscription.findMany({
     where: {
       userId: user.id,
       deletedAt: null,
@@ -912,6 +961,8 @@ export async function CalendarView({ month }: { month?: string }) {
     include: { category: true, paymentMethod: true },
     orderBy: [{ nextBillingDate: "asc" }, { name: "asc" }],
   })) as unknown as SubscriptionView[];
+  const subscriptions = limitByPlan(allSubscriptions, user.plan);
+  const hiddenCount = hiddenByPlan(allSubscriptions.length, user.plan);
 
   const byDate = subscriptions.reduce<Record<string, typeof subscriptions>>((acc, item) => {
     const key = dateKey(item.nextBillingDate);
@@ -926,6 +977,7 @@ export async function CalendarView({ month }: { month?: string }) {
         description="月ごとのカレンダーで、更新日に該当するサブスクリプションを確認します。"
         action={<Link href="/subscriptions/new" className="btn-primary">サブスク追加</Link>}
       />
+      <PlanLimitBanner hiddenCount={hiddenCount} />
       <Card>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
@@ -979,6 +1031,7 @@ export async function CalendarView({ month }: { month?: string }) {
 
 export async function AnalyticsView() {
   const user = await requireVerifiedUser();
+  if (!isPremiumPlan(user.plan)) return <AppShell><PageHeader title="分析" description="支出割合、上位契約、更新集中、見直し候補をグラフで確認します。" /><PremiumOnlyNotice title="高度分析はPremium限定です" description="カテゴリ比率、支払い方法別分析、上位契約、更新集中、見直し候補のグラフ表示はPremiumで利用できます。" /></AppShell>;
   const subscriptions = (await prisma.subscription.findMany({
     where: { userId: user.id, deletedAt: null },
     include: { category: true, paymentMethod: true },
@@ -1203,6 +1256,7 @@ function StatusBar({ label, value, total }: { label: string; value: number; tota
 
 export async function ReviewView() {
   const user = await requireVerifiedUser();
+  if (!isPremiumPlan(user.plan)) return <AppShell><PageHeader title="見直しレポート" description="削減見込み、見直しスコア、期限リスクをまとめて判断します。" /><PremiumOnlyNotice title="見直しレポートはPremium限定です" description="削減見込み、見直しスコア、期限リスク、優先順位つきの改善リストはPremiumで利用できます。" /></AppShell>;
   const subscriptions = (await prisma.subscription.findMany({
     where: { userId: user.id, deletedAt: null, status: "ACTIVE" },
     include: { category: true, paymentMethod: true },
@@ -1337,13 +1391,16 @@ export async function ExportView() {
 
 export async function NotificationsView() {
   const user = await requireVerifiedUser();
-  const subscriptions = (await prisma.subscription.findMany({
+  const allSubscriptions = (await prisma.subscription.findMany({
     where: { userId: user.id, deletedAt: null },
     orderBy: { nextBillingDate: "asc" },
   })) as unknown as SubscriptionView[];
+  const subscriptions = limitByPlan(allSubscriptions, user.plan);
+  const hiddenCount = hiddenByPlan(allSubscriptions.length, user.plan);
   return (
     <AppShell>
       <PageHeader title="通知設定" description="登録済みサブスクリプションごとの通知日数を確認します。変更は各サブスク編集画面で行います。" />
+      <PlanLimitBanner hiddenCount={hiddenCount} />
       <Card className="mb-5">
         <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
           <div>

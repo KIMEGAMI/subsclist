@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { FREE_SUBSCRIPTION_LIMIT } from "@/lib/plans";
 
 const schema = z.object({
   name: z.string().trim().min(1).max(100),
@@ -45,9 +46,9 @@ export async function POST(request: Request) {
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success) return NextResponse.json({ message: "入力内容を確認してください。" }, { status: 400 });
 
-  const activeCount = await prisma.subscription.count({ where: { userId: user.id, deletedAt: null, status: "ACTIVE" } });
-  if (user.plan === "FREE" && activeCount >= 10) {
-    return NextResponse.json({ message: "Freeプランではサブスク登録は10件までです。" }, { status: 403 });
+  const subscriptionCount = await prisma.subscription.count({ where: { userId: user.id, deletedAt: null } });
+  if (user.plan === "FREE" && subscriptionCount >= FREE_SUBSCRIPTION_LIMIT) {
+    return NextResponse.json({ message: "Freeプランではサブスク登録は10件までです。Premiumに変更すると無制限に登録できます。" }, { status: 403 });
   }
 
   const data = parsed.data;

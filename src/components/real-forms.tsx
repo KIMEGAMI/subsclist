@@ -465,11 +465,11 @@ export function PlanSettingsForm({ plan }: { plan: "FREE" | "PREMIUM" }) {
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-lg border border-slate-100 bg-white/70 p-4 shadow-sm">
           <p className="font-bold">Free</p>
-          <p className="mt-2 text-sm text-slate-600">サブスク10件まで、基本管理。</p>
+          <p className="mt-2 text-sm text-slate-600">サブスク10件まで、カテゴリ5件まで。基本管理、ダッシュボード、カレンダー、通知確認が使えます。</p>
         </div>
         <div className="rounded-lg border border-blue-100 bg-blue-50/80 p-4 shadow-sm">
           <p className="font-bold text-blue-900">Premium</p>
-          <p className="mt-2 text-sm text-blue-800">登録無制限、CSV、分析、AI提案。</p>
+          <p className="mt-2 text-sm text-blue-800">登録無制限、CSV入出力、CSV明細候補検出、高度分析、支払い累計、見直しレポート、AI診断、解約支援が使えます。</p>
         </div>
       </div>
       {message && <p className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p>}
