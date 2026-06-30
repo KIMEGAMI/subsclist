@@ -9,6 +9,14 @@ export const runtime = "nodejs";
 const yen = new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 });
 const requestSchema = z.object({ subscriptionId: z.string().min(1) });
 
+type RelatedSubscriptionForRecommendation = {
+  name: string;
+  price: number;
+  billingCycle: string;
+  customCycleDays: number | null;
+  category: { name: string } | null;
+};
+
 function monthly(price: number, cycle: string, customCycleDays?: number | null) {
   if (cycle === "YEARLY") return price / 12;
   if (cycle === "WEEKLY") return price * 4.345;
@@ -114,7 +122,7 @@ export async function POST(request: Request) {
       memo: subscription.memo,
       lastReviewedAt: subscription.lastReviewedAt?.toISOString().slice(0, 10) ?? null,
     },
-    sameCategoryContracts: relatedSubscriptions.map((item) => ({
+    sameCategoryContracts: (relatedSubscriptions as RelatedSubscriptionForRecommendation[]).map((item) => ({
       name: item.name,
       category: item.category?.name ?? "未分類",
       monthlyPrice: yen.format(monthly(item.price, item.billingCycle, item.customCycleDays)),
