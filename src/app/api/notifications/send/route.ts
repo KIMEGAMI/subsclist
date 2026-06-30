@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
 import { getCurrentUser } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { sendSubscriptionReminderEmail } from "@/lib/mail";
@@ -30,6 +29,14 @@ function sameDay(a: Date, b: Date) {
 
 function formatDate(date: Date) {
   return date.toISOString().slice(0, 10);
+}
+function hasPrismaErrorCode(error: unknown, code: string) {
+  return Boolean(
+    error &&
+      typeof error === "object" &&
+      "code" in error &&
+      (error as { code?: unknown }).code === code,
+  );
 }
 
 function remindersFor(subscription: {
@@ -146,7 +153,7 @@ export async function POST(request: NextRequest) {
         });
         sent += 1;
       } catch (error) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+        if (hasPrismaErrorCode(error, "P2002")) {
           skipped += 1;
           continue;
         }
