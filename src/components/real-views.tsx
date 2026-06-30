@@ -10,6 +10,64 @@ import { estimatedMonthlySaving, reviewScore } from "@/lib/subscription-insights
 
 const yen = new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 });
 
+type CancellationStatusValue = "NONE" | "CONSIDERING" | "PLANNED" | "REQUESTED" | "COMPLETED";
+
+type CategoryView = { id: string; name: string; color: string };
+
+type PaymentMethodView = { id: string; name: string; type: string; memo: string | null };
+
+type PaymentHistoryView = {
+  id: string;
+  subscriptionId: string;
+  amount: number;
+  paidAt: Date;
+  memo: string | null;
+  subscription: { id: string; name: string; category?: CategoryView | null; paymentMethod?: PaymentMethodView | null };
+};
+
+type CancellationChecklistView = { id: string; label: string; completedAt: Date | null };
+
+type CancellationEvidenceView = {
+  id: string;
+  title: string;
+  kind: string;
+  referenceUrl: string | null;
+  memo: string | null;
+  recordedAt: Date;
+};
+
+type UserPreferenceView = { monthlyBudget: number | null; defaultNotifyDaysBefore: number; notificationHour: number };
+
+type SubscriptionView = {
+  id: string;
+  name: string;
+  price: number;
+  currency: string;
+  billingCycle: string;
+  customCycleDays: number | null;
+  nextBillingDate: Date;
+  status: string;
+  memo: string | null;
+  serviceUrl: string | null;
+  cancellationUrl: string | null;
+  trialEndsAt: Date | null;
+  cancellationDeadline: Date | null;
+  lastReviewedAt: Date | null;
+  notifyDaysBefore: number | null;
+  usageFrequency: string;
+  priority: string;
+  logoUrl: string | null;
+  categoryId: string | null;
+  paymentMethodId: string | null;
+  cancellationStatus: CancellationStatusValue;
+  plannedCancelAt: Date | null;
+  cancellationMemo: string | null;
+  cancellationCompletedAt?: Date | null;
+  category?: CategoryView | null;
+  paymentMethod?: PaymentMethodView | null;
+  paymentHistories: PaymentHistoryView[];
+};
+
 const paymentMethodTypeLabels: Record<string, string> = {
   APPLE_PAY: "Apple Pay",
   AMAZON_PAY: "Amazon Pay",
@@ -126,14 +184,14 @@ const defaultCancellationChecklist = [
 
 export async function DashboardView() {
   const user = await requireVerifiedUser();
-  const [subscriptions, preference] = await Promise.all([
+  const [subscriptions, preference] = (await Promise.all([
     prisma.subscription.findMany({
       where: { userId: user.id, deletedAt: null },
       include: { category: true, paymentMethod: true },
       orderBy: { nextBillingDate: "asc" },
     }),
     prisma.userPreference.findUnique({ where: { userId: user.id } }),
-  ]);
+  ])) as unknown as [SubscriptionView[], UserPreferenceView | null];
   const active = subscriptions.filter((item) => item.status === "ACTIVE");
   const monthlyTotal = active.reduce((sum, item) => sum + monthly(item.price, item.billingCycle, item.customCycleDays), 0);
   const budget = preference?.monthlyBudget ?? null;
@@ -234,11 +292,11 @@ export async function DashboardView() {
 
 export async function SubscriptionsView() {
   const user = await requireVerifiedUser();
-  const subscriptions = await prisma.subscription.findMany({
+  const subscriptions = (await prisma.subscription.findMany({
     where: { userId: user.id, deletedAt: null },
     include: { category: true, paymentMethod: true },
     orderBy: { nextBillingDate: "asc" },
-  });
+  })) as unknown as SubscriptionView[];
   return (
     <AppShell>
       <PageHeader title="サブスク一覧" description="登録済みサブスクリプションだけを表示します。" action={<Link href="/subscriptions/new" className="btn-primary">新規登録</Link>} />
@@ -288,10 +346,10 @@ export async function SubscriptionFormView({ id }: { id?: string }) {
 
 export async function SubscriptionDetailView({ id }: { id: string }) {
   const user = await requireVerifiedUser();
-  const item = await prisma.subscription.findFirst({
+  const item = (await prisma.subscription.findFirst({
     where: { id, userId: user.id, deletedAt: null },
     include: { category: true, paymentMethod: true, paymentHistories: { orderBy: { paidAt: "desc" } } },
-  });
+  })) as unknown as SubscriptionView | null;
   if (!item) notFound();
   const sameCategoryCount = item.categoryId
     ? await prisma.subscription.count({ where: { userId: user.id, deletedAt: null, status: "ACTIVE", categoryId: item.categoryId } })
@@ -299,10 +357,10 @@ export async function SubscriptionDetailView({ id }: { id: string }) {
   const score = reviewScore(item, sameCategoryCount);
   const saving = estimatedMonthlySaving(item);
   const cancellationPageUrl = safeExternalUrl(item.cancellationUrl);
-  let checklist = await prisma.cancellationChecklistItem.findMany({
+  let checklist = (await prisma.cancellationChecklistItem.findMany({
     where: { subscriptionId: item.id, userId: user.id },
     orderBy: { sortOrder: "asc" },
-  });
+  })) as unknown as CancellationChecklistView[];
   if (checklist.length === 0) {
     await prisma.cancellationChecklistItem.createMany({
       data: defaultCancellationChecklist.map((label, index) => ({
@@ -312,15 +370,15 @@ export async function SubscriptionDetailView({ id }: { id: string }) {
         sortOrder: index + 1,
       })),
     });
-    checklist = await prisma.cancellationChecklistItem.findMany({
+    checklist = (await prisma.cancellationChecklistItem.findMany({
       where: { subscriptionId: item.id, userId: user.id },
       orderBy: { sortOrder: "asc" },
-    });
+    })) as unknown as CancellationChecklistView[];
   }
-  const evidences = await prisma.cancellationEvidence.findMany({
+  const evidences = (await prisma.cancellationEvidence.findMany({
     where: { subscriptionId: item.id, userId: user.id },
     orderBy: { recordedAt: "desc" },
-  });
+  })) as unknown as CancellationEvidenceView[];
   const completedChecklistCount = checklist.filter((entry) => entry.completedAt).length;
   return (
     <AppShell>
@@ -440,13 +498,13 @@ function Info({ label, value }: { label: string; value: string }) {
 
 export async function CategoriesView() {
   const user = await requireVerifiedUser();
-  const categories = await prisma.category.findMany({ where: { userId: user.id }, orderBy: { name: "asc" } });
+  const categories = (await prisma.category.findMany({ where: { userId: user.id }, orderBy: { name: "asc" } })) as unknown as CategoryView[];
   return <AppShell><PageHeader title="カテゴリ管理" description="ユーザーのカテゴリだけを管理します。" /><div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]"><Card><CategoryForm /></Card><Card><div className="grid gap-3 sm:grid-cols-2">{categories.length === 0 ? <EmptyState text="カテゴリがありません。" /> : categories.map((item) => <div key={item.id} className="flex items-center gap-3 rounded-lg border border-slate-100 bg-white/70 p-4 shadow-sm"><span className="size-4 rounded-full shadow-sm" style={{ backgroundColor: item.color }} /><span className="font-bold">{item.name}</span></div>)}</div></Card></div></AppShell>;
 }
 
 export async function PaymentMethodsView() {
   const user = await requireVerifiedUser();
-  const methods = await prisma.paymentMethod.findMany({ where: { userId: user.id }, orderBy: { name: "asc" } });
+  const methods = (await prisma.paymentMethod.findMany({ where: { userId: user.id }, orderBy: { name: "asc" } })) as unknown as PaymentMethodView[];
   return <AppShell><PageHeader title="支払い方法" description="ユーザーの支払い方法だけを管理します。" /><div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]"><Card><PaymentMethodForm /></Card><Card><div className="divide-y divide-slate-100">{methods.length === 0 ? <EmptyState text="支払い方法がありません。" /> : methods.map((item) => <div key={item.id} className="py-3"><p className="font-semibold">{item.name}</p><p className="text-sm text-slate-500">{paymentMethodTypeLabels[item.type] ?? item.type}{item.memo ? ` / ${item.memo}` : ""}</p></div>)}</div></Card></div></AppShell>;
 }
 
@@ -454,7 +512,7 @@ export async function PaymentsView() {
   const user = await requireVerifiedUser();
   const today = new Date();
   const currentKey = yearMonthKey(today);
-  const subscriptions = await prisma.subscription.findMany({
+  const subscriptions = (await prisma.subscription.findMany({
     where: { userId: user.id, deletedAt: null, status: "ACTIVE" },
     include: {
       category: true,
@@ -462,14 +520,14 @@ export async function PaymentsView() {
       paymentHistories: { orderBy: { paidAt: "desc" }, take: 12 },
     },
     orderBy: { nextBillingDate: "asc" },
-  });
+  })) as unknown as SubscriptionView[];
   const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
   const nextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
-  const currentMonthHistories = await prisma.paymentHistory.findMany({
+  const currentMonthHistories = (await prisma.paymentHistory.findMany({
     where: { userId: user.id, paidAt: { gte: monthStart, lt: nextMonth } },
     include: { subscription: true },
     orderBy: { paidAt: "desc" },
-  });
+  })) as unknown as PaymentHistoryView[];
   const paidTotal = currentMonthHistories.reduce((sum, item) => sum + item.amount, 0);
   const dueThisMonth = subscriptions.filter((item) => yearMonthKey(item.nextBillingDate) === currentKey);
   const confirmedThisMonth = dueThisMonth.filter((item) => item.paymentHistories.some((history) => yearMonthKey(history.paidAt) === currentKey));
@@ -548,7 +606,7 @@ export async function PaymentTotalsView() {
   const user = await requireVerifiedUser();
   const todayEnd = new Date();
   todayEnd.setHours(23, 59, 59, 999);
-  const histories = await prisma.paymentHistory.findMany({
+  const histories = (await prisma.paymentHistory.findMany({
     where: { userId: user.id, paidAt: { lte: todayEnd } },
     include: {
       subscription: {
@@ -559,7 +617,7 @@ export async function PaymentTotalsView() {
       },
     },
     orderBy: { paidAt: "asc" },
-  });
+  })) as unknown as PaymentHistoryView[];
 
   const totalPaid = histories.reduce((sum, item) => sum + item.amount, 0);
   const uniqueSubscriptions = new Set(histories.map((item) => item.subscriptionId)).size;
@@ -841,7 +899,7 @@ export async function CalendarView({ month }: { month?: string }) {
   const monthEnd = new Date(Date.UTC(year, monthIndex + 1, 1));
   const todayKey = dateKey(new Date());
 
-  const subscriptions = await prisma.subscription.findMany({
+  const subscriptions = (await prisma.subscription.findMany({
     where: {
       userId: user.id,
       deletedAt: null,
@@ -853,7 +911,7 @@ export async function CalendarView({ month }: { month?: string }) {
     },
     include: { category: true, paymentMethod: true },
     orderBy: [{ nextBillingDate: "asc" }, { name: "asc" }],
-  });
+  })) as unknown as SubscriptionView[];
 
   const byDate = subscriptions.reduce<Record<string, typeof subscriptions>>((acc, item) => {
     const key = dateKey(item.nextBillingDate);
@@ -921,11 +979,11 @@ export async function CalendarView({ month }: { month?: string }) {
 
 export async function AnalyticsView() {
   const user = await requireVerifiedUser();
-  const subscriptions = await prisma.subscription.findMany({
+  const subscriptions = (await prisma.subscription.findMany({
     where: { userId: user.id, deletedAt: null },
     include: { category: true, paymentMethod: true },
     orderBy: { nextBillingDate: "asc" },
-  });
+  })) as unknown as SubscriptionView[];
   const active = subscriptions.filter((item) => item.status === "ACTIVE");
   const monthlyTotal = active.reduce((sum, item) => sum + monthly(item.price, item.billingCycle, item.customCycleDays), 0);
   const annualTotal = monthlyTotal * 12;
@@ -1145,11 +1203,11 @@ function StatusBar({ label, value, total }: { label: string; value: number; tota
 
 export async function ReviewView() {
   const user = await requireVerifiedUser();
-  const subscriptions = await prisma.subscription.findMany({
+  const subscriptions = (await prisma.subscription.findMany({
     where: { userId: user.id, deletedAt: null, status: "ACTIVE" },
     include: { category: true, paymentMethod: true },
     orderBy: { nextBillingDate: "asc" },
-  });
+  })) as unknown as SubscriptionView[];
   const categoryCounts = subscriptions.reduce<Record<string, number>>((acc, item) => {
     const key = item.categoryId ?? "none";
     acc[key] = (acc[key] ?? 0) + 1;
@@ -1279,10 +1337,10 @@ export async function ExportView() {
 
 export async function NotificationsView() {
   const user = await requireVerifiedUser();
-  const subscriptions = await prisma.subscription.findMany({
+  const subscriptions = (await prisma.subscription.findMany({
     where: { userId: user.id, deletedAt: null },
     orderBy: { nextBillingDate: "asc" },
-  });
+  })) as unknown as SubscriptionView[];
   return (
     <AppShell>
       <PageHeader title="通知設定" description="登録済みサブスクリプションごとの通知日数を確認します。変更は各サブスク編集画面で行います。" />

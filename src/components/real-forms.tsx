@@ -2,8 +2,28 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import type { Subscription } from "@prisma/client";
 
+type SubscriptionFormValue = {
+  id: string;
+  name: string;
+  price: number;
+  billingCycle: string;
+  customCycleDays: number | null;
+  nextBillingDate: Date | string;
+  categoryId: string | null;
+  paymentMethodId: string | null;
+  status: string;
+  notifyDaysBefore: number | null;
+  usageFrequency: string;
+  priority: string;
+  trialEndsAt: Date | string | null;
+  cancellationDeadline: Date | string | null;
+  lastReviewedAt: Date | string | null;
+  serviceUrl: string | null;
+  cancellationUrl: string | null;
+  logoUrl: string | null;
+  memo: string | null;
+};
 type Option = { id: string; name: string };
 type ServicePreset = {
   name: string;
@@ -102,7 +122,7 @@ export function SubscriptionForm({
   categories,
   paymentMethods,
 }: {
-  subscription?: Subscription | null;
+  subscription?: SubscriptionFormValue | null;
   categories: Option[];
   paymentMethods: Option[];
 }) {
@@ -158,7 +178,7 @@ export function SubscriptionForm({
         </select>
       </Field>
       <Field label="次回更新日">
-        <input name="nextBillingDate" type="date" defaultValue={subscription?.nextBillingDate.toISOString().slice(0, 10) ?? ""} className="input" required />
+        <input name="nextBillingDate" type="date" defaultValue={dateValue(subscription?.nextBillingDate)} className="input" required />
       </Field>
       <Field label="カテゴリ">
         <select name="categoryId" defaultValue={subscription?.categoryId ?? ""} className="input">
