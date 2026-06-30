@@ -53,12 +53,11 @@ NOTIFICATION_JOB_SECRET="十分に長いランダム文字列"
 
 ```bash
 npm install
-npm run prisma:generate
 npm run lint
 npm run build
 ```
 
-この段階で `npm run build` が失敗する場合は、本番デプロイ前に修正してください。
+`npm run build` は内部で `prisma generate` を実行してから Next.js をビルドします。この段階で失敗する場合は、本番デプロイ前に修正してください。
 
 ## 4. Vercel にデプロイする場合
 
@@ -85,7 +84,6 @@ npm run prisma:deploy && npm run build
 git clone https://github.com/KIMEGAMI/subsclist.git
 cd SubscList
 npm install
-npm run prisma:generate
 npm run prisma:deploy
 npm run build
 npm run start

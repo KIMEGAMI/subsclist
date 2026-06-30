@@ -93,6 +93,8 @@ npm run lint
 npm run build
 ```
 
+`npm run build` は `prisma generate` を実行してから Next.js をビルドします。
+
 ## デプロイ
 
 Vercel などの Next.js 対応環境にデプロイできます。MySQL、Stripe、メール配信の本番環境変数を設定してください。
