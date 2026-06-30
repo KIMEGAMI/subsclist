@@ -4,6 +4,21 @@ import { prisma } from "@/lib/prisma";
 
 const yenless = (value: number) => Math.round(value).toString();
 
+type ExportSubscription = {
+  name: string;
+  price: number;
+  billingCycle: string;
+  customCycleDays: number | null;
+  nextBillingDate: Date;
+  trialEndsAt: Date | null;
+  cancellationDeadline: Date | null;
+  lastReviewedAt: Date | null;
+  category: { name: string } | null;
+  paymentMethod: { name: string } | null;
+  status: string;
+  memo: string | null;
+};
+
 function monthly(price: number, cycle: string, customCycleDays?: number | null) {
   if (cycle === "YEARLY") return price / 12;
   if (cycle === "WEEKLY") return price * 4.345;
@@ -29,7 +44,7 @@ export async function GET() {
   });
   const rows = [
     ["サービス名", "金額", "請求周期", "月額換算", "年額換算", "次回更新日", "無料トライアル終了日", "解約期限", "最終見直し日", "カテゴリ", "支払い方法", "ステータス", "メモ"],
-    ...subscriptions.map((item) => {
+    ...(subscriptions as ExportSubscription[]).map((item) => {
       const monthlyAmount = monthly(item.price, item.billingCycle, item.customCycleDays);
       return [
         item.name,
