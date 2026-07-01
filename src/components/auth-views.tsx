@@ -39,7 +39,28 @@ async function postJson(url: string, body?: unknown) {
   return data;
 }
 
-export function LoginView() {
+function GoogleLoginButton() {
+  return (
+    <a href="/api/auth/google/start" className="mt-5 flex min-h-12 w-full items-center justify-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/google-logo.png" alt="" className="size-5" />
+      Googleでログイン
+    </a>
+  );
+}
+
+function GoogleLoginMessage({ status }: { status?: string }) {
+  if (!status) return null;
+  const message =
+    status === "config"
+      ? "Googleログイン設定が未完了です。GOOGLE_CLIENT_ID と GOOGLE_CLIENT_SECRET を確認してください。"
+      : status === "invalid"
+        ? "Googleログインの認証状態を確認できませんでした。もう一度お試しください。"
+        : "Googleログインに失敗しました。もう一度お試しください。";
+  return <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{message}</p>;
+}
+
+export function LoginView({ googleStatus }: { googleStatus?: string } = {}) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -66,7 +87,10 @@ export function LoginView() {
 
   return (
     <AuthFrame title="ログイン">
-      <form onSubmit={submit} noValidate className="mt-6 space-y-4">
+      <GoogleLoginMessage status={googleStatus} />
+      <GoogleLoginButton />
+      <div className="my-5 flex items-center gap-3 text-xs font-bold text-slate-400"><span className="h-px flex-1 bg-slate-200" />または<span className="h-px flex-1 bg-slate-200" /></div>
+      <form onSubmit={submit} noValidate className="space-y-4">
         {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
         <label className="grid gap-2 text-sm font-semibold">
           メールアドレス
@@ -123,7 +147,9 @@ export function RegisterView() {
 
   return (
     <AuthFrame title="新規登録">
-      <form onSubmit={submit} noValidate className="mt-6 space-y-4">
+      <GoogleLoginButton />
+      <div className="my-5 flex items-center gap-3 text-xs font-bold text-slate-400"><span className="h-px flex-1 bg-slate-200" />または<span className="h-px flex-1 bg-slate-200" /></div>
+      <form onSubmit={submit} noValidate className="space-y-4">
         {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
         {message && <p className="rounded-lg bg-blue-50 p-3 text-sm font-semibold text-blue-700">{message}</p>}
         <label className="grid gap-2 text-sm font-semibold">

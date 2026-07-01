@@ -24,6 +24,8 @@ export const env = {
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? "",
   stripePremiumPriceId: process.env.STRIPE_PREMIUM_PRICE_ID ?? "",
   stripeTestMode: (process.env.STRIPE_SECRET_KEY ?? "").startsWith("sk_test_"),
+  googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
+  googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
 };
 
 export function assertAuthSecret() {
@@ -50,6 +52,14 @@ export function assertStripeEnv() {
 
 export function assertStripeWebhookEnv() {
   for (const name of ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"] as const) {
+    if (!process.env[name]) {
+      throw new Error(name + " is not set.");
+    }
+  }
+}
+
+export function assertGoogleEnv() {
+  for (const name of ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"] as const) {
     if (!process.env[name]) {
       throw new Error(name + " is not set.");
     }

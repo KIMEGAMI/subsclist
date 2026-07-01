@@ -118,3 +118,25 @@ npm run seed:demo
 ```
 
 This creates the demo user, verified email state, Premium plan, sample subscriptions, payment methods, categories, notification settings, payment history from 2025-01 to 2026-06, and cancellation evidence.
+
+
+## Google OAuth Login
+
+Create an OAuth client in Google Cloud Console and set:
+
+```env
+GOOGLE_CLIENT_ID="...apps.googleusercontent.com"
+GOOGLE_CLIENT_SECRET="..."
+```
+
+Authorized redirect URI:
+
+```text
+https://your-domain.example/api/auth/google/callback
+```
+
+For local development, also add:
+
+```text
+http://localhost:3000/api/auth/google/callback
+```
