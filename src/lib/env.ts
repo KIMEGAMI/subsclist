@@ -1,7 +1,7 @@
 function required(name: string) {
   const value = process.env[name];
   if (!value) {
-    throw new Error(`${name} が設定されていません。`);
+    throw new Error(name + " is not set.");
   }
   return value;
 }
@@ -23,18 +23,19 @@ export const env = {
   stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? "",
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? "",
   stripePremiumPriceId: process.env.STRIPE_PREMIUM_PRICE_ID ?? "",
+  stripeTestMode: (process.env.STRIPE_SECRET_KEY ?? "").startsWith("sk_test_"),
 };
 
 export function assertAuthSecret() {
   if (env.authSecret.length < 32) {
-    throw new Error("AUTH_SECRET または NEXTAUTH_SECRET は32文字以上で設定してください。");
+    throw new Error("AUTH_SECRET or NEXTAUTH_SECRET must be at least 32 characters.");
   }
 }
 
 export function assertMailEnv() {
   for (const name of ["MAIL_FROM", "SMTP_HOST", "SMTP_USER", "SMTP_PASS"] as const) {
     if (!process.env[name]) {
-      throw new Error(`${name} が設定されていません。`);
+      throw new Error(name + " is not set.");
     }
   }
 }
@@ -42,7 +43,7 @@ export function assertMailEnv() {
 export function assertStripeEnv() {
   for (const name of ["STRIPE_SECRET_KEY", "STRIPE_PREMIUM_PRICE_ID"] as const) {
     if (!process.env[name]) {
-      throw new Error(`${name} が設定されていません。`);
+      throw new Error(name + " is not set.");
     }
   }
 }
@@ -50,7 +51,7 @@ export function assertStripeEnv() {
 export function assertStripeWebhookEnv() {
   for (const name of ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"] as const) {
     if (!process.env[name]) {
-      throw new Error(`${name} が設定されていません。`);
+      throw new Error(name + " is not set.");
     }
   }
 }

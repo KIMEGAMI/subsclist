@@ -431,7 +431,7 @@ export function ProfileSettingsForm({ name, email }: { name: string; email: stri
   );
 }
 
-export function PlanSettingsForm({ plan }: { plan: "FREE" | "PREMIUM" }) {
+export function PlanSettingsForm({ plan, stripeTestMode }: { plan: "FREE" | "PREMIUM"; stripeTestMode?: boolean }) {
   const router = useRouter();
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
@@ -485,6 +485,14 @@ export function PlanSettingsForm({ plan }: { plan: "FREE" | "PREMIUM" }) {
           <p className="mt-2 text-sm text-blue-800">Unlimited subscriptions, CSV import/export, statement detection, advanced analytics, monthly report, AI recommendations, and cancellation support.</p>
         </div>
       </div>
+      {stripeTestMode && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
+          <p className="font-black">Stripe test mode is active</p>
+          <p>Use card number <span className="font-mono font-bold">4242 4242 4242 4242</span> in Stripe Checkout.</p>
+          <p>Expiry can be any future date. CVC can be any 3 digits. Name, address, and ZIP can be any test value.</p>
+          <p>No real charge is created while Stripe test keys are used.</p>
+        </div>
+      )}
       {message && <p className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p>}
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
       <div className="flex flex-col gap-3 sm:flex-row">

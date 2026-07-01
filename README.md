@@ -70,6 +70,18 @@ For Google SMTP, enable 2-step verification on the Google account, create an app
 
 For Stripe Premium billing, create a JPY 480 monthly Price and set `STRIPE_PREMIUM_PRICE_ID`. Configure the webhook endpoint at `/api/stripe/webhook`.
 
+## Stripe Test Billing
+
+Use Stripe test keys for a full checkout rehearsal before switching to live mode.
+
+1. In Stripe Dashboard, enable test mode.
+2. Create a JPY 480 monthly test Price and set it as `STRIPE_PREMIUM_PRICE_ID`.
+3. Set `STRIPE_SECRET_KEY` to a `sk_test_...` key.
+4. Configure the webhook endpoint and set `STRIPE_WEBHOOK_SECRET` to the test webhook signing secret.
+5. Open Settings, click `Upgrade to Premium`, and use card `4242 4242 4242 4242`.
+
+For the test card, use any future expiry date, any 3-digit CVC, and any name/address/ZIP. Stripe does not create a real charge in test mode.
+
 For AI recommendations, set `OPENAI_API_KEY`.
 
 ## Database

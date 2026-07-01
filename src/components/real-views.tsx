@@ -6,6 +6,7 @@ import { NotificationSendButton } from "@/components/notification-send-button";
 import { BudgetSettingsForm, CancellationChecklist, CancellationEvidenceForm, CancellationPlanForm, CategoryForm, CsvCandidateDetectorForm, CsvDownloadButton, CsvImportForm, DeleteCancellationEvidenceButton, DeletePaymentHistoryButton, LogoutButton, PasswordSettingsForm, PaymentHistoryForm, PaymentMethodForm, PlanSettingsForm, ProfileSettingsForm, SubscriptionActions, SubscriptionForm } from "@/components/real-forms";
 import { requireVerifiedUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { env } from "@/lib/env";
 import { FREE_SUBSCRIPTION_LIMIT, hiddenByPlan, isPremiumPlan, limitByPlan } from "@/lib/plans";
 import { estimatedMonthlySaving, reviewScore } from "@/lib/subscription-insights";
 
@@ -1490,7 +1491,7 @@ export async function SettingsView() {
         <Card>
           <h2 className="text-lg font-bold">プラン</h2>
           <p className="mt-2 text-sm text-slate-600">Free/Premiumの利用状態を変更します。</p>
-          <div className="mt-5"><PlanSettingsForm plan={user.plan} /></div>
+          <div className="mt-5"><PlanSettingsForm plan={user.plan} stripeTestMode={env.stripeTestMode} /></div>
         </Card>
         <Card>
           <h2 className="text-lg font-bold">パスワード</h2>

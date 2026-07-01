@@ -1,55 +1,50 @@
-# SubscList 本番デプロイ手順
+# SubscList Production Deploy
 
-この手順は Next.js + Prisma + MySQL 構成の SubscList を本番環境へデプロイするためのものです。
-本番DBに対して `prisma migrate dev` や `prisma migrate reset` は実行しないでください。本番では必ず `npm run prisma:deploy` を使います。
+This guide is for deploying SubscList with Next.js, Prisma, MySQL, Google SMTP, OpenAI, and Stripe.
 
-## 1. 事前準備
+Do not run development migration commands against production. Use `npm run prisma:deploy` for production database migrations.
 
-本番サーバー、または Vercel などのホスティング環境で以下を用意します。
+## 1. Requirements
 
-- Node.js 20 以上
-- MySQL 8.0 以上、または互換DB
-- GitHub リポジトリ: `https://github.com/KIMEGAMI/subsclist`
-- Google SMTP 用の Gmail アプリパスワード
+- Node.js 20 or later
+- MySQL 8.0 or compatible database
+- GitHub repository: https://github.com/KIMEGAMI/subsclist
+- Gmail app password for SMTP
 - OpenAI API key
-- Stripe 本番キー、Webhook secret、Premium プランの Price ID
+- Stripe secret key, webhook secret, and Premium Price ID
 
-## 2. 本番用の環境変数
+## 2. Environment Variables
 
-`.env.example` を基準に、本番環境へ以下を設定します。
-Vercel の場合は Project Settings の Environment Variables に登録してください。
-セルフホストの場合はアプリの配置先に `.env` を作成します。
+Create `.env` on the server or register these values in the hosting provider.
 
 ```env
 DATABASE_URL="mysql://user:password@host:3306/subsclist"
 APP_URL="https://your-domain.example"
 NEXTAUTH_URL="https://your-domain.example"
-NEXTAUTH_SECRET="32文字以上のランダム文字列"
-AUTH_SECRET="32文字以上のランダム文字列"
+NEXTAUTH_SECRET="at-least-32-random-characters"
+AUTH_SECRET="at-least-32-random-characters"
 
 MAIL_FROM="SubscList <your-gmail-address@gmail.com>"
 SMTP_HOST="smtp.gmail.com"
 SMTP_PORT="587"
 SMTP_SECURE="false"
 SMTP_USER="your-gmail-address@gmail.com"
-SMTP_PASS="Googleのアプリパスワード"
+SMTP_PASS="your-google-app-password"
 
 OPENAI_API_KEY="sk-proj-..."
 OPENAI_MODEL="gpt-4.1-mini"
 
-STRIPE_SECRET_KEY="sk_live_..."
+STRIPE_SECRET_KEY="sk_live_or_sk_test_..."
 STRIPE_WEBHOOK_SECRET="whsec_..."
 STRIPE_PREMIUM_PRICE_ID="price_..."
 
 DEMO_USER_EMAIL="user@shinji.work"
-NOTIFICATION_JOB_SECRET="十分に長いランダム文字列"
+NOTIFICATION_JOB_SECRET="long-random-secret"
 ```
 
-`APP_URL` と `NEXTAUTH_URL` は、必ず実際に公開する HTTPS のURLにしてください。メール認証URLやログイン後の遷移に使われます。
+`APP_URL` and `NEXTAUTH_URL` must be the public HTTPS URL of the service.
 
-## 3. デプロイ前のローカル確認
-
-本番へ反映する前に、ローカルで以下を確認します。
+## 3. Build Check
 
 ```bash
 npm install
@@ -57,51 +52,33 @@ npm run lint
 npm run build
 ```
 
-`npm run build` generates Prisma Client before the Next.js build. During generation only, it uses a fallback URL when `DATABASE_URL` is not set. `npm run prisma:deploy` still requires the production `DATABASE_URL`.
+`npm run build` runs Prisma Client generation before the Next.js build. `npm run prisma:deploy` always requires the real production `DATABASE_URL`.
 
-## 4. Vercel にデプロイする場合
-
-1. Vercel で GitHub リポジトリ `KIMEGAMI/subsclist` を Import します。
-2. Framework Preset は Next.js を選択します。
-3. Environment Variables に「2. 本番用の環境変数」を登録します。
-4. Build Command は通常どおり `npm run build` を使用します。
-5. Install Command は `npm install` を使用します。
-6. 初回デプロイ前、またはデプロイ後に本番DBへマイグレーションを適用します。
-
-Vercel の Build Command でDBマイグレーションまで自動実行したい場合は、以下のように設定できます。
-
-```bash
-npm run prisma:deploy && npm run build
-```
-
-ただし、複数環境や複数デプロイが同時に走る可能性がある場合は、CI/CD または手動で `npm run prisma:deploy` を1回だけ実行する運用の方が安全です。
-
-## 5. セルフホストでデプロイする場合
-
-サーバー上で以下を実行します。
+## 4. Self-host Deploy
 
 ```bash
 git clone https://github.com/KIMEGAMI/subsclist.git
-cd SubscList
+cd subsclist
 npm install
 npm run prisma:deploy
 npm run build
 npm run start
 ```
 
-標準では `npm run start` は port 3000 で起動します。必要に応じてリバースプロキシで HTTPS 化してください。
+The default Next.js port is 3000. Put Apache or Nginx in front of it for HTTPS.
 
-PM2 を使う場合の例です。
+With PM2:
 
 ```bash
-npm install -g pm2
+sudo npm install -g pm2
 pm2 start npm --name subsclist -- run start
 pm2 save
 ```
 
-## 6. Stripe settings
+## 5. Stripe Billing
 
 Stripe Checkout, Customer Portal, and Webhook routes are implemented.
+
 Create a JPY 480 monthly Price in Stripe Dashboard and set it as `STRIPE_PREMIUM_PRICE_ID`.
 
 Webhook endpoint:
@@ -110,36 +87,50 @@ Webhook endpoint:
 https://your-domain.example/api/stripe/webhook
 ```
 
-Enable these Stripe events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, and `customer.subscription.deleted`.
-Set the signing secret as `STRIPE_WEBHOOK_SECRET`.
+Enable these Stripe events:
 
-## 7. 定期通知の実行
+- `checkout.session.completed`
+- `customer.subscription.created`
+- `customer.subscription.updated`
+- `customer.subscription.deleted`
 
-通知送信APIを cron から呼び出す場合は、`NOTIFICATION_JOB_SECRET` を付けて実行します。
+Set the endpoint signing secret as `STRIPE_WEBHOOK_SECRET`.
+
+### Stripe Test Mode
+
+Before using live keys, run a full test checkout.
+
+1. Turn on test mode in Stripe Dashboard.
+2. Create a test JPY 480 monthly Price.
+3. Set `STRIPE_SECRET_KEY` to `sk_test_...`.
+4. Set `STRIPE_PREMIUM_PRICE_ID` to the test `price_...`.
+5. Set `STRIPE_WEBHOOK_SECRET` from the test webhook endpoint.
+6. Open SubscList Settings and click `Upgrade to Premium`.
+7. In Stripe Checkout, use card `4242 4242 4242 4242`.
+
+Use any future expiry date, any 3-digit CVC, and any name/address/ZIP. No real charge is created in test mode.
+
+## 6. Notification Job
 
 ```bash
 curl -X POST "https://your-domain.example/api/notifications/send" \
   -H "Authorization: Bearer your-notification-job-secret"
 ```
 
-Vercel Cron、GitHub Actions、サーバーの cron など、運用環境に合わせて1日1回程度で設定してください。
+## 7. Post-deploy Checks
 
-## 8. デプロイ後の確認
+- `/` opens correctly
+- `/login` works
+- Registration sends a Google SMTP verification email
+- Email verification completes
+- Authenticated pages such as `/dashboard`, `/subscriptions`, and `/calendar` load
+- Subscription create, edit, and delete work
+- OpenAI recommendations work when `OPENAI_API_KEY` is set
+- Stripe test checkout completes and the webhook updates the user to Premium
 
-デプロイ後は以下を確認します。
+## 8. Production Database Safety
 
-- `/` が表示できる
-- `/login` からログインできる
-- 新規登録後、Google SMTP から認証メールが届く
-- メール認証URLで認証が完了する
-- `/dashboard`、`/subscriptions`、`/calendar` がログイン後に表示できる
-- サブスク登録、編集、削除ができる
-- AI診断で OpenAI API エラーが出ない
-- Premium 関連機能を使う場合、Stripe の本番決済が動作する
-
-## 9. 本番DB運用の注意
-
-本番DBでは以下を実行しないでください。
+Do not run these commands against production:
 
 ```bash
 npm run prisma:migrate
@@ -147,10 +138,10 @@ npx prisma migrate dev
 npx prisma migrate reset
 ```
 
-本番DBの更新は以下のみを使います。
+Use only:
 
 ```bash
 npm run prisma:deploy
 ```
 
-マイグレーション前には、DBバックアップを取得してください。
+Take a database backup before applying migrations.
