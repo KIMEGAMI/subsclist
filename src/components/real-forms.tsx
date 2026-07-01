@@ -435,7 +435,7 @@ export function PlanSettingsForm({ plan, stripeTestMode }: { plan: "FREE" | "PRE
   const router = useRouter();
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState<"checkout" | "portal" | "downgrade" | "">("");
+  const [loading, setLoading] = useState<"checkout" | "portal" | "downgrade" | "sync" | "">("");
 
   async function openStripe(path: "/api/stripe/checkout" | "/api/stripe/portal", mode: "checkout" | "portal") {
     setMessage("");
@@ -448,6 +448,23 @@ export function PlanSettingsForm({ plan, stripeTestMode }: { plan: "FREE" | "PRE
       window.location.href = data.url;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Stripeページを開けませんでした。");
+      setLoading("");
+    }
+  }
+
+  async function syncBilling() {
+    setMessage("");
+    setError("");
+    setLoading("sync");
+    try {
+      const response = await fetch("/api/stripe/sync", { method: "POST" });
+      const data = (await response.json().catch(() => ({}))) as { message?: string };
+      if (!response.ok) throw new Error(data.message ?? "課金状態の確認に失敗しました。");
+      setMessage(data.message ?? "課金状態を確認しました。");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "課金状態の確認に失敗しました。");
+    } finally {
       setLoading("");
     }
   }
@@ -482,7 +499,7 @@ export function PlanSettingsForm({ plan, stripeTestMode }: { plan: "FREE" | "PRE
             <p className="font-bold text-blue-900">Premium 月額480円</p>
             {plan === "PREMIUM" && <span className="rounded-full bg-blue-600 px-2 py-1 text-xs font-black text-white">現在のプラン</span>}
           </div>
-          <p className="mt-2 text-sm text-blue-800">サブスク無制限、CSVインポート/エクスポート、明細検出、高度な分析、月次レポート、AI提案、解約支援を利用できます。</p>
+          <p className="mt-2 text-sm text-blue-800">サブスク無制限、CSV入出力、明細検出、高度な分析、月次レポート、AI提案、解約支援を利用できます。</p>
         </div>
       </div>
       {stripeTestMode && (
@@ -495,7 +512,7 @@ export function PlanSettingsForm({ plan, stripeTestMode }: { plan: "FREE" | "PRE
       )}
       {message && <p className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p>}
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
-      <div className="flex flex-col gap-3 sm:flex-row">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
         {plan === "FREE" ? (
           <button type="button" disabled={Boolean(loading)} onClick={() => openStripe("/api/stripe/checkout", "checkout")} className="btn-primary">
             {loading === "checkout" ? "Stripeを開いています..." : "Premiumにアップグレード"}
@@ -505,13 +522,16 @@ export function PlanSettingsForm({ plan, stripeTestMode }: { plan: "FREE" | "PRE
             {loading === "portal" ? "Stripeを開いています..." : "課金を管理"}
           </button>
         )}
+        <button type="button" disabled={Boolean(loading)} onClick={syncBilling} className="btn-secondary">
+          {loading === "sync" ? "確認中..." : "課金状態を再確認"}
+        </button>
         {plan === "PREMIUM" && (
           <button type="button" disabled={Boolean(loading)} onClick={downgrade} className="btn-secondary">
             {loading === "downgrade" ? "更新中..." : "アプリ表示をFreeに変更"}
           </button>
         )}
       </div>
-      <p className="text-xs leading-5 text-slate-500">本番課金はStripeで管理されます。Webhookを設定すると、決済成功、解約、サブスクリプション状態の変更が自動でPremiumへ反映されます。</p>
+      <p className="text-xs leading-5 text-slate-500">決済完了後にPremium表示へ切り替わらない場合は「課金状態を再確認」を押してください。通常はCheckout完了後またはWebhook受信時に自動で反映されます。</p>
     </div>
   );
 }

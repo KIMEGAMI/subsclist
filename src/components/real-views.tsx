@@ -135,6 +135,31 @@ function PlanLimitBanner({ hiddenCount }: { hiddenCount: number }) {
   );
 }
 
+function PremiumValueCard({ monthlyTotal, saving, reviewCount, urgentCount }: { monthlyTotal: number; saving: number; reviewCount: number; urgentCount: number }) {
+  const yearlySaving = saving * 12;
+  return (
+    <Card className="mt-6 border-blue-200 bg-gradient-to-br from-blue-50/95 to-cyan-50/90">
+      <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+        <div>
+          <p className="text-xs font-black uppercase text-blue-700">Premium Value</p>
+          <h2 className="mt-2 text-xl font-black text-blue-950">480円の元が取れているかを毎月チェック</h2>
+          <p className="mt-2 text-sm font-semibold leading-6 text-blue-900">登録済みサブスクから、見直し候補・期限リスク・削減見込みを自動で整理します。</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="rounded-lg bg-white/80 p-4 shadow-sm"><p className="text-xs font-bold text-slate-500">月額固定費</p><p className="mt-1 text-2xl font-black text-slate-950">{yen.format(monthlyTotal)}</p></div>
+          <div className="rounded-lg bg-white/80 p-4 shadow-sm"><p className="text-xs font-bold text-slate-500">年間削減候補</p><p className="mt-1 text-2xl font-black text-emerald-700">{yen.format(yearlySaving)}</p></div>
+          <div className="rounded-lg bg-white/80 p-4 shadow-sm"><p className="text-xs font-bold text-slate-500">見直し候補</p><p className="mt-1 text-2xl font-black text-slate-950">{reviewCount}件</p></div>
+          <div className="rounded-lg bg-white/80 p-4 shadow-sm"><p className="text-xs font-bold text-slate-500">期限リスク</p><p className="mt-1 text-2xl font-black text-rose-700">{urgentCount}件</p></div>
+        </div>
+      </div>
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row">
+        <Link href="/review" className="btn-primary">見直しレポートを見る</Link>
+        <Link href="/monthly-report" className="btn-secondary">月次レポートを見る</Link>
+      </div>
+    </Card>
+  );
+}
+
 function PremiumOnlyNotice({ title, description }: { title: string; description: string }) {
   return (
     <Card className="border-blue-200 bg-blue-50/90">
@@ -229,6 +254,7 @@ export async function DashboardView() {
   const budgetRate = budget ? percent(monthlyTotal, budget) : 0;
   const urgentItems = active.filter((item) => daysUntil(item.nextBillingDate) <= 7 || (item.trialEndsAt && daysUntil(item.trialEndsAt) <= 7) || (item.cancellationDeadline && daysUntil(item.cancellationDeadline) <= 7));
   const reviewItems = active.filter((item) => needsReview(item.lastReviewedAt));
+  const saving = active.reduce((sum, item) => sum + estimatedMonthlySaving(item), 0);
   const categoryTotals = active.reduce<Record<string, number>>((acc, item) => {
     const name = item.category?.name ?? "未分類";
     acc[name] = (acc[name] ?? 0) + monthly(item.price, item.billingCycle, item.customCycleDays);
@@ -237,7 +263,7 @@ export async function DashboardView() {
 
   return (
     <AppShell>
-      <PageHeader title="ダッシュボード" description="登録済みサブスクリプションの月額、年額、更新予定を確認します。" action={<Link href="/subscriptions/new" className="btn-primary">サブスク追加</Link>} />
+      <PageHeader title="ダッシュボード" description="登録済みサブスクリプションの月額、更新予定、期限リスク、見直し候補を確認します。" action={<Link href="/subscriptions/new" className="btn-primary">サブスク追加</Link>} />
       <PlanLimitBanner hiddenCount={hiddenCount} />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
@@ -253,6 +279,7 @@ export async function DashboardView() {
           </Card>
         ))}
       </div>
+      <PremiumValueCard monthlyTotal={monthlyTotal} saving={saving} reviewCount={reviewItems.length} urgentCount={urgentItems.length} />
       {budget && (
         <Card className="mt-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

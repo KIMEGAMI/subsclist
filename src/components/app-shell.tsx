@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 
+const brand = "サブスクリスト";
 const nav = [
   { label: "ダッシュボード", href: "/dashboard", icon: "D" },
   { label: "サブスク", href: "/subscriptions", icon: "S" },
@@ -13,7 +14,7 @@ const nav = [
   { label: "見直し", href: "/review", icon: "R" },
   { label: "カテゴリ", href: "/categories", icon: "K" },
   { label: "支払い方法", href: "/payment-methods", icon: "P" },
-  { label: "支払い確認", href: "/payments", icon: "Y" },
+  { label: "支払い履歴", href: "/payments", icon: "Y" },
   { label: "支払い累計", href: "/payment-totals", icon: "T" },
   { label: "通知", href: "/notifications", icon: "N" },
   { label: "CSV", href: "/export", icon: "E" },
@@ -27,10 +28,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="min-h-screen bg-[#eef9fb] bg-[url('/app-background.png')] bg-cover bg-fixed bg-center text-slate-950">
       <div className="fixed inset-0 bg-white/28 backdrop-blur-[2px]" aria-hidden="true" />
       <aside className="fixed inset-y-0 left-0 z-30 hidden w-[17.5rem] border-r border-white/65 bg-white/88 px-5 py-6 shadow-[18px_0_50px_rgba(15,23,42,0.08)] backdrop-blur-xl lg:flex lg:flex-col">
-        <Link href="/" className="group flex items-center gap-3 text-xl font-black">
+        <Link href="/dashboard" className="group flex items-center gap-3 text-xl font-black">
           <span className="grid size-11 place-items-center rounded-lg bg-gradient-to-br from-blue-600 via-cyan-500 to-fuchsia-500 text-white shadow-lg shadow-blue-500/20 transition group-hover:scale-105">S</span>
           <span>
-            サブスクリスト
+            {brand}
             <span className="block text-xs font-bold text-slate-500">Subscription OS</span>
           </span>
         </Link>
@@ -54,14 +55,14 @@ export function AppShell({ children }: { children: ReactNode }) {
           })}
         </nav>
         <div className="mt-auto rounded-lg border border-blue-100 bg-gradient-to-br from-blue-50 to-cyan-50 p-4">
-          <p className="text-sm font-black text-blue-950">固定費を見える化</p>
-          <p className="mt-2 text-xs leading-5 text-blue-800">更新日、解約期限、AI見直しを一つの画面で管理します。</p>
+          <p className="text-sm font-black text-blue-950">{"固定費を見える化"}</p>
+          <p className="mt-2 text-xs leading-5 text-blue-800">{"更新日、解約期限、AI見直し、支払い履歴をまとめて確認できます。"}</p>
         </div>
       </aside>
       <header className="sticky top-0 z-20 border-b border-white/65 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-xl lg:hidden">
         <div className="flex items-center justify-between">
-          <Link href="/dashboard" className="font-black">サブスクリスト</Link>
-          <Link href="/subscriptions/new" className="btn-primary min-h-0 px-3 py-2 text-sm">追加</Link>
+          <Link href="/dashboard" className="font-black">{brand}</Link>
+          <Link href="/subscriptions/new" className="btn-primary min-h-0 px-3 py-2 text-sm">{"追加"}</Link>
         </div>
         <div className="subtle-scrollbar mt-3 flex gap-2 overflow-x-auto pb-1">
           {nav.map(({ label, href }) => (

@@ -51,3 +51,24 @@ export async function syncStripeCheckoutSessionById(sessionId: string, userId: s
   const synced = await syncStripeCheckoutSession(session);
   return synced ? "synced" : "missing_subscription";
 }
+
+export async function syncLatestStripeSubscriptionForUser(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { stripeCustomerId: true, stripeSubscriptionId: true },
+  });
+  if (!user?.stripeCustomerId && !user?.stripeSubscriptionId) return "not_found" as const;
+
+  const client = stripe();
+  if (user.stripeSubscriptionId) {
+    const subscription = await client.subscriptions.retrieve(user.stripeSubscriptionId);
+    await syncStripeSubscription(subscription);
+    return activePlan(subscription.status) === "PREMIUM" ? "premium" as const : "free" as const;
+  }
+
+  const subscriptions = await client.subscriptions.list({ customer: user.stripeCustomerId ?? undefined, status: "all", limit: 10 });
+  const active = subscriptions.data.find((item) => item.status === "active" || item.status === "trialing") ?? subscriptions.data[0];
+  if (!active) return "not_found" as const;
+  await syncStripeSubscription(active);
+  return activePlan(active.status) === "PREMIUM" ? "premium" as const : "free" as const;
+}
