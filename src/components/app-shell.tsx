@@ -9,6 +9,7 @@ const nav = [
   { label: "サブスク", href: "/subscriptions", icon: "S" },
   { label: "カレンダー", href: "/calendar", icon: "C" },
   { label: "分析", href: "/analytics", icon: "A" },
+  { label: "月次レポート", href: "/monthly-report", icon: "M" },
   { label: "見直し", href: "/review", icon: "R" },
   { label: "カテゴリ", href: "/categories", icon: "K" },
   { label: "支払い方法", href: "/payment-methods", icon: "P" },
@@ -33,7 +34,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span className="block text-xs font-bold text-slate-500">Subscription OS</span>
           </span>
         </Link>
-        <nav className="mt-8 space-y-1.5">
+        <nav className="mt-8 space-y-1.5 overflow-y-auto pr-1">
           {nav.map(({ label, href, icon }) => {
             const active = pathname === href || (href === "/subscriptions" && pathname.startsWith("/subscriptions"));
             return (
@@ -54,7 +55,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </nav>
         <div className="mt-auto rounded-lg border border-blue-100 bg-gradient-to-br from-blue-50 to-cyan-50 p-4">
           <p className="text-sm font-black text-blue-950">固定費を見える化</p>
-          <p className="mt-2 text-xs leading-5 text-blue-800">更新日、解約期限、AI見直しを一箇所で管理します。</p>
+          <p className="mt-2 text-xs leading-5 text-blue-800">更新日、解約期限、AI見直しを一つの画面で管理します。</p>
         </div>
       </aside>
       <header className="sticky top-0 z-20 border-b border-white/65 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-xl lg:hidden">

@@ -73,30 +73,30 @@ const paymentMethodTypeLabels: Record<string, string> = {
   APPLE_PAY: "Apple Pay",
   AMAZON_PAY: "Amazon Pay",
   AU_PAY: "au PAY",
-  BANK: "銀行引落",
-  BANK_TRANSFER: "銀行振込",
-  CARRIER_BILLING: "キャリア決済",
-  CASH: "現金",
-  CONVENIENCE_STORE: "コンビニ払い",
-  CREDIT_CARD: "クレジットカード",
-  D_BARAI: "d払い",
-  DEBIT_CARD: "デビットカード",
+  BANK: "Bank debit",
+  BANK_TRANSFER: "Bank transfer",
+  CARRIER_BILLING: "Carrier billing",
+  CASH: "Cash",
+  CONVENIENCE_STORE: "Convenience store",
+  CREDIT_CARD: "Credit card",
+  D_BARAI: "d Barai",
+  DEBIT_CARD: "Debit card",
   GOOGLE_PAY: "Google Pay",
   ID: "iD",
-  INVOICE: "請求書払い",
+  INVOICE: "Invoice",
   LINE_PAY: "LINE Pay",
-  MERPAY: "メルペイ",
+  MERPAY: "Merpay",
   NANACO: "nanaco",
   PASMO: "PASMO",
   PAYPAL: "PayPal",
   PAYPAY: "PayPay",
-  PREPAID_CARD: "プリペイドカード",
+  PREPAID_CARD: "Prepaid card",
   QUICPAY: "QUICPay",
-  RAKUTEN_EDY: "楽天Edy",
-  RAKUTEN_PAY: "楽天ペイ",
+  RAKUTEN_EDY: "Rakuten Edy",
+  RAKUTEN_PAY: "Rakuten Pay",
   SUICA: "Suica",
   WAON: "WAON",
-  OTHER: "その他",
+  OTHER: "Other",
 };
 
 function monthly(price: number, cycle: string, customCycleDays?: number | null) {
@@ -1395,40 +1395,82 @@ export async function NotificationsView() {
     where: { userId: user.id, deletedAt: null },
     orderBy: { nextBillingDate: "asc" },
   })) as unknown as SubscriptionView[];
+  const deliveries = await prisma.notificationDelivery.findMany({
+    where: { userId: user.id },
+    orderBy: { sentAt: "desc" },
+    take: 200,
+  });
   const subscriptions = limitByPlan(allSubscriptions, user.plan);
   const hiddenCount = hiddenByPlan(allSubscriptions.length, user.plan);
+  const lastSentBySubscription = new Map<string, Date>();
+  for (const delivery of deliveries) {
+    if (!lastSentBySubscription.has(delivery.subscriptionId)) {
+      lastSentBySubscription.set(delivery.subscriptionId, delivery.sentAt);
+    }
+  }
+  const now = new Date();
+  const nextTargets = subscriptions
+    .flatMap((item) => [
+      { item, label: "Renewal", date: item.nextBillingDate },
+      { item, label: "Trial end", date: item.trialEndsAt },
+      { item, label: "Cancel deadline", date: item.cancellationDeadline },
+    ])
+    .filter((entry): entry is { item: SubscriptionView; label: string; date: Date } => entry.date instanceof Date && entry.date.getTime() >= now.getTime())
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+
   return (
     <AppShell>
-      <PageHeader title="通知設定" description="登録済みサブスクリプションごとの通知日数を確認します。変更は各サブスク編集画面で行います。" />
+      <PageHeader title="Notifications" description="Check upcoming renewal, trial, cancellation-deadline notices and delivery history." />
       <PlanLimitBanner hiddenCount={hiddenCount} />
       <Card className="mb-5">
         <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
           <div>
-            <h2 className="font-bold">期限通知</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">更新日、無料トライアル終了日、解約期限が通知日数と一致した契約へメールを送信します。同じ期限の通知は重複送信されません。</p>
+            <h2 className="font-bold">Deadline notifications</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">Emails are sent when the configured notice period matches a renewal, trial end, or cancellation deadline. Duplicate notices for the same deadline are skipped.</p>
           </div>
           <NotificationSendButton />
         </div>
       </Card>
-      <Card>
-        {subscriptions.length === 0 ? (
-          <EmptyState text="通知対象のサブスクリプションはありません。" />
-        ) : (
-          <div className="divide-y divide-slate-100">
-            {subscriptions.map((item) => (
-              <div key={item.id} className="flex items-center justify-between py-3">
+      <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+        <Card>
+          <h2 className="text-lg font-bold">Upcoming notices</h2>
+          <div className="mt-4 divide-y divide-slate-100">
+            {nextTargets.length === 0 ? <EmptyState text="No upcoming notices." /> : nextTargets.slice(0, 10).map(({ item, label, date }) => (
+              <Link key={item.id + "-" + label + "-" + date.toISOString()} href={"/subscriptions/" + item.id} className="flex items-center justify-between gap-3 py-3">
                 <div>
                   <p className="font-semibold">{item.name}</p>
-                  <p className="text-sm text-slate-500">次回更新日 {item.nextBillingDate.toISOString().slice(0, 10)} / トライアル {dateText(item.trialEndsAt)} / 解約期限 {dateText(item.cancellationDeadline)}</p>
+                  <p className="text-sm text-slate-500">{label}: {dateText(date)} / notice {item.notifyDaysBefore ?? 7} days before</p>
                 </div>
-                <Link href={`/subscriptions/${item.id}/edit`} className="btn-secondary min-h-0 px-3 py-2 text-sm">
-                  {item.notifyDaysBefore ?? 0}日前
-                </Link>
-              </div>
+                <span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-black text-blue-700">{Math.max(0, daysUntil(date))} days</span>
+              </Link>
             ))}
           </div>
-        )}
-      </Card>
+        </Card>
+        <Card>
+          <h2 className="text-lg font-bold">Delivery status by subscription</h2>
+          {subscriptions.length === 0 ? (
+            <div className="mt-4"><EmptyState text="No subscriptions for notifications." /></div>
+          ) : (
+            <div className="mt-4 divide-y divide-slate-100">
+              {subscriptions.map((item) => {
+                const lastSent = lastSentBySubscription.get(item.id);
+                return (
+                  <div key={item.id} className="flex items-center justify-between gap-3 py-3">
+                    <div>
+                      <p className="font-semibold">{item.name}</p>
+                      <p className="text-sm text-slate-500">Renewal {dateText(item.nextBillingDate)} / trial {dateText(item.trialEndsAt)} / cancel deadline {dateText(item.cancellationDeadline)}</p>
+                      <p className="mt-1 text-xs font-semibold text-slate-500">Last sent: {lastSent ? dateText(lastSent) : "Never"}</p>
+                    </div>
+                    <Link href={"/subscriptions/" + item.id + "/edit"} className="btn-secondary min-h-0 px-3 py-2 text-sm">
+                      {item.notifyDaysBefore ?? 7} days
+                    </Link>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      </div>
     </AppShell>
   );
 }
@@ -1470,6 +1512,110 @@ export async function SettingsView() {
           </div>
         </Card>
       </div>
+    </AppShell>
+  );
+}
+export async function MonthlyReportView() {
+  const user = await requireVerifiedUser();
+  if (!isPremiumPlan(user.plan)) {
+    return <AppShell><PageHeader title="月次レポート" description="今月の支払い予定、前月比、削減候補、期限リスクを確認します。" /><PremiumOnlyNotice title="月次レポートはPremium限定です" description="毎月の固定費レビュー、削減候補、期限リスクの集約はPremiumで利用できます。" /></AppShell>;
+  }
+
+  const today = new Date();
+  const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+  const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
+  const previousStart = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+  const previousEnd = new Date(today.getFullYear(), today.getMonth(), 0, 23, 59, 59, 999);
+
+  const subscriptions = (await prisma.subscription.findMany({
+    where: { userId: user.id, deletedAt: null, status: "ACTIVE" },
+    include: { category: true, paymentMethod: true },
+    orderBy: { nextBillingDate: "asc" },
+  })) as unknown as SubscriptionView[];
+  const histories = (await prisma.paymentHistory.findMany({
+    where: { userId: user.id, paidAt: { gte: previousStart, lte: monthEnd } },
+    include: { subscription: { include: { category: true, paymentMethod: true } } },
+    orderBy: { paidAt: "desc" },
+  })) as unknown as PaymentHistoryView[];
+
+  const monthHistories = histories.filter((item) => item.paidAt >= monthStart && item.paidAt <= monthEnd);
+  const previousHistories = histories.filter((item) => item.paidAt >= previousStart && item.paidAt <= previousEnd);
+  const currentPaid = monthHistories.reduce((sum, item) => sum + item.amount, 0);
+  const previousPaid = previousHistories.reduce((sum, item) => sum + item.amount, 0);
+  const delta = currentPaid - previousPaid;
+  const deltaClass = delta > 0 ? "text-red-600" : delta < 0 ? "text-emerald-600" : "text-slate-950";
+  const activeMonthly = subscriptions.reduce((sum, item) => sum + monthly(item.price, item.billingCycle, item.customCycleDays), 0);
+  const dueThisMonth = subscriptions.filter((item) => item.nextBillingDate >= monthStart && item.nextBillingDate <= monthEnd);
+  const riskItems = subscriptions.filter((item) =>
+    (item.trialEndsAt && item.trialEndsAt >= today && item.trialEndsAt <= monthEnd) ||
+    (item.cancellationDeadline && item.cancellationDeadline >= today && item.cancellationDeadline <= monthEnd),
+  );
+  const categoryCounts = subscriptions.reduce<Record<string, number>>((acc, item) => {
+    const key = item.categoryId ?? "none";
+    acc[key] = (acc[key] ?? 0) + 1;
+    return acc;
+  }, {});
+  const scored = subscriptions
+    .map((item) => ({ item, score: reviewScore(item, categoryCounts[item.categoryId ?? "none"] ?? 1), saving: estimatedMonthlySaving(item) }))
+    .sort((a, b) => b.score.score - a.score.score || b.saving - a.saving);
+  const saving = scored.reduce((sum, item) => sum + item.saving, 0);
+
+  return (
+    <AppShell>
+      <PageHeader title="月次レポート" description="今月見るべき支払い、更新、削減候補を1画面にまとめます。" action={<Link href="/review" className="btn-primary">見直しへ</Link>} />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+        <Card><p className="text-sm font-semibold text-slate-500">今月の支払い実績</p><p className="mt-2 text-3xl font-black">{yen.format(currentPaid)}</p><p className="mt-2 text-sm text-slate-500">記録済み {monthHistories.length}件</p></Card>
+        <Card><p className="text-sm font-semibold text-slate-500">前月比</p><p className={"mt-2 text-3xl font-black " + deltaClass}>{delta >= 0 ? "+" : ""}{yen.format(delta)}</p><p className="mt-2 text-sm text-slate-500">前月 {yen.format(previousPaid)}</p></Card>
+        <Card><p className="text-sm font-semibold text-slate-500">月額見込み</p><p className="mt-2 text-3xl font-black">{yen.format(activeMonthly)}</p><p className="mt-2 text-sm text-slate-500">アクティブ契約</p></Card>
+        <Card><p className="text-sm font-semibold text-slate-500">今月の更新</p><p className="mt-2 text-3xl font-black">{dueThisMonth.length}件</p><p className="mt-2 text-sm text-slate-500">期限リスク {riskItems.length}件</p></Card>
+        <Card><p className="text-sm font-semibold text-slate-500">削減余地</p><p className="mt-2 text-3xl font-black">{yen.format(saving)}</p><p className="mt-2 text-sm text-slate-500">年間 {yen.format(saving * 12)}</p></Card>
+      </div>
+
+      <div className="mt-6 grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">
+        <Card>
+          <h2 className="text-lg font-bold">今月の支払い予定</h2>
+          <div className="mt-4 divide-y divide-slate-100">
+            {dueThisMonth.length === 0 ? <EmptyState text="今月更新予定の契約はありません。" /> : dueThisMonth.map((item) => (
+              <Link key={item.id} href={"/subscriptions/" + item.id} className="flex items-center justify-between gap-4 py-3">
+                <div>
+                  <p className="font-semibold">{item.name}</p>
+                  <p className="text-sm text-slate-500">{item.category?.name ?? "未分類"} / {dateText(item.nextBillingDate)}</p>
+                </div>
+                <p className="font-black">{yen.format(monthly(item.price, item.billingCycle, item.customCycleDays))}</p>
+              </Link>
+            ))}
+          </div>
+        </Card>
+        <Card>
+          <h2 className="text-lg font-bold">期限リスク</h2>
+          <div className="mt-4 divide-y divide-slate-100">
+            {riskItems.length === 0 ? <EmptyState text="今月中に対応が必要な期限はありません。" /> : riskItems.map((item) => (
+              <Link key={item.id} href={"/subscriptions/" + item.id} className="block py-3">
+                <p className="font-semibold">{item.name}</p>
+                <p className="mt-1 text-sm text-slate-500">トライアル {dateText(item.trialEndsAt)} / 解約期限 {dateText(item.cancellationDeadline)}</p>
+              </Link>
+            ))}
+          </div>
+        </Card>
+      </div>
+
+      <Card className="mt-6">
+        <h2 className="text-lg font-bold">今月の見直し優先リスト</h2>
+        <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          {scored.slice(0, 6).map(({ item, score, saving }) => (
+            <Link key={item.id} href={"/subscriptions/" + item.id} className="rounded-lg border border-slate-100 bg-white/70 p-4 shadow-sm transition hover:border-blue-200 hover:bg-blue-50">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="font-bold">{item.name}</p>
+                  <p className="mt-2 text-sm leading-6 text-slate-500">{score.reasons.join(" / ")}</p>
+                </div>
+                <span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-black text-blue-700">{score.score}</span>
+              </div>
+              <p className="mt-3 text-sm font-bold text-slate-700">削減見込み {yen.format(saving)}/月</p>
+            </Link>
+          ))}
+        </div>
+      </Card>
     </AppShell>
   );
 }

@@ -53,7 +53,7 @@ export function reviewScore(item: InsightSubscription, sameCategoryCount = 1) {
 
   if (sameCategoryCount >= 3) {
     score += 16;
-    reasons.push("同カテゴリの契約が多い");
+    reasons.push("同じカテゴリの契約が多い");
   }
 
   if (item.usageFrequency === "RARELY") {
@@ -61,7 +61,7 @@ export function reviewScore(item: InsightSubscription, sameCategoryCount = 1) {
     reasons.push("利用頻度が低い");
   } else if (item.usageFrequency === "MONTHLY") {
     score += 10;
-    reasons.push("利用頻度が月1程度");
+    reasons.push("利用頻度が月1回程度");
   }
 
   if (item.priority === "OPTIONAL") {

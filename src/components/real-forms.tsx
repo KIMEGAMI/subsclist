@@ -435,49 +435,76 @@ export function PlanSettingsForm({ plan }: { plan: "FREE" | "PREMIUM" }) {
   const router = useRouter();
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<"checkout" | "portal" | "downgrade" | "">("");
 
-  async function submit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  async function openStripe(path: "/api/stripe/checkout" | "/api/stripe/portal", mode: "checkout" | "portal") {
     setMessage("");
     setError("");
-    setLoading(true);
-    const form = new FormData(event.currentTarget);
+    setLoading(mode);
     try {
-      await request("/api/settings/plan", "PUT", Object.fromEntries(form.entries()));
-      setMessage("プランを更新しました。");
+      const response = await fetch(path, { method: "POST" });
+      const data = (await response.json().catch(() => ({}))) as { message?: string; url?: string };
+      if (!response.ok || !data.url) throw new Error(data.message ?? "Could not open the Stripe page.");
+      window.location.href = data.url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not open the Stripe page.");
+      setLoading("");
+    }
+  }
+
+  async function downgrade() {
+    setMessage("");
+    setError("");
+    setLoading("downgrade");
+    try {
+      await request("/api/settings/plan", "PUT", { plan: "FREE" });
+      setMessage("Changed the app display to Free. If Stripe billing is active, cancel it from the Stripe portal as well.");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "プラン変更に失敗しました。");
+      setError(err instanceof Error ? err.message : "Plan update failed.");
     } finally {
-      setLoading(false);
+      setLoading("");
     }
   }
 
   return (
-    <form onSubmit={submit} noValidate className="space-y-4">
-      <Field label="プラン">
-        <select name="plan" defaultValue={plan} className="input">
-          <option value="FREE">Free</option>
-          <option value="PREMIUM">Premium</option>
-        </select>
-      </Field>
+    <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="rounded-lg border border-slate-100 bg-white/70 p-4 shadow-sm">
-          <p className="font-bold">Free</p>
-          <p className="mt-2 text-sm text-slate-600">サブスク10件まで、カテゴリ5件まで。基本管理、ダッシュボード、カレンダー、通知確認が使えます。</p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-bold">Free</p>
+            {plan === "FREE" && <span className="rounded-full bg-slate-100 px-2 py-1 text-xs font-black text-slate-600">Current</span>}
+          </div>
+          <p className="mt-2 text-sm text-slate-600">Manage up to 10 subscriptions and 5 categories. Basic dashboard, calendar, and notification checks are included.</p>
         </div>
         <div className="rounded-lg border border-blue-100 bg-blue-50/80 p-4 shadow-sm">
-          <p className="font-bold text-blue-900">Premium</p>
-          <p className="mt-2 text-sm text-blue-800">登録無制限、CSV入出力、CSV明細候補検出、高度分析、支払い累計、見直しレポート、AI診断、解約支援が使えます。</p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-bold text-blue-900">Premium JPY 480/mo</p>
+            {plan === "PREMIUM" && <span className="rounded-full bg-blue-600 px-2 py-1 text-xs font-black text-white">Current</span>}
+          </div>
+          <p className="mt-2 text-sm text-blue-800">Unlimited subscriptions, CSV import/export, statement detection, advanced analytics, monthly report, AI recommendations, and cancellation support.</p>
         </div>
       </div>
       {message && <p className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p>}
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
-      <button disabled={loading} className="btn-primary">
-        {loading ? "変更中..." : "プランを変更"}
-      </button>
-    </form>
+      <div className="flex flex-col gap-3 sm:flex-row">
+        {plan === "FREE" ? (
+          <button type="button" disabled={Boolean(loading)} onClick={() => openStripe("/api/stripe/checkout", "checkout")} className="btn-primary">
+            {loading === "checkout" ? "Opening Stripe..." : "Upgrade to Premium"}
+          </button>
+        ) : (
+          <button type="button" disabled={Boolean(loading)} onClick={() => openStripe("/api/stripe/portal", "portal")} className="btn-primary">
+            {loading === "portal" ? "Opening Stripe..." : "Manage billing"}
+          </button>
+        )}
+        {plan === "PREMIUM" && (
+          <button type="button" disabled={Boolean(loading)} onClick={downgrade} className="btn-secondary">
+            {loading === "downgrade" ? "Updating..." : "Switch app display to Free"}
+          </button>
+        )}
+      </div>
+      <p className="text-xs leading-5 text-slate-500">Production billing is managed by Stripe. When the webhook is configured, payment success, cancellation, and subscription status changes update Premium automatically.</p>
+    </div>
   );
 }
 

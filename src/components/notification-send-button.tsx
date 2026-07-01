@@ -18,7 +18,8 @@ export function NotificationSendButton() {
         failures?: string[];
       };
       if (!response.ok) throw new Error(data.message ?? "通知送信に失敗しました。");
-      setMessage(`送信 ${data.sent ?? 0}件 / 送信済み ${data.skipped ?? 0}件`);
+      const failed = data.failures?.length ? ` / 失敗 ${data.failures.length}件` : "";
+      setMessage(`送信 ${data.sent ?? 0}件 / 送信済み ${data.skipped ?? 0}件${failed}`);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "通知送信に失敗しました。");
     } finally {
@@ -29,7 +30,7 @@ export function NotificationSendButton() {
   return (
     <div className="grid gap-2">
       <button disabled={loading} onClick={send} className="btn-primary">
-        {loading ? "送信中..." : "期限通知を送信"}
+        {loading ? "送信中..." : "期限通知を今すぐ送信"}
       </button>
       {message && <p className="text-sm font-semibold text-slate-600">{message}</p>}
     </div>

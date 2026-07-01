@@ -99,12 +99,19 @@ pm2 start npm --name subsclist -- run start
 pm2 save
 ```
 
-## 6. Stripe 設定
+## 6. Stripe settings
 
-`.env.example` には Stripe 用の環境変数がありますが、現時点のアプリには Stripe Checkout / Webhook の API ルートはまだ実装されていません。
-Premium プランの決済を本番で有効化する場合は、決済APIと Webhook API を実装してから、Stripe Dashboard に本番URLの Webhook エンドポイントを登録してください。
+Stripe Checkout, Customer Portal, and Webhook routes are implemented.
+Create a JPY 480 monthly Price in Stripe Dashboard and set it as `STRIPE_PREMIUM_PRICE_ID`.
 
-実装後は、Webhook secret を `STRIPE_WEBHOOK_SECRET` に設定します。
+Webhook endpoint:
+
+```text
+https://your-domain.example/api/stripe/webhook
+```
+
+Enable these Stripe events: `checkout.session.completed`, `customer.subscription.created`, `customer.subscription.updated`, and `customer.subscription.deleted`.
+Set the signing secret as `STRIPE_WEBHOOK_SECRET`.
 
 ## 7. 定期通知の実行
 
