@@ -61,12 +61,30 @@ export async function syncLatestStripeSubscriptionForUser(userId: string) {
 
   const client = stripe();
   if (user.stripeSubscriptionId) {
-    const subscription = await client.subscriptions.retrieve(user.stripeSubscriptionId);
+    const subscription = await client.subscriptions.retrieve(user.stripeSubscriptionId).catch(async (error) => {
+      const stripeError = error as { code?: string };
+      if (stripeError.code !== "resource_missing") throw error;
+      await prisma.user.update({
+        where: { id: userId },
+        data: { stripeSubscriptionId: null },
+      });
+      return null;
+    });
+    if (!subscription) return "stale_subscription" as const;
     await syncStripeSubscription(subscription);
     return activePlan(subscription.status) === "PREMIUM" ? "premium" as const : "free" as const;
   }
 
-  const subscriptions = await client.subscriptions.list({ customer: user.stripeCustomerId ?? undefined, status: "all", limit: 10 });
+  const subscriptions = await client.subscriptions.list({ customer: user.stripeCustomerId ?? undefined, status: "all", limit: 10 }).catch(async (error) => {
+    const stripeError = error as { code?: string; param?: string; raw?: { param?: string } };
+    if (stripeError.code !== "resource_missing" && stripeError.param !== "customer" && stripeError.raw?.param !== "customer") throw error;
+    await prisma.user.update({
+      where: { id: userId },
+      data: { stripeCustomerId: null, stripeSubscriptionId: null },
+    });
+    return null;
+  });
+  if (!subscriptions) return "stale_customer" as const;
   const active = subscriptions.data.find((item) => item.status === "active" || item.status === "trialing") ?? subscriptions.data[0];
   if (!active) return "not_found" as const;
   await syncStripeSubscription(active);

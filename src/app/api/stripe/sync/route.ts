@@ -8,6 +8,8 @@ export async function POST() {
     const status = await syncLatestStripeSubscriptionForUser(user.id);
     if (status === "premium") return NextResponse.json({ message: "Stripeの課金状態を確認し、Premiumプランに更新しました。" });
     if (status === "free") return NextResponse.json({ message: "Stripeの課金状態を確認しました。現在、有効なPremium契約はありません。" });
+    if (status === "stale_subscription") return NextResponse.json({ message: "DBに保存されていたStripeサブスクリプションIDが現在のStripeキーで見つかりませんでした。古いIDを解除しました。もう一度Checkoutを完了するか、Stripeキーのテスト/本番モードが一致しているか確認してください。" }, { status: 409 });
+    if (status === "stale_customer") return NextResponse.json({ message: "DBに保存されていたStripe顧客IDが現在のStripeキーで見つかりませんでした。古いIDを解除しました。もう一度Premiumにアップグレードしてください。" }, { status: 409 });
     return NextResponse.json({ message: "Stripeの課金情報がまだ見つかりませんでした。決済直後の場合は少し待ってから再確認してください。" }, { status: 404 });
   } catch (error) {
     console.error("Stripe billing sync failed.", error);
