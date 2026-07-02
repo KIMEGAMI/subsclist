@@ -36,7 +36,7 @@ const t = {
   resend: "認証メールを再送する",
   backTop: "トップへ戻る",
   pricingTitle: "料金プラン",
-  pricingLead: "Freeで始めて、必要になったらPremiumへ。本格運用に必要な分析、CSV、AI、解約支援をまとめて利用できます。",
+  pricingLead: "Freeで始めて、必要になったらPremiumへ。Premiumは買い切り480円で、本格運用に必要な分析、CSV、AI、解約支援をまとめて利用できます。",
 };
 
 function AuthFrame({ title, children }: { title: string; children: React.ReactNode }) {
@@ -255,7 +255,8 @@ export function PricingView() {
           </Card>
           <Card className="border-blue-400">
             <h2 className="text-2xl font-bold">Premium</h2>
-            <p className="mt-2 text-4xl font-black">本格運用</p>
+            <p className="mt-2 text-4xl font-black">買い切り480円</p>
+            <p className="mt-2 text-sm font-semibold text-blue-700">一度の購入でPremium機能を利用できます。</p>
             <ul className="mt-5 space-y-2 text-sm text-slate-600">
               <li>サブスク登録・表示無制限</li>
               <li>CSV入出力、CSV明細候補検出</li>
