@@ -9,6 +9,7 @@ datasource db {
 enum Plan {
   FREE
   PREMIUM
+  LIFETIME
 }
 
 enum BillingCycle {

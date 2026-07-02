@@ -5,7 +5,7 @@ import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 
 const schema = z.object({
-  plan: z.enum(["FREE", "PREMIUM"]),
+  plan: z.enum(["FREE", "PREMIUM", "LIFETIME"]),
 });
 
 export async function PUT(request: Request) {
@@ -17,6 +17,9 @@ export async function PUT(request: Request) {
 
   if (parsed.data.plan === "PREMIUM" && env.stripeSecretKey && env.stripePremiumPriceId) {
     return NextResponse.json({ message: "Premiumへの変更はStripe Checkoutから行ってください。" }, { status: 409 });
+  }
+  if (parsed.data.plan === "LIFETIME" && env.stripeSecretKey && env.stripeLifetimePriceId) {
+    return NextResponse.json({ message: "買い切りプランへの変更はStripe Checkoutから行ってください。" }, { status: 409 });
   }
 
   await prisma.user.update({

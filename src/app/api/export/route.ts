@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { isPremiumPlan } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 
 const yenless = (value: number) => Math.round(value).toString();
@@ -34,7 +35,7 @@ export async function GET() {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ message: "ログインしてください。" }, { status: 401 });
   if (!user.emailVerified) return NextResponse.json({ message: "メール認証が必要です。" }, { status: 403 });
-  if (user.plan !== "PREMIUM") {
+  if (!isPremiumPlan(user.plan)) {
     return NextResponse.json({ message: "CSV出力はPremium限定です。" }, { status: 403 });
   }
   const subscriptions = await prisma.subscription.findMany({

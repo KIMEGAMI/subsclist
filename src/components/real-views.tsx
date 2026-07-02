@@ -1303,6 +1303,12 @@ function statusLabel(status: string) {
   return status;
 }
 
+function planLabel(plan: string) {
+  if (plan === "LIFETIME") return "買い切り";
+  if (plan === "PREMIUM") return "Premium";
+  return "Free";
+}
+
 function usageLabel(value: string) {
   if (value === "DAILY") return "毎日使う";
   if (value === "WEEKLY") return "週に数回使う";
@@ -1479,7 +1485,7 @@ function ReviewList({
 
 export async function ExportView() {
   const user = await requireVerifiedUser();
-  const disabled = user.plan !== "PREMIUM";
+  const disabled = !isPremiumPlan(user.plan);
   return (
     <AppShell>
       <PageHeader title="CSV入出力" description="カード明細や既存管理表から候補を検出し、登録済みデータの入出力もできます。" />
@@ -1600,13 +1606,13 @@ export async function SettingsView({ checkoutStatus, checkoutSessionId }: { chec
       try {
         const syncStatus = await syncStripeCheckoutSessionById(checkoutSessionId, currentUser.id);
         if (syncStatus === "synced") {
-          checkoutNotice = { type: "success", message: "決済が完了しました。Premiumプランに更新しました。" };
+          checkoutNotice = { type: "success", message: "決済が完了しました。プランを更新しました。" };
         } else if (syncStatus === "not_complete") {
           checkoutNotice = { type: "error", message: "Stripe決済がまだ完了していません。しばらく待ってから再読み込みしてください。" };
         } else if (syncStatus === "invalid_user") {
           checkoutNotice = { type: "error", message: "決済情報とログイン中のユーザーが一致しません。" };
         } else {
-          checkoutNotice = { type: "error", message: "Stripeのサブスクリプション情報を確認できませんでした。" };
+          checkoutNotice = { type: "error", message: "Stripeの決済情報を確認できませんでした。" };
         }
       } catch (error) {
         console.error("Stripe checkout session sync failed.", error);
@@ -1639,7 +1645,7 @@ export async function SettingsView({ checkoutStatus, checkoutSessionId }: { chec
         </Card>
         <Card>
           <h2 className="text-lg font-bold">プラン</h2>
-          <p className="mt-2 text-sm text-slate-600">Free/Premiumの利用状態を変更します。</p>
+          <p className="mt-2 text-sm text-slate-600">Free、Premium、買い切りの利用状態を変更します。</p>
           <div className="mt-5"><PlanSettingsForm plan={user.plan} stripeTestMode={env.stripeTestMode} /></div>
         </Card>
         <Card>
@@ -1657,7 +1663,7 @@ export async function SettingsView({ checkoutStatus, checkoutSessionId }: { chec
           <div className="mt-5 grid gap-4 sm:grid-cols-2">
             <Info label="メール" value={user.email} />
             <Info label="メール認証" value={user.emailVerified ? "認証済み" : "未認証"} />
-            <Info label="現在のプラン" value={user.plan} />
+            <Info label="現在のプラン" value={planLabel(user.plan)} />
             <Info label="登録日" value={user.createdAt.toISOString().slice(0, 10)} />
           </div>
         </Card>

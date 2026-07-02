@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { isPremiumPlan } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 
 type Row = Record<string, string>;
@@ -60,7 +61,7 @@ export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ message: "ログインしてください。" }, { status: 401 });
   if (!user.emailVerified) return NextResponse.json({ message: "メール認証が必要です。" }, { status: 403 });
-  if (user.plan !== "PREMIUM") return NextResponse.json({ message: "CSVインポートはPremium限定です。" }, { status: 403 });
+  if (!isPremiumPlan(user.plan)) return NextResponse.json({ message: "CSVインポートはPremium限定です。" }, { status: 403 });
 
   const form = await request.formData();
   const file = form.get("file");

@@ -431,18 +431,22 @@ export function ProfileSettingsForm({ name, email }: { name: string; email: stri
   );
 }
 
-export function PlanSettingsForm({ plan, stripeTestMode }: { plan: "FREE" | "PREMIUM"; stripeTestMode?: boolean }) {
+export function PlanSettingsForm({ plan, stripeTestMode }: { plan: "FREE" | "PREMIUM" | "LIFETIME"; stripeTestMode?: boolean }) {
   const router = useRouter();
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState<"checkout" | "portal" | "downgrade" | "sync" | "">("");
 
-  async function openStripe(path: "/api/stripe/checkout" | "/api/stripe/portal", mode: "checkout" | "portal") {
+  async function openStripe(path: "/api/stripe/checkout" | "/api/stripe/portal", mode: "checkout" | "portal", checkoutPlan?: "PREMIUM" | "LIFETIME") {
     setMessage("");
     setError("");
     setLoading(mode);
     try {
-      const response = await fetch(path, { method: "POST" });
+      const response = await fetch(path, {
+        method: "POST",
+        headers: checkoutPlan ? { "Content-Type": "application/json" } : undefined,
+        body: checkoutPlan ? JSON.stringify({ plan: checkoutPlan }) : undefined,
+      });
       const data = (await response.json().catch(() => ({}))) as { message?: string; url?: string };
       if (!response.ok || !data.url) throw new Error(data.message ?? "Stripeページを開けませんでした。");
       window.location.href = data.url;
@@ -501,6 +505,13 @@ export function PlanSettingsForm({ plan, stripeTestMode }: { plan: "FREE" | "PRE
           </div>
           <p className="mt-2 text-sm text-blue-800">サブスク無制限、CSV入出力、明細検出、高度な分析、月次レポート、AI提案、解約支援を利用できます。</p>
         </div>
+        <div className="rounded-lg border border-emerald-100 bg-emerald-50/80 p-4 shadow-sm sm:col-span-2">
+          <div className="flex items-center justify-between gap-3">
+            <p className="font-bold text-emerald-900">買い切り</p>
+            {plan === "LIFETIME" && <span className="rounded-full bg-emerald-600 px-2 py-1 text-xs font-black text-white">現在のプラン</span>}
+          </div>
+          <p className="mt-2 text-sm text-emerald-800">Premiumと同じ機能を、継続課金なしで利用できます。個人利用や小規模運用向けの安心プランです。</p>
+        </div>
       </div>
       {stripeTestMode && (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
@@ -514,12 +525,21 @@ export function PlanSettingsForm({ plan, stripeTestMode }: { plan: "FREE" | "PRE
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
         {plan === "FREE" ? (
-          <button type="button" disabled={Boolean(loading)} onClick={() => openStripe("/api/stripe/checkout", "checkout")} className="btn-primary">
+          <button type="button" disabled={Boolean(loading)} onClick={() => openStripe("/api/stripe/checkout", "checkout", "PREMIUM")} className="btn-primary">
             {loading === "checkout" ? "Stripeを開いています..." : "Premiumにアップグレード"}
           </button>
-        ) : (
+        ) : plan === "PREMIUM" ? (
           <button type="button" disabled={Boolean(loading)} onClick={() => openStripe("/api/stripe/portal", "portal")} className="btn-primary">
             {loading === "portal" ? "Stripeを開いています..." : "課金を管理"}
+          </button>
+        ) : (
+          <button type="button" disabled className="btn-primary opacity-80">
+            買い切り適用済み
+          </button>
+        )}
+        {plan !== "LIFETIME" && (
+          <button type="button" disabled={Boolean(loading)} onClick={() => openStripe("/api/stripe/checkout", "checkout", "LIFETIME")} className="btn-secondary">
+            {loading === "checkout" ? "Stripeを開いています..." : "買い切りで利用する"}
           </button>
         )}
         <button type="button" disabled={Boolean(loading)} onClick={syncBilling} className="btn-secondary">

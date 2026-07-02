@@ -23,6 +23,7 @@ export const env = {
   stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? "",
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? "",
   stripePremiumPriceId: process.env.STRIPE_PREMIUM_PRICE_ID ?? "",
+  stripeLifetimePriceId: process.env.STRIPE_LIFETIME_PRICE_ID ?? "",
   stripeTestMode: (process.env.STRIPE_SECRET_KEY ?? "").startsWith("sk_test_"),
   googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
@@ -43,7 +44,7 @@ export function assertMailEnv() {
 }
 
 export function assertStripeEnv() {
-  for (const name of ["STRIPE_SECRET_KEY", "STRIPE_PREMIUM_PRICE_ID"] as const) {
+  for (const name of ["STRIPE_SECRET_KEY"] as const) {
     if (!process.env[name]) {
       throw new Error(name + " is not set.");
     }

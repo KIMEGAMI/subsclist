@@ -2,7 +2,7 @@ export const FREE_SUBSCRIPTION_LIMIT = 10;
 export const FREE_CATEGORY_LIMIT = 5;
 
 export function isPremiumPlan(plan?: string | null) {
-  return plan === "PREMIUM";
+  return plan === "PREMIUM" || plan === "LIFETIME";
 }
 
 export function limitByPlan<T>(items: T[], plan?: string | null, limit = FREE_SUBSCRIPTION_LIMIT) {

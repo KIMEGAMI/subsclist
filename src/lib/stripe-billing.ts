@@ -28,6 +28,19 @@ export async function syncStripeSubscription(subscription: Stripe.Subscription) 
 export async function syncStripeCheckoutSession(session: Stripe.Checkout.Session) {
   const userId = session.metadata?.userId;
   const customerId = typeof session.customer === "string" ? session.customer : session.customer?.id;
+  if (session.metadata?.plan === "LIFETIME") {
+    if (!userId || !customerId || session.mode !== "payment" || session.payment_status !== "paid") return false;
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        plan: "LIFETIME",
+        stripeCustomerId: customerId,
+        stripeSubscriptionId: null,
+      },
+    });
+    return true;
+  }
+
   const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
   if (!userId || !customerId || !subscriptionId) return false;
 
@@ -46,6 +59,11 @@ export async function syncStripeCheckoutSessionById(sessionId: string, userId: s
   const session = await stripe().checkout.sessions.retrieve(sessionId, { expand: ["subscription"] });
 
   if (session.metadata?.userId !== userId) return "invalid_user";
+  if (session.metadata?.plan === "LIFETIME") {
+    if (session.mode !== "payment" || session.status !== "complete" || session.payment_status !== "paid") return "not_complete";
+    const synced = await syncStripeCheckoutSession(session);
+    return synced ? "synced" : "missing_subscription";
+  }
   if (session.mode !== "subscription" || session.status !== "complete") return "not_complete";
 
   const synced = await syncStripeCheckoutSession(session);
@@ -55,8 +73,9 @@ export async function syncStripeCheckoutSessionById(sessionId: string, userId: s
 export async function syncLatestStripeSubscriptionForUser(userId: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { stripeCustomerId: true, stripeSubscriptionId: true },
+    select: { plan: true, stripeCustomerId: true, stripeSubscriptionId: true },
   });
+  if (user?.plan === "LIFETIME") return "lifetime" as const;
   if (!user?.stripeCustomerId && !user?.stripeSubscriptionId) return "not_found" as const;
 
   const client = stripe();

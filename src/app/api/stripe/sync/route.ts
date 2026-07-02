@@ -6,6 +6,7 @@ export async function POST() {
   const user = await requireVerifiedUser();
   try {
     const status = await syncLatestStripeSubscriptionForUser(user.id);
+    if (status === "lifetime") return NextResponse.json({ message: "買い切りプランが有効です。Premium機能を利用できます。" });
     if (status === "premium") return NextResponse.json({ message: "Stripeの課金状態を確認し、Premiumプランに更新しました。" });
     if (status === "free") return NextResponse.json({ message: "Stripeの課金状態を確認しました。現在、有効なPremium契約はありません。" });
     if (status === "stale_subscription") return NextResponse.json({ message: "DBに保存されていたStripeサブスクリプションIDが現在のStripeキーで見つかりませんでした。古いIDを解除しました。もう一度Checkoutを完了するか、Stripeキーのテスト/本番モードが一致しているか確認してください。" }, { status: 409 });
