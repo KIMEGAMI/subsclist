@@ -19,7 +19,7 @@ export function NotificationSendButton() {
       };
       if (!response.ok) throw new Error(data.message ?? "通知送信に失敗しました。");
       const failed = data.failures?.length ? ` / 失敗 ${data.failures.length}件` : "";
-      setMessage(`送信 ${data.sent ?? 0}件 / 送信済み ${data.skipped ?? 0}件${failed}`);
+      setMessage(`送信 ${data.sent ?? 0}件 / 重複スキップ ${data.skipped ?? 0}件${failed}`);
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "通知送信に失敗しました。");
     } finally {

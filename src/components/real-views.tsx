@@ -1525,45 +1525,45 @@ export async function NotificationsView() {
   const now = new Date();
   const nextTargets = subscriptions
     .flatMap((item) => [
-      { item, label: "Renewal", date: item.nextBillingDate },
-      { item, label: "Trial end", date: item.trialEndsAt },
-      { item, label: "Cancel deadline", date: item.cancellationDeadline },
+      { item, label: "更新日", date: item.nextBillingDate },
+      { item, label: "トライアル終了", date: item.trialEndsAt },
+      { item, label: "解約期限", date: item.cancellationDeadline },
     ])
     .filter((entry): entry is { item: SubscriptionView; label: string; date: Date } => entry.date instanceof Date && entry.date.getTime() >= now.getTime())
     .sort((a, b) => a.date.getTime() - b.date.getTime());
 
   return (
     <AppShell>
-      <PageHeader title="Notifications" description="Check upcoming renewal, trial, cancellation-deadline notices and delivery history." />
+      <PageHeader title="通知" description="更新日、無料トライアル終了、解約期限の通知予定と送信履歴を確認します。" />
       <PlanLimitBanner hiddenCount={hiddenCount} />
       <Card className="mb-5">
         <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
           <div>
-            <h2 className="font-bold">Deadline notifications</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">Emails are sent when the configured notice period matches a renewal, trial end, or cancellation deadline. Duplicate notices for the same deadline are skipped.</p>
+            <h2 className="font-bold">期限通知</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">設定した通知日数と、更新日・トライアル終了日・解約期限が一致したときにメールを送信します。同じ期限への重複送信は自動でスキップします。</p>
           </div>
           <NotificationSendButton />
         </div>
       </Card>
       <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
         <Card>
-          <h2 className="text-lg font-bold">Upcoming notices</h2>
+          <h2 className="text-lg font-bold">今後の通知予定</h2>
           <div className="mt-4 divide-y divide-slate-100">
-            {nextTargets.length === 0 ? <EmptyState text="No upcoming notices." /> : nextTargets.slice(0, 10).map(({ item, label, date }) => (
+            {nextTargets.length === 0 ? <EmptyState text="今後の通知予定はありません。" /> : nextTargets.slice(0, 10).map(({ item, label, date }) => (
               <Link key={item.id + "-" + label + "-" + date.toISOString()} href={"/subscriptions/" + item.id} className="flex items-center justify-between gap-3 py-3">
                 <div>
                   <p className="font-semibold">{item.name}</p>
-                  <p className="text-sm text-slate-500">{label}: {dateText(date)} / notice {item.notifyDaysBefore ?? 7} days before</p>
+                  <p className="text-sm text-slate-500">{label}: {dateText(date)} / {item.notifyDaysBefore ?? 7}日前に通知</p>
                 </div>
-                <span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-black text-blue-700">{Math.max(0, daysUntil(date))} days</span>
+                <span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-black text-blue-700">あと{Math.max(0, daysUntil(date))}日</span>
               </Link>
             ))}
           </div>
         </Card>
         <Card>
-          <h2 className="text-lg font-bold">Delivery status by subscription</h2>
+          <h2 className="text-lg font-bold">サブスク別の送信状況</h2>
           {subscriptions.length === 0 ? (
-            <div className="mt-4"><EmptyState text="No subscriptions for notifications." /></div>
+            <div className="mt-4"><EmptyState text="通知対象のサブスクリプションはありません。" /></div>
           ) : (
             <div className="mt-4 divide-y divide-slate-100">
               {subscriptions.map((item) => {
@@ -1572,11 +1572,11 @@ export async function NotificationsView() {
                   <div key={item.id} className="flex items-center justify-between gap-3 py-3">
                     <div>
                       <p className="font-semibold">{item.name}</p>
-                      <p className="text-sm text-slate-500">Renewal {dateText(item.nextBillingDate)} / trial {dateText(item.trialEndsAt)} / cancel deadline {dateText(item.cancellationDeadline)}</p>
-                      <p className="mt-1 text-xs font-semibold text-slate-500">Last sent: {lastSent ? dateText(lastSent) : "Never"}</p>
+                      <p className="text-sm text-slate-500">更新日 {dateText(item.nextBillingDate)} / トライアル {dateText(item.trialEndsAt)} / 解約期限 {dateText(item.cancellationDeadline)}</p>
+                      <p className="mt-1 text-xs font-semibold text-slate-500">最終送信: {lastSent ? dateText(lastSent) : "未送信"}</p>
                     </div>
                     <Link href={"/subscriptions/" + item.id + "/edit"} className="btn-secondary min-h-0 px-3 py-2 text-sm">
-                      {item.notifyDaysBefore ?? 7} days
+                      {item.notifyDaysBefore ?? 7}日前
                     </Link>
                   </div>
                 );
