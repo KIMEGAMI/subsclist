@@ -75,30 +75,30 @@ const paymentMethodTypeLabels: Record<string, string> = {
   APPLE_PAY: "Apple Pay",
   AMAZON_PAY: "Amazon Pay",
   AU_PAY: "au PAY",
-  BANK: "Bank debit",
-  BANK_TRANSFER: "Bank transfer",
-  CARRIER_BILLING: "Carrier billing",
-  CASH: "Cash",
-  CONVENIENCE_STORE: "Convenience store",
-  CREDIT_CARD: "Credit card",
+  BANK: "銀行口座振替",
+  BANK_TRANSFER: "銀行振込",
+  CARRIER_BILLING: "キャリア決済",
+  CASH: "現金",
+  CONVENIENCE_STORE: "コンビニ払い",
+  CREDIT_CARD: "クレジットカード",
   D_BARAI: "d Barai",
-  DEBIT_CARD: "Debit card",
+  DEBIT_CARD: "デビットカード",
   GOOGLE_PAY: "Google Pay",
   ID: "iD",
-  INVOICE: "Invoice",
+  INVOICE: "請求書払い",
   LINE_PAY: "LINE Pay",
-  MERPAY: "Merpay",
+  MERPAY: "メルペイ",
   NANACO: "nanaco",
   PASMO: "PASMO",
   PAYPAL: "PayPal",
   PAYPAY: "PayPay",
-  PREPAID_CARD: "Prepaid card",
+  PREPAID_CARD: "プリペイドカード",
   QUICPAY: "QUICPay",
-  RAKUTEN_EDY: "Rakuten Edy",
-  RAKUTEN_PAY: "Rakuten Pay",
+  RAKUTEN_EDY: "楽天Edy",
+  RAKUTEN_PAY: "楽天ペイ",
   SUICA: "Suica",
   WAON: "WAON",
-  OTHER: "Other",
+  OTHER: "その他",
 };
 
 function monthly(price: number, cycle: string, customCycleDays?: number | null) {
@@ -229,6 +229,52 @@ function OperationalCommandCard({
   );
 }
 
+function SetupChecklistCard({
+  subscriptionCount,
+  hasCategory,
+  hasPaymentMethod,
+  hasBudget,
+  hasReviewData,
+}: {
+  subscriptionCount: number;
+  hasCategory: boolean;
+  hasPaymentMethod: boolean;
+  hasBudget: boolean;
+  hasReviewData: boolean;
+}) {
+  const steps = [
+    { label: "サブスクを登録", done: subscriptionCount > 0, href: "/subscriptions/new", action: "追加" },
+    { label: "カテゴリを設定", done: hasCategory, href: "/categories", action: "設定" },
+    { label: "支払い方法を設定", done: hasPaymentMethod, href: "/payment-methods", action: "設定" },
+    { label: "月額予算を設定", done: hasBudget, href: "/settings", action: "設定" },
+    { label: "利用頻度と見直し日を入力", done: hasReviewData, href: "/subscriptions", action: "見直す" },
+  ];
+  const doneCount = steps.filter((step) => step.done).length;
+
+  return (
+    <Card className="mb-5 border-emerald-100 bg-emerald-50/85">
+      <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
+        <div>
+          <p className="text-sm font-black text-emerald-700">初期設定チェック</p>
+          <h2 className="mt-1 text-xl font-black text-emerald-950">分析精度を上げるための準備</h2>
+          <p className="mt-2 text-sm font-semibold text-emerald-800">{doneCount}/{steps.length} 完了。登録情報が増えるほど、削減候補と通知の精度が上がります。</p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2 xl:min-w-[520px]">
+          {steps.map((step) => (
+            <Link key={step.label} href={step.href} className="flex items-center justify-between gap-3 rounded-lg border border-white/70 bg-white/75 px-3 py-2 text-sm font-bold text-slate-700 shadow-sm transition hover:border-emerald-200 hover:bg-white">
+              <span className="flex items-center gap-2">
+                <span className={`grid size-5 place-items-center rounded-full text-[11px] font-black ${step.done ? "bg-emerald-600 text-white" : "bg-slate-100 text-slate-500"}`}>{step.done ? "済" : "未"}</span>
+                {step.label}
+              </span>
+              {!step.done && <span className="text-xs text-emerald-700">{step.action}</span>}
+            </Link>
+          ))}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function PremiumOnlyNotice({ title, description }: { title: string; description: string }) {
   return (
     <Card className="border-blue-200 bg-blue-50/90">
@@ -348,6 +394,7 @@ export async function DashboardView() {
   return (
     <AppShell>
       <PageHeader title="ダッシュボード" description="登録済みサブスクリプションの月額、更新予定、期限リスク、見直し候補を確認します。" action={<Link href="/subscriptions/new" className="btn-primary">サブスク追加</Link>} />
+      <SetupChecklistCard subscriptionCount={allSubscriptions.length} hasCategory={active.some((item) => Boolean(item.categoryId))} hasPaymentMethod={active.some((item) => Boolean(item.paymentMethodId))} hasBudget={Boolean(budget)} hasReviewData={active.some((item) => item.usageFrequency !== "UNKNOWN" && Boolean(item.lastReviewedAt))} />
       <PlanLimitBanner hiddenCount={hiddenCount} />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
@@ -1489,6 +1536,18 @@ export async function ExportView() {
   return (
     <AppShell>
       <PageHeader title="CSV入出力" description="カード明細や既存管理表から候補を検出し、登録済みデータの入出力もできます。" />
+      <Card className="mb-5 border-blue-100 bg-blue-50/80">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-blue-950">CSVを迷わず始める</h2>
+            <p className="mt-2 text-sm leading-6 text-blue-800">インポート用テンプレートと、明細候補検出を試せるサンプルCSVを用意しました。列名の確認や動作テストに使えます。</p>
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row">
+            <Link href="/api/import/template" className="btn-secondary">インポート用テンプレート</Link>
+            <Link href="/api/import/statement-sample" className="btn-secondary">明細サンプルCSV</Link>
+          </div>
+        </div>
+      </Card>
       <Card className="mb-5">
         <h2 className="text-lg font-bold">カード・銀行明細からサブスク候補を検出</h2>
         <div className="mt-5"><CsvCandidateDetectorForm disabled={disabled} /></div>
