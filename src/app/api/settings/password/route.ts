@@ -7,13 +7,18 @@ import { prisma } from "@/lib/prisma";
 const schema = z.object({
   currentPassword: z.string().min(1),
   newPassword: z.string().min(8).max(128),
+  newPasswordConfirm: z.string().min(8).max(128),
 });
 
 export async function PUT(request: Request) {
   const sessionUser = await requireVerifiedUser();
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success) {
-    return NextResponse.json({ message: "現在のパスワードと新しいパスワードを入力してください。" }, { status: 400 });
+    return NextResponse.json({ message: "現在のパスワード、新しいパスワード、確認用パスワードを入力してください。" }, { status: 400 });
+  }
+
+  if (parsed.data.newPassword !== parsed.data.newPasswordConfirm) {
+    return NextResponse.json({ message: "新しいパスワードと確認用パスワードが一致しません。" }, { status: 400 });
   }
 
   const user = await prisma.user.findUnique({ where: { id: sessionUser.id } });

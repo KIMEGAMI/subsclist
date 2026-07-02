@@ -565,8 +565,15 @@ export function PasswordSettingsForm() {
     event.preventDefault();
     setMessage("");
     setError("");
-    setLoading(true);
     const form = new FormData(event.currentTarget);
+    const newPassword = String(form.get("newPassword") ?? "");
+    const newPasswordConfirm = String(form.get("newPasswordConfirm") ?? "");
+    if (newPassword !== newPasswordConfirm) {
+      setError("新しいパスワードと確認用パスワードが一致しません。");
+      return;
+    }
+
+    setLoading(true);
     try {
       await request("/api/settings/password", "PUT", Object.fromEntries(form.entries()));
       event.currentTarget.reset();
@@ -582,6 +589,7 @@ export function PasswordSettingsForm() {
     <form onSubmit={submit} noValidate className="space-y-4">
       <Field label="現在のパスワード"><input name="currentPassword" className="input" type="password" required /></Field>
       <Field label="新しいパスワード"><input name="newPassword" className="input" type="password" minLength={8} required /></Field>
+      <Field label="新しいパスワード（確認）"><input name="newPasswordConfirm" className="input" type="password" minLength={8} required /></Field>
       {message && <p className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p>}
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
       <button disabled={loading} className="btn-primary">
