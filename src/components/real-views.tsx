@@ -1704,7 +1704,7 @@ export async function SettingsView({ checkoutStatus, checkoutSessionId }: { chec
         </Card>
         <Card>
           <h2 className="text-lg font-bold">プラン</h2>
-          <p className="mt-2 text-sm text-slate-600">Free、Premium、買い切りの利用状態を変更します。</p>
+          <p className="mt-2 text-sm text-slate-600">Freeと買い切りPremiumの利用状態を確認・変更します。</p>
           <div className="mt-5"><PlanSettingsForm plan={user.plan} stripeTestMode={env.stripeTestMode} /></div>
         </Card>
         <Card>
