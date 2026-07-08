@@ -1,11 +1,11 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import crypto from "node:crypto";
+import { SESSION_MAX_AGE_SECONDS } from "@/lib/app-constants";
 import { prisma } from "@/lib/prisma";
 import { assertAuthSecret, env } from "@/lib/env";
 
 const sessionCookie = "subsclist_session";
-const maxAgeSeconds = 60 * 60 * 24 * 14;
 
 type SessionPayload = {
   userId: string;
@@ -51,14 +51,14 @@ export async function setSession(userId: string, emailVerified: boolean) {
     encodeSession({
       userId,
       emailVerified,
-      exp: Math.floor(Date.now() / 1000) + maxAgeSeconds,
+      exp: Math.floor(Date.now() / 1000) + SESSION_MAX_AGE_SECONDS,
     }),
     {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
       path: "/",
-      maxAge: maxAgeSeconds,
+      maxAge: SESSION_MAX_AGE_SECONDS,
     },
   );
 }

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Card } from "@/components/app-shell";
+import { MAX_USER_NAME_LENGTH } from "@/lib/app-constants";
 
 const t = {
   brand: "サブスクリスト",
@@ -183,7 +184,7 @@ export function RegisterView() {
         {message && <p className="rounded-lg bg-blue-50 p-3 text-sm font-semibold text-blue-700">{message}</p>}
         <label className="grid gap-2 text-sm font-semibold">
           {t.name}
-          <input value={name} onChange={(e) => setName(e.target.value)} className="input" maxLength={100} />
+          <input value={name} onChange={(e) => setName(e.target.value)} className="input" maxLength={MAX_USER_NAME_LENGTH} />
         </label>
         <label className="grid gap-2 text-sm font-semibold">
           {t.email}

@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
+import { MAX_NOTIFICATION_HOUR, MAX_NOTIFY_DAYS_BEFORE, MIN_NOTIFICATION_HOUR } from "@/lib/app-constants";
 import { prisma } from "@/lib/prisma";
 
 const schema = z.object({
   monthlyBudget: z.coerce.number().min(0).optional(),
-  defaultNotifyDaysBefore: z.coerce.number().min(0).max(60),
-  notificationHour: z.coerce.number().min(0).max(23),
+  defaultNotifyDaysBefore: z.coerce.number().min(0).max(MAX_NOTIFY_DAYS_BEFORE),
+  notificationHour: z.coerce.number().min(MIN_NOTIFICATION_HOUR).max(MAX_NOTIFICATION_HOUR),
 });
 
 export async function PUT(request: Request) {

@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { DEFAULT_NOTIFY_DAYS_BEFORE } from "@/lib/app-constants";
+import { isoDate } from "@/lib/billing";
 import { env } from "@/lib/env";
 import { sendSubscriptionReminderEmail } from "@/lib/mail";
 import { prisma } from "@/lib/prisma";
@@ -28,7 +30,7 @@ function sameDay(a: Date, b: Date) {
 }
 
 function formatDate(date: Date) {
-  return date.toISOString().slice(0, 10);
+  return isoDate(date);
 }
 function hasPrismaErrorCode(error: unknown, code: string) {
   return Boolean(
@@ -49,7 +51,7 @@ function remindersFor(subscription: {
   cancellationDeadline: Date | null;
 }) {
   const today = startOfDay(new Date());
-  const daysBefore = subscription.notifyDaysBefore ?? 7;
+  const daysBefore = subscription.notifyDaysBefore ?? DEFAULT_NOTIFY_DAYS_BEFORE;
   const reminders: Reminder[] = [];
   const price = `${subscription.currency} ${subscription.price.toLocaleString("ja-JP")}`;
 

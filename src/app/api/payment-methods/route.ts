@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
+import { MAX_PAYMENT_METHOD_NAME_LENGTH } from "@/lib/app-constants";
 import { prisma } from "@/lib/prisma";
 
 const schema = z.object({
-  name: z.string().trim().min(1).max(50),
+  name: z.string().trim().min(1).max(MAX_PAYMENT_METHOD_NAME_LENGTH),
   type: z.enum([
     "CREDIT_CARD",
     "DEBIT_CARD",
