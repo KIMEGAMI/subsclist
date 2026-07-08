@@ -157,7 +157,9 @@ export function SubscriptionForm({
     event.preventDefault();
     setError("");
     setLoading(true);
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+
+    const form = new FormData(formElement);
     const payload = Object.fromEntries(form.entries());
     try {
       const data = await request(subscription ? `/api/subscriptions/${subscription.id}` : "/api/subscriptions", subscription ? "PUT" : "POST", payload);
@@ -314,10 +316,12 @@ export function CategoryForm() {
       onSubmit={async (event) => {
         event.preventDefault();
         setError("");
-        const form = new FormData(event.currentTarget);
+        const formElement = event.currentTarget;
+
+        const form = new FormData(formElement);
         try {
           await request("/api/categories", "POST", Object.fromEntries(form.entries()));
-          event.currentTarget.reset();
+          formElement.reset();
           router.refresh();
         } catch (err) {
           setError(err instanceof Error ? err.message : "追加に失敗しました。");
@@ -342,10 +346,12 @@ export function PaymentMethodForm() {
       onSubmit={async (event) => {
         event.preventDefault();
         setError("");
-        const form = new FormData(event.currentTarget);
+        const formElement = event.currentTarget;
+
+        const form = new FormData(formElement);
         try {
           await request("/api/payment-methods", "POST", Object.fromEntries(form.entries()));
-          event.currentTarget.reset();
+          formElement.reset();
           router.refresh();
         } catch (err) {
           setError(err instanceof Error ? err.message : "追加に失敗しました。");
@@ -418,7 +424,9 @@ export function ProfileSettingsForm({ name, email }: { name: string; email: stri
     setMessage("");
     setError("");
     setLoading(true);
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+
+    const form = new FormData(formElement);
     try {
       await request("/api/settings/profile", "PUT", Object.fromEntries(form.entries()));
       setMessage("プロフィールを更新しました。");
@@ -567,7 +575,9 @@ export function PasswordSettingsForm() {
     event.preventDefault();
     setMessage("");
     setError("");
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+
+    const form = new FormData(formElement);
     const newPassword = String(form.get("newPassword") ?? "");
     const newPasswordConfirm = String(form.get("newPasswordConfirm") ?? "");
     if (newPassword !== newPasswordConfirm) {
@@ -578,7 +588,7 @@ export function PasswordSettingsForm() {
     setLoading(true);
     try {
       await request("/api/settings/password", "PUT", Object.fromEntries(form.entries()));
-      event.currentTarget.reset();
+      formElement.reset();
       setMessage("パスワードを変更しました。");
     } catch (err) {
       setError(err instanceof Error ? err.message : "パスワード変更に失敗しました。");
@@ -620,10 +630,12 @@ export function PaymentHistoryForm({
     setMessage("");
     setError("");
     setLoading(true);
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+
+    const form = new FormData(formElement);
     try {
       await request("/api/payment-histories", "POST", Object.fromEntries(form.entries()));
-      event.currentTarget.reset();
+      formElement.reset();
       setMessage("支払い履歴を登録しました。");
       router.refresh();
     } catch (err) {
@@ -708,7 +720,9 @@ export function CancellationPlanForm({
     setMessage("");
     setError("");
     setLoading(true);
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+
+    const form = new FormData(formElement);
     try {
       await request(`/api/subscriptions/${id}`, "PATCH", Object.fromEntries(form.entries()));
       setMessage("解約支援の状態を更新しました。");
@@ -759,7 +773,9 @@ export function BudgetSettingsForm({
     setMessage("");
     setError("");
     setLoading(true);
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+
+    const form = new FormData(formElement);
     try {
       await request("/api/settings/budget", "PUT", Object.fromEntries(form.entries()));
       setMessage("予算と通知設定を更新しました。");
@@ -794,13 +810,15 @@ export function CsvImportForm({ disabled }: { disabled: boolean }) {
     setMessage("");
     setError("");
     setLoading(true);
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+
+    const form = new FormData(formElement);
     try {
       const response = await fetch("/api/import/subscriptions", { method: "POST", body: form });
       const data = (await response.json().catch(() => ({}))) as { message?: string; created?: number; skipped?: number };
       if (!response.ok) throw new Error(data.message ?? "インポートに失敗しました。");
       setMessage(`${data.created ?? 0}件を取り込みました。スキップ: ${data.skipped ?? 0}件`);
-      event.currentTarget.reset();
+      formElement.reset();
       router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : "インポートに失敗しました。");
@@ -873,10 +891,12 @@ export function CancellationEvidenceForm({ subscriptionId }: { subscriptionId: s
     setMessage("");
     setError("");
     setLoading(true);
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+
+    const form = new FormData(formElement);
     try {
       await request("/api/cancellation-evidences", "POST", Object.fromEntries(form.entries()));
-      event.currentTarget.reset();
+      formElement.reset();
       setMessage("証跡を追加しました。");
       router.refresh();
     } catch (err) {
@@ -950,7 +970,9 @@ export function CsvCandidateDetectorForm({ disabled }: { disabled: boolean }) {
     setError("");
     setLoading(true);
     setResult(null);
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+
+    const form = new FormData(formElement);
     try {
       const response = await fetch("/api/import/candidates", { method: "POST", body: form });
       const data = await response.json().catch(() => ({}));
