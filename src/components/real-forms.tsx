@@ -3,6 +3,18 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import {
+  DEFAULT_NOTIFY_DAYS_BEFORE,
+  MAX_CATEGORY_NAME_LENGTH,
+  MAX_MEMO_LENGTH,
+  MAX_PAYMENT_HISTORY_MEMO_LENGTH,
+  MAX_PAYMENT_METHOD_NAME_LENGTH,
+  MAX_SUBSCRIPTION_NAME_LENGTH,
+  MAX_USER_NAME_LENGTH,
+  MIN_PASSWORD_LENGTH,
+} from "@/lib/app-constants";
+import { isoDate } from "@/lib/billing";
+
 type SubscriptionFormValue = {
   id: string;
   name: string;
@@ -167,7 +179,7 @@ export function SubscriptionForm({
           {servicePresets.map((item) => <option key={item.name} value={item.name}>{item.name}</option>)}
         </select>
       </Field>
-      <Field label="サービス名"><input name="name" defaultValue={subscription?.name ?? ""} className="input" maxLength={100} required /></Field>
+      <Field label="サービス名"><input name="name" defaultValue={subscription?.name ?? ""} className="input" maxLength={MAX_SUBSCRIPTION_NAME_LENGTH} required /></Field>
       <Field label="料金"><input name="price" type="number" defaultValue={subscription?.price ?? 0} className="input" min={0} required /></Field>
       <Field label="請求周期">
         <select name="billingCycle" defaultValue={subscription?.billingCycle ?? "MONTHLY"} className="input" required>
@@ -199,7 +211,7 @@ export function SubscriptionForm({
           <option value="CANCELLED">解約済み</option>
         </select>
       </Field>
-      <Field label="通知日数"><input name="notifyDaysBefore" type="number" defaultValue={subscription?.notifyDaysBefore ?? 7} className="input" min={0} /></Field>
+      <Field label="通知日数"><input name="notifyDaysBefore" type="number" defaultValue={subscription?.notifyDaysBefore ?? DEFAULT_NOTIFY_DAYS_BEFORE} className="input" min={0} /></Field>
       <Field label="利用頻度">
         <select name="usageFrequency" defaultValue={subscription?.usageFrequency ?? "UNKNOWN"} className="input">
           <option value="UNKNOWN">未設定</option>
@@ -231,7 +243,7 @@ export function SubscriptionForm({
       <Field label="ロゴURL"><input name="logoUrl" defaultValue={subscription?.logoUrl ?? ""} className="input" type="url" placeholder="未入力ならサービスURLのfaviconを表示" /></Field>
       <label className="grid gap-2 text-sm font-semibold text-slate-700 md:col-span-2">
         メモ
-        <textarea name="memo" defaultValue={subscription?.memo ?? ""} className="input min-h-28" maxLength={1000} />
+        <textarea name="memo" defaultValue={subscription?.memo ?? ""} className="input min-h-28" maxLength={MAX_MEMO_LENGTH} />
       </label>
       <div className="md:col-span-2">
       <button disabled={loading} className="btn-primary">
@@ -251,7 +263,7 @@ function setInputValue(form: HTMLFormElement, name: string, value: string) {
 
 function dateValue(value?: Date | string | null) {
   if (!value) return "";
-  return new Date(value).toISOString().slice(0, 10);
+  return isoDate(value);
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
@@ -315,7 +327,7 @@ export function CategoryForm() {
       className="space-y-4"
     >
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
-      <Field label="カテゴリ名"><input name="name" className="input" maxLength={50} required /></Field>
+      <Field label="カテゴリ名"><input name="name" className="input" maxLength={MAX_CATEGORY_NAME_LENGTH} required /></Field>
       <Field label="色"><input name="color" type="color" defaultValue="#2563eb" className="h-12 w-20 rounded border border-slate-200" required /></Field>
       <button className="btn-primary">追加</button>
     </form>
@@ -343,7 +355,7 @@ export function PaymentMethodForm() {
       className="space-y-4"
     >
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
-      <Field label="名前"><input name="name" className="input" maxLength={50} required /></Field>
+      <Field label="名前"><input name="name" className="input" maxLength={MAX_PAYMENT_METHOD_NAME_LENGTH} required /></Field>
       <Field label="種別">
         <select name="type" className="input" required>
           <option value="APPLE_PAY">Apple Pay</option>
@@ -420,7 +432,7 @@ export function ProfileSettingsForm({ name, email }: { name: string; email: stri
 
   return (
     <form onSubmit={submit} noValidate className="space-y-4">
-      <Field label="名前"><input name="name" defaultValue={name} className="input" maxLength={100} required /></Field>
+      <Field label="名前"><input name="name" defaultValue={name} className="input" maxLength={MAX_USER_NAME_LENGTH} required /></Field>
       <Field label="メールアドレス"><input value={email} className="input bg-slate-100 text-slate-500" disabled /></Field>
       {message && <p className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p>}
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
@@ -578,8 +590,8 @@ export function PasswordSettingsForm() {
   return (
     <form onSubmit={submit} noValidate className="space-y-4">
       <Field label="現在のパスワード"><input name="currentPassword" className="input" type="password" required /></Field>
-      <Field label="新しいパスワード"><input name="newPassword" className="input" type="password" minLength={8} required /></Field>
-      <Field label="新しいパスワード（確認）"><input name="newPasswordConfirm" className="input" type="password" minLength={8} required /></Field>
+      <Field label="新しいパスワード"><input name="newPassword" className="input" type="password" minLength={MIN_PASSWORD_LENGTH} required /></Field>
+      <Field label="新しいパスワード（確認）"><input name="newPasswordConfirm" className="input" type="password" minLength={MIN_PASSWORD_LENGTH} required /></Field>
       {message && <p className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p>}
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
       <button disabled={loading} className="btn-primary">
@@ -636,10 +648,10 @@ export function PaymentHistoryForm({
         </Field>
       )}
       <Field label="支払い金額"><input name="amount" type="number" defaultValue={defaultAmount ?? ""} className="input" min={0} required /></Field>
-      <Field label="支払い日"><input name="paidAt" type="date" defaultValue={new Date().toISOString().slice(0, 10)} className="input" required /></Field>
+      <Field label="支払い日"><input name="paidAt" type="date" defaultValue={isoDate(new Date())} className="input" required /></Field>
       <label className="grid gap-2 text-sm font-semibold text-slate-700 md:col-span-2">
         メモ
-        <textarea name="memo" className="input min-h-28" maxLength={500} placeholder="領収書番号、カード明細名、確認メモなど" />
+        <textarea name="memo" className="input min-h-28" maxLength={MAX_PAYMENT_HISTORY_MEMO_LENGTH} placeholder="領収書番号、カード明細名、確認メモなど" />
       </label>
       {message && <p className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700 md:col-span-2">{message}</p>}
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700 md:col-span-2">{error}</p>}
@@ -720,7 +732,7 @@ export function CancellationPlanForm({
         </select>
       </Field>
       <Field label="解約予定日"><input name="plannedCancelAt" type="date" defaultValue={dateValue(plannedCancelAt)} className="input" /></Field>
-      <Field label="解約メモ"><textarea name="cancellationMemo" defaultValue={memo ?? ""} className="input min-h-24" maxLength={1000} placeholder="問い合わせ番号、解約手順、次に確認することなど" /></Field>
+      <Field label="解約メモ"><textarea name="cancellationMemo" defaultValue={memo ?? ""} className="input min-h-24" maxLength={MAX_MEMO_LENGTH} placeholder="問い合わせ番号、解約手順、次に確認することなど" /></Field>
       {message && <p className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p>}
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
       <button disabled={loading} className="btn-primary w-full">{loading ? "更新中..." : "解約支援を更新"}</button>
@@ -877,7 +889,7 @@ export function CancellationEvidenceForm({ subscriptionId }: { subscriptionId: s
   return (
     <form onSubmit={submit} noValidate className="grid gap-4 md:grid-cols-2">
       <input type="hidden" name="subscriptionId" value={subscriptionId} />
-      <Field label="証跡タイトル"><input name="title" className="input" maxLength={100} required placeholder="例: 解約受付メール" /></Field>
+      <Field label="証跡タイトル"><input name="title" className="input" maxLength={MAX_SUBSCRIPTION_NAME_LENGTH} required placeholder="例: 解約受付メール" /></Field>
       <Field label="種類">
         <select name="kind" className="input" defaultValue="MEMO">
           <option value="REQUEST">申請記録</option>
@@ -887,11 +899,11 @@ export function CancellationEvidenceForm({ subscriptionId }: { subscriptionId: s
           <option value="MEMO">メモ</option>
         </select>
       </Field>
-      <Field label="記録日"><input name="recordedAt" type="date" className="input" defaultValue={new Date().toISOString().slice(0, 10)} /></Field>
+      <Field label="記録日"><input name="recordedAt" type="date" className="input" defaultValue={isoDate(new Date())} /></Field>
       <Field label="参照URL"><input name="referenceUrl" type="url" className="input" placeholder="メール、スクリーンショット、受付ページなど" /></Field>
       <label className="grid gap-2 text-sm font-semibold text-slate-700 md:col-span-2">
         メモ
-        <textarea name="memo" className="input min-h-24" maxLength={1000} placeholder="受付番号、担当窓口、確認した内容など" />
+        <textarea name="memo" className="input min-h-24" maxLength={MAX_MEMO_LENGTH} placeholder="受付番号、担当窓口、確認した内容など" />
       </label>
       {message && <p className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700 md:col-span-2">{message}</p>}
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700 md:col-span-2">{error}</p>}

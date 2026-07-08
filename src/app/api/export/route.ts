@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import { annualAmount, isoDate, monthlyAmount } from "@/lib/billing";
 import { isPremiumPlan } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 
@@ -20,15 +21,8 @@ type ExportSubscription = {
   memo: string | null;
 };
 
-function monthly(price: number, cycle: string, customCycleDays?: number | null) {
-  if (cycle === "YEARLY") return price / 12;
-  if (cycle === "WEEKLY") return price * 4.345;
-  if (cycle === "CUSTOM") return customCycleDays ? price * (30.437 / customCycleDays) : price;
-  return price;
-}
-
 function dateCell(value?: Date | null) {
-  return value ? value.toISOString().slice(0, 10) : "";
+  return isoDate(value);
 }
 
 export async function GET() {
@@ -46,14 +40,14 @@ export async function GET() {
   const rows = [
     ["サービス名", "金額", "請求周期", "月額換算", "年額換算", "次回更新日", "無料トライアル終了日", "解約期限", "最終見直し日", "カテゴリ", "支払い方法", "ステータス", "メモ"],
     ...(subscriptions as ExportSubscription[]).map((item) => {
-      const monthlyAmount = monthly(item.price, item.billingCycle, item.customCycleDays);
+      const monthly = monthlyAmount(item.price, item.billingCycle, item.customCycleDays);
       return [
         item.name,
         String(item.price),
         item.billingCycle,
-        yenless(monthlyAmount),
-        yenless(monthlyAmount * 12),
-        item.nextBillingDate.toISOString().slice(0, 10),
+        yenless(monthly),
+        yenless(annualAmount(item.price, item.billingCycle, item.customCycleDays)),
+        isoDate(item.nextBillingDate),
         dateCell(item.trialEndsAt),
         dateCell(item.cancellationDeadline),
         dateCell(item.lastReviewedAt),

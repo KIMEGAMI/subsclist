@@ -5,6 +5,17 @@ import { AiRecommendationsPanel } from "@/components/ai-recommendations";
 import { NotificationSendButton } from "@/components/notification-send-button";
 import { BudgetSettingsForm, CancellationChecklist, CancellationEvidenceForm, CancellationPlanForm, CategoryForm, CsvCandidateDetectorForm, CsvDownloadButton, CsvImportForm, DeleteCancellationEvidenceButton, DeletePaymentHistoryButton, LogoutButton, PasswordSettingsForm, PaymentHistoryForm, PaymentMethodForm, PlanSettingsForm, ProfileSettingsForm, SubscriptionActions, SubscriptionForm } from "@/components/real-forms";
 import { requireVerifiedUser } from "@/lib/auth";
+import {
+  ALLOWED_URL_PROTOCOLS,
+  DEFAULT_NOTIFICATION_HOUR,
+  DEFAULT_NOTIFY_DAYS_BEFORE,
+  PLACEHOLDER_HOSTS,
+  REVIEW_CAUTION_SCORE_THRESHOLD,
+  REVIEW_STALE_DAYS,
+  REVIEW_URGENT_SCORE_THRESHOLD,
+  UPCOMING_DEADLINE_DAYS,
+} from "@/lib/app-constants";
+import { annualAmount, daysUntil, isoDate, MONTHS_PER_YEAR, monthlyAmount as monthly } from "@/lib/billing";
 import { prisma } from "@/lib/prisma";
 import { env } from "@/lib/env";
 import { FREE_SUBSCRIPTION_LIMIT, hiddenByPlan, isPremiumPlan, limitByPlan } from "@/lib/plans";
@@ -101,21 +112,6 @@ const paymentMethodTypeLabels: Record<string, string> = {
   OTHER: "その他",
 };
 
-function monthly(price: number, cycle: string, customCycleDays?: number | null) {
-  if (cycle === "YEARLY") return price / 12;
-  if (cycle === "WEEKLY") return price * 4.345;
-  if (cycle === "CUSTOM") return customCycleDays ? price * (30.437 / customCycleDays) : price;
-  return price;
-}
-
-function daysUntil(date: Date) {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const target = new Date(date);
-  target.setHours(0, 0, 0, 0);
-  return Math.ceil((target.getTime() - today.getTime()) / 86400000);
-}
-
 function EmptyState({ text }: { text: string }) {
   return <p className="rounded-lg border border-dashed border-slate-200 bg-white/70 p-4 text-sm font-semibold text-slate-500">{text}</p>;
 }
@@ -136,7 +132,7 @@ function PlanLimitBanner({ hiddenCount }: { hiddenCount: number }) {
 }
 
 function PremiumValueCard({ monthlyTotal, saving, reviewCount, urgentCount }: { monthlyTotal: number; saving: number; reviewCount: number; urgentCount: number }) {
-  const yearlySaving = saving * 12;
+  const yearlySaving = saving * MONTHS_PER_YEAR;
   return (
     <Card className="mt-6 border-blue-200 bg-gradient-to-br from-blue-50/95 to-cyan-50/90">
       <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
@@ -287,7 +283,7 @@ function PremiumOnlyNotice({ title, description }: { title: string; description:
 }
 
 function dateText(value?: Date | null) {
-  return value ? value.toISOString().slice(0, 10) : "未設定";
+  return value ? isoDate(value) : "未設定";
 }
 
 function serviceIcon(item: { logoUrl?: string | null; serviceUrl?: string | null; name: string }) {
@@ -305,8 +301,8 @@ function safeExternalUrl(value?: string | null) {
   if (!value) return null;
   try {
     const url = new URL(value);
-    if (!["http:", "https:"].includes(url.protocol)) return null;
-    if (["example.com", "www.example.com"].includes(url.hostname.toLowerCase())) return null;
+    if (!(ALLOWED_URL_PROTOCOLS as readonly string[]).includes(url.protocol)) return null;
+    if ((PLACEHOLDER_HOSTS as readonly string[]).includes(url.hostname.toLowerCase())) return null;
     return url.toString();
   } catch {
     return null;
@@ -339,7 +335,7 @@ function monthRange(start: Date, end: Date) {
 
 function needsReview(value?: Date | null) {
   if (!value) return true;
-  return daysUntil(value) < -90;
+  return daysUntil(value) < -REVIEW_STALE_DAYS;
 }
 
 const defaultCancellationChecklist = [
@@ -376,7 +372,7 @@ export async function DashboardView() {
     return acc;
   }, {});
   const scoredItems = active.map((item) => reviewScore(item, categoryCounts[item.categoryId ?? "none"] ?? 1));
-  const reviewPriorityCount = scoredItems.filter((item) => item.score >= 40).length;
+  const reviewPriorityCount = scoredItems.filter((item) => item.score >= REVIEW_CAUTION_SCORE_THRESHOLD).length;
   const lowUsageCount = active.filter((item) => item.usageFrequency === "RARELY" || item.priority === "OPTIONAL").length;
   const filledFields = active.reduce((sum, item) => {
     return sum + Number(Boolean(item.categoryId)) + Number(Boolean(item.paymentMethodId)) + Number(item.usageFrequency !== "UNKNOWN") + Number(Boolean(item.lastReviewedAt));
@@ -399,7 +395,7 @@ export async function DashboardView() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {[
           ["月額合計", yen.format(monthlyTotal), "from-blue-600 to-cyan-500"],
-          ["年額換算", yen.format(monthlyTotal * 12), "from-slate-900 to-blue-700"],
+          ["年額換算", yen.format(monthlyTotal * MONTHS_PER_YEAR), "from-slate-900 to-blue-700"],
           ["アクティブ件数", `${active.length}件`, "from-emerald-500 to-teal-500"],
           ["予算消化", budget ? `${budgetRate}%` : "未設定", "from-fuchsia-500 to-rose-500"],
         ].map(([label, value, gradient]) => (
@@ -432,7 +428,7 @@ export async function DashboardView() {
           <div className="mt-4 divide-y divide-slate-100">
             {active.length === 0 ? <EmptyState text="登録済みのサブスクリプションはありません。" /> : active.slice(0, 5).map((item) => (
               <Link key={item.id} href={`/subscriptions/${item.id}`} className="flex items-center justify-between gap-4 py-3">
-                <div><p className="font-semibold">{item.name}</p><p className="text-sm text-slate-500">{item.nextBillingDate.toISOString().slice(0, 10)} / {daysUntil(item.nextBillingDate)}日後</p></div>
+                <div><p className="font-semibold">{item.name}</p><p className="text-sm text-slate-500">{isoDate(item.nextBillingDate)} / {daysUntil(item.nextBillingDate)}日後</p></div>
                 <p className="font-bold">{yen.format(monthly(item.price, item.billingCycle, item.customCycleDays))}/月</p>
               </Link>
             ))}
@@ -512,7 +508,7 @@ export async function SubscriptionsView() {
               </div>
               <p className="mt-5 text-3xl font-black text-slate-950">{yen.format(monthly(item.price, item.billingCycle, item.customCycleDays))}</p>
               <div className="mt-4 rounded-lg bg-slate-50/80 p-3 text-sm font-semibold text-slate-600">
-                次回更新 {item.nextBillingDate.toISOString().slice(0, 10)} / {item.paymentMethod?.name ?? "未設定"}
+                次回更新 {isoDate(item.nextBillingDate)} / {item.paymentMethod?.name ?? "未設定"}
               </div>
             </Link>
           ))}
@@ -587,8 +583,8 @@ export async function SubscriptionDetailView({ id }: { id: string }) {
         <Card>
           <div className="grid gap-4 sm:grid-cols-2">
             <Info label="月額換算" value={yen.format(monthly(item.price, item.billingCycle, item.customCycleDays))} />
-            <Info label="年額換算" value={yen.format(monthly(item.price, item.billingCycle, item.customCycleDays) * 12)} />
-            <Info label="次回更新日" value={item.nextBillingDate.toISOString().slice(0, 10)} />
+            <Info label="年額換算" value={yen.format(annualAmount(item.price, item.billingCycle, item.customCycleDays))} />
+            <Info label="次回更新日" value={isoDate(item.nextBillingDate)} />
             <Info label="ステータス" value={item.status} />
             <Info label="カテゴリ" value={item.category?.name ?? "未分類"} />
             <Info label="支払い方法" value={item.paymentMethod?.name ?? "未設定"} />
@@ -610,7 +606,7 @@ export async function SubscriptionDetailView({ id }: { id: string }) {
             <div className="mt-4 flex flex-wrap gap-2">
               {score.reasons.map((reason) => <span key={reason} className="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-700">{reason}</span>)}
             </div>
-            <p className="mt-4 text-sm font-semibold text-blue-900">削減見込み: 月 {yen.format(saving)} / 年 {yen.format(saving * 12)}</p>
+            <p className="mt-4 text-sm font-semibold text-blue-900">削減見込み: 月 {yen.format(saving)} / 年 {yen.format(saving * MONTHS_PER_YEAR)}</p>
           </div>
           <p className="mt-5 rounded-lg border border-slate-100 bg-slate-50/80 p-4 text-sm font-medium leading-6 text-slate-600">{item.memo || "メモは登録されていません。"}</p>
         </Card>
@@ -655,7 +651,7 @@ export async function SubscriptionDetailView({ id }: { id: string }) {
                   <div key={evidence.id} className="flex items-start justify-between gap-3 py-3">
                     <div>
                       <p className="font-bold">{evidence.title}</p>
-                      <p className="mt-1 text-sm text-slate-500">{evidence.recordedAt.toISOString().slice(0, 10)} / {evidenceKindLabel(evidence.kind)}</p>
+                      <p className="mt-1 text-sm text-slate-500">{isoDate(evidence.recordedAt)} / {evidenceKindLabel(evidence.kind)}</p>
                       {evidence.referenceUrl && <Link href={evidence.referenceUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block text-sm font-semibold text-blue-700">参照URLを開く</Link>}
                       {evidence.memo && <p className="mt-2 text-sm leading-6 text-slate-600">{evidence.memo}</p>}
                     </div>
@@ -684,7 +680,7 @@ export async function SubscriptionDetailView({ id }: { id: string }) {
           {item.paymentHistories.length === 0 ? <EmptyState text="支払い履歴はまだ登録されていません。" /> : item.paymentHistories.map((history) => (
             <div key={history.id} className="flex items-center justify-between gap-3 border-b border-slate-100 py-3">
               <div>
-                <p className="font-bold">{history.paidAt.toISOString().slice(0, 10)} / {yen.format(history.amount)}</p>
+                <p className="font-bold">{isoDate(history.paidAt)} / {yen.format(history.amount)}</p>
                 {history.memo && <p className="mt-1 text-sm text-slate-500">{history.memo}</p>}
               </div>
               <DeletePaymentHistoryButton id={history.id} />
@@ -1086,11 +1082,11 @@ function monthLabel(value: string) {
 }
 
 function dateKeyFromParts(year: number, monthIndex: number, day: number) {
-  return new Date(Date.UTC(year, monthIndex, day)).toISOString().slice(0, 10);
+  return isoDate(new Date(Date.UTC(year, monthIndex, day)));
 }
 
 function dateKey(value: Date) {
-  return value.toISOString().slice(0, 10);
+  return isoDate(value);
 }
 
 export async function CalendarView({ month }: { month?: string }) {
@@ -1200,7 +1196,7 @@ export async function AnalyticsView() {
   })) as unknown as SubscriptionView[];
   const active = subscriptions.filter((item) => item.status === "ACTIVE");
   const monthlyTotal = active.reduce((sum, item) => sum + monthly(item.price, item.billingCycle, item.customCycleDays), 0);
-  const annualTotal = monthlyTotal * 12;
+  const annualTotal = monthlyTotal * MONTHS_PER_YEAR;
   const averageMonthly = active.length ? monthlyTotal / active.length : 0;
   const upcoming30 = active.filter((item) => daysUntil(item.nextBillingDate) >= 0 && daysUntil(item.nextBillingDate) <= 30);
   const reviewCount = active.filter((item) => needsReview(item.lastReviewedAt)).length;
@@ -1442,16 +1438,16 @@ export async function ReviewView() {
     })
     .sort((a, b) => b.score.score - a.score.score || b.saving - a.saving);
   const totalSaving = scored.reduce((sum, item) => sum + item.saving, 0);
-  const urgentCount = scored.filter((item) => item.score.score >= 70).length;
+  const urgentCount = scored.filter((item) => item.score.score >= REVIEW_URGENT_SCORE_THRESHOLD).length;
   const expensive = [...subscriptions].sort((a, b) => monthly(b.price, b.billingCycle, b.customCycleDays) - monthly(a.price, a.billingCycle, a.customCycleDays)).slice(0, 5);
-  const urgent = subscriptions.filter((item) => daysUntil(item.nextBillingDate) <= 14 || (item.trialEndsAt && daysUntil(item.trialEndsAt) <= 14) || (item.cancellationDeadline && daysUntil(item.cancellationDeadline) <= 14));
+  const urgent = subscriptions.filter((item) => daysUntil(item.nextBillingDate) <= UPCOMING_DEADLINE_DAYS || (item.trialEndsAt && daysUntil(item.trialEndsAt) <= UPCOMING_DEADLINE_DAYS) || (item.cancellationDeadline && daysUntil(item.cancellationDeadline) <= UPCOMING_DEADLINE_DAYS));
   const stale = subscriptions.filter((item) => needsReview(item.lastReviewedAt));
 
   return (
     <AppShell>
       <PageHeader title="見直しレポート" description="削減見込み、見直しスコア、期限リスクをまとめて判断します。" />
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Card><p className="text-sm font-semibold text-slate-500">削減見込み</p><p className="mt-2 text-3xl font-black">{yen.format(totalSaving)}</p><p className="mt-2 text-sm text-slate-500">年間 {yen.format(totalSaving * 12)}</p></Card>
+        <Card><p className="text-sm font-semibold text-slate-500">削減見込み</p><p className="mt-2 text-3xl font-black">{yen.format(totalSaving)}</p><p className="mt-2 text-sm text-slate-500">年間 {yen.format(totalSaving * MONTHS_PER_YEAR)}</p></Card>
         <Card><p className="text-sm font-semibold text-slate-500">要対応スコア</p><p className="mt-2 text-3xl font-black">{urgentCount}件</p><p className="mt-2 text-sm text-slate-500">70点以上</p></Card>
         <Card><p className="text-sm font-semibold text-slate-500">14日以内の対応</p><p className="mt-2 text-3xl font-black">{urgent.length}件</p></Card>
         <Card><p className="text-sm font-semibold text-slate-500">未見直し</p><p className="mt-2 text-3xl font-black">{stale.length}件</p></Card>
@@ -1464,7 +1460,7 @@ export async function ReviewView() {
               <div>
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="font-bold">{item.name}</p>
-                  <span className={`rounded-full px-2 py-1 text-xs font-black ${score.score >= 70 ? "bg-red-50 text-red-700" : score.score >= 40 ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>{score.grade}</span>
+                  <span className={`rounded-full px-2 py-1 text-xs font-black ${score.score >= REVIEW_URGENT_SCORE_THRESHOLD ? "bg-red-50 text-red-700" : score.score >= REVIEW_CAUTION_SCORE_THRESHOLD ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700"}`}>{score.grade}</span>
                 </div>
                 <p className="mt-2 text-sm leading-6 text-slate-500">{score.reasons.join(" / ")}</p>
               </div>
@@ -1618,7 +1614,7 @@ export async function NotificationsView() {
               <Link key={item.id + "-" + label + "-" + date.toISOString()} href={"/subscriptions/" + item.id} className="flex items-center justify-between gap-3 py-3">
                 <div>
                   <p className="font-semibold">{item.name}</p>
-                  <p className="text-sm text-slate-500">{label}: {dateText(date)} / {item.notifyDaysBefore ?? 7}日前に通知</p>
+                  <p className="text-sm text-slate-500">{label}: {dateText(date)} / {item.notifyDaysBefore ?? DEFAULT_NOTIFY_DAYS_BEFORE}日前に通知</p>
                 </div>
                 <span className="rounded-full bg-blue-50 px-2 py-1 text-xs font-black text-blue-700">あと{Math.max(0, daysUntil(date))}日</span>
               </Link>
@@ -1641,7 +1637,7 @@ export async function NotificationsView() {
                       <p className="mt-1 text-xs font-semibold text-slate-500">最終送信: {lastSent ? dateText(lastSent) : "未送信"}</p>
                     </div>
                     <Link href={"/subscriptions/" + item.id + "/edit"} className="btn-secondary min-h-0 px-3 py-2 text-sm">
-                      {item.notifyDaysBefore ?? 7}日前
+                      {item.notifyDaysBefore ?? DEFAULT_NOTIFY_DAYS_BEFORE}日前
                     </Link>
                   </div>
                 );
@@ -1715,7 +1711,7 @@ export async function SettingsView({ checkoutStatus, checkoutSessionId }: { chec
         <Card>
           <h2 className="text-lg font-bold">予算・通知</h2>
           <p className="mt-2 text-sm text-slate-600">月額予算と新規登録時の標準通知設定を管理します。</p>
-          <div className="mt-5"><BudgetSettingsForm monthlyBudget={preference?.monthlyBudget} defaultNotifyDaysBefore={preference?.defaultNotifyDaysBefore ?? 7} notificationHour={preference?.notificationHour ?? 9} /></div>
+          <div className="mt-5"><BudgetSettingsForm monthlyBudget={preference?.monthlyBudget} defaultNotifyDaysBefore={preference?.defaultNotifyDaysBefore ?? DEFAULT_NOTIFY_DAYS_BEFORE} notificationHour={preference?.notificationHour ?? DEFAULT_NOTIFICATION_HOUR} /></div>
         </Card>
         <Card>
           <h2 className="text-lg font-bold">アカウント状態</h2>
@@ -1723,7 +1719,7 @@ export async function SettingsView({ checkoutStatus, checkoutSessionId }: { chec
             <Info label="メール" value={user.email} />
             <Info label="メール認証" value={user.emailVerified ? "認証済み" : "未認証"} />
             <Info label="現在のプラン" value={planLabel(user.plan)} />
-            <Info label="登録日" value={user.createdAt.toISOString().slice(0, 10)} />
+            <Info label="登録日" value={isoDate(user.createdAt)} />
           </div>
         </Card>
       </div>
@@ -1783,7 +1779,7 @@ export async function MonthlyReportView() {
         <Card><p className="text-sm font-semibold text-slate-500">前月比</p><p className={"mt-2 text-3xl font-black " + deltaClass}>{delta >= 0 ? "+" : ""}{yen.format(delta)}</p><p className="mt-2 text-sm text-slate-500">前月 {yen.format(previousPaid)}</p></Card>
         <Card><p className="text-sm font-semibold text-slate-500">月額見込み</p><p className="mt-2 text-3xl font-black">{yen.format(activeMonthly)}</p><p className="mt-2 text-sm text-slate-500">アクティブ契約</p></Card>
         <Card><p className="text-sm font-semibold text-slate-500">今月の更新</p><p className="mt-2 text-3xl font-black">{dueThisMonth.length}件</p><p className="mt-2 text-sm text-slate-500">期限リスク {riskItems.length}件</p></Card>
-        <Card><p className="text-sm font-semibold text-slate-500">削減余地</p><p className="mt-2 text-3xl font-black">{yen.format(saving)}</p><p className="mt-2 text-sm text-slate-500">年間 {yen.format(saving * 12)}</p></Card>
+        <Card><p className="text-sm font-semibold text-slate-500">削減余地</p><p className="mt-2 text-3xl font-black">{yen.format(saving)}</p><p className="mt-2 text-sm text-slate-500">年間 {yen.format(saving * MONTHS_PER_YEAR)}</p></Card>
       </div>
 
       <div className="mt-6 grid gap-5 xl:grid-cols-[1.1fr_0.9fr]">

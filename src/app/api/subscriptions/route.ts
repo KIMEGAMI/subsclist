@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
+import { ALLOWED_URL_PROTOCOLS, MAX_MEMO_LENGTH, MAX_SUBSCRIPTION_NAME_LENGTH, PLACEHOLDER_HOSTS } from "@/lib/app-constants";
 import { prisma } from "@/lib/prisma";
 import { FREE_SUBSCRIPTION_LIMIT } from "@/lib/plans";
 
 const schema = z.object({
-  name: z.string().trim().min(1).max(100),
+  name: z.string().trim().min(1).max(MAX_SUBSCRIPTION_NAME_LENGTH),
   price: z.coerce.number().min(0),
   billingCycle: z.enum(["MONTHLY", "YEARLY", "WEEKLY", "CUSTOM"]),
   nextBillingDate: z.string().min(1),
@@ -21,7 +22,7 @@ const schema = z.object({
   usageFrequency: z.enum(["DAILY", "WEEKLY", "MONTHLY", "RARELY", "UNKNOWN"]).optional(),
   priority: z.enum(["ESSENTIAL", "USEFUL", "OPTIONAL", "UNKNOWN"]).optional(),
   logoUrl: z.string().optional(),
-  memo: z.string().max(1000).optional(),
+  memo: z.string().max(MAX_MEMO_LENGTH).optional(),
 });
 
 function optionalDate(value?: string) {
@@ -32,8 +33,8 @@ function optionalUrl(value?: string) {
   if (!value) return null;
   try {
     const url = new URL(value);
-    if (["example.com", "www.example.com"].includes(url.hostname.toLowerCase())) return null;
-    return ["http:", "https:"].includes(url.protocol) ? url.toString() : null;
+    if ((PLACEHOLDER_HOSTS as readonly string[]).includes(url.hostname.toLowerCase())) return null;
+    return (ALLOWED_URL_PROTOCOLS as readonly string[]).includes(url.protocol) ? url.toString() : null;
   } catch {
     return null;
   }

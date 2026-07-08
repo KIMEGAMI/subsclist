@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { requireVerifiedUser } from "@/lib/auth";
+import { isoDate, monthlyAmount } from "@/lib/billing";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 import { isPremiumPlan } from "@/lib/plans";
@@ -17,13 +18,6 @@ type RelatedSubscriptionForRecommendation = {
   customCycleDays: number | null;
   category: { name: string } | null;
 };
-
-function monthly(price: number, cycle: string, customCycleDays?: number | null) {
-  if (cycle === "YEARLY") return price / 12;
-  if (cycle === "WEEKLY") return price * 4.345;
-  if (cycle === "CUSTOM") return customCycleDays ? price * (30.437 / customCycleDays) : price;
-  return price;
-}
 
 function outputText(data: unknown) {
   if (!data || typeof data !== "object") return "";
@@ -116,20 +110,20 @@ export async function POST(request: Request) {
     target: {
       name: subscription.name,
       category: subscription.category?.name ?? "未分類",
-      monthlyPrice: yen.format(monthly(subscription.price, subscription.billingCycle, subscription.customCycleDays)),
+      monthlyPrice: yen.format(monthlyAmount(subscription.price, subscription.billingCycle, subscription.customCycleDays)),
       rawPrice: subscription.price,
       currency: subscription.currency,
       billingCycle: subscription.billingCycle,
-      nextBillingDate: subscription.nextBillingDate.toISOString().slice(0, 10),
+      nextBillingDate: isoDate(subscription.nextBillingDate),
       serviceUrl: subscription.serviceUrl,
       cancellationUrl: subscription.cancellationUrl,
       memo: subscription.memo,
-      lastReviewedAt: subscription.lastReviewedAt?.toISOString().slice(0, 10) ?? null,
+      lastReviewedAt: subscription.lastReviewedAt ? isoDate(subscription.lastReviewedAt) : null,
     },
     sameCategoryContracts: (relatedSubscriptions as RelatedSubscriptionForRecommendation[]).map((item) => ({
       name: item.name,
       category: item.category?.name ?? "未分類",
-      monthlyPrice: yen.format(monthly(item.price, item.billingCycle, item.customCycleDays)),
+      monthlyPrice: yen.format(monthlyAmount(item.price, item.billingCycle, item.customCycleDays)),
     })),
   };
 

@@ -1,5 +1,5 @@
-export const FREE_SUBSCRIPTION_LIMIT = 10;
-export const FREE_CATEGORY_LIMIT = 5;
+export { FREE_CATEGORY_LIMIT, FREE_SUBSCRIPTION_LIMIT } from "@/lib/app-constants";
+import { FREE_SUBSCRIPTION_LIMIT } from "@/lib/app-constants";
 
 export function isPremiumPlan(plan?: string | null) {
   return plan === "PREMIUM" || plan === "LIFETIME";

@@ -2,14 +2,15 @@ import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createVerificationToken, hashToken, setSession } from "@/lib/auth";
+import { EMAIL_VERIFICATION_TOKEN_TTL_MS, MAX_EMAIL_LENGTH, MAX_PASSWORD_LENGTH, MAX_USER_NAME_LENGTH, MIN_PASSWORD_LENGTH } from "@/lib/app-constants";
 import { assertMailEnv } from "@/lib/env";
 import { sendVerificationEmail } from "@/lib/mail";
 import { prisma } from "@/lib/prisma";
 
 const schema = z.object({
-  name: z.string().trim().min(1).max(100),
-  email: z.string().trim().email().max(255),
-  password: z.string().min(8).max(128),
+  name: z.string().trim().min(1).max(MAX_USER_NAME_LENGTH),
+  email: z.string().trim().email().max(MAX_EMAIL_LENGTH),
+  password: z.string().min(MIN_PASSWORD_LENGTH).max(MAX_PASSWORD_LENGTH),
 });
 
 const initialCategories = [
@@ -26,7 +27,7 @@ async function createTokenAndSend(userId: string, email: string) {
     data: {
       userId,
       tokenHash: hashToken(token),
-      expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
+      expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TOKEN_TTL_MS),
     },
   });
   await sendVerificationEmail(email, token);

@@ -1,5 +1,21 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth";
+import {
+  CSV_CONFIDENCE_WEIGHTS,
+  CSV_EXISTING_PRICE_TOLERANCE,
+  CSV_MAX_CANDIDATE_COUNT,
+  CSV_MAX_CONFIDENCE,
+  CSV_MAX_MONTHLY_GAP_DAYS,
+  CSV_MAX_WEEKLY_GAP_DAYS,
+  CSV_MAX_YEARLY_GAP_DAYS,
+  CSV_MIN_CANDIDATE_CONFIDENCE,
+  CSV_MIN_MONTHLY_GAP_DAYS,
+  CSV_MIN_WEEKLY_GAP_DAYS,
+  CSV_MIN_YEARLY_GAP_DAYS,
+  CSV_RECURRING_MIN_OCCURRENCES,
+  CSV_RECURRING_OCCURRENCE_THRESHOLD,
+} from "@/lib/app-constants";
+import { isoDate, MILLISECONDS_PER_DAY } from "@/lib/billing";
 import { isPremiumPlan } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
 
@@ -87,11 +103,11 @@ function dateValue(value: string) {
 function inferCycle(dates: Date[]) {
   if (dates.length < 2) return "UNKNOWN";
   const sorted = dates.sort((a, b) => a.getTime() - b.getTime());
-  const gaps = sorted.slice(1).map((date, index) => Math.round((date.getTime() - sorted[index].getTime()) / 86400000));
+  const gaps = sorted.slice(1).map((date, index) => Math.round((date.getTime() - sorted[index].getTime()) / MILLISECONDS_PER_DAY));
   const avg = gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length;
-  if (avg >= 25 && avg <= 35) return "MONTHLY";
-  if (avg >= 6 && avg <= 8) return "WEEKLY";
-  if (avg >= 330 && avg <= 400) return "YEARLY";
+  if (avg >= CSV_MIN_MONTHLY_GAP_DAYS && avg <= CSV_MAX_MONTHLY_GAP_DAYS) return "MONTHLY";
+  if (avg >= CSV_MIN_WEEKLY_GAP_DAYS && avg <= CSV_MAX_WEEKLY_GAP_DAYS) return "WEEKLY";
+  if (avg >= CSV_MIN_YEARLY_GAP_DAYS && avg <= CSV_MAX_YEARLY_GAP_DAYS) return "YEARLY";
   return "CUSTOM";
 }
 
@@ -143,21 +159,28 @@ export async function POST(request: Request) {
       const known = knownServices.find((service) => first.merchant.toLowerCase().includes(service.toLowerCase()));
       const dates = items.map((item) => item.date).filter((date): date is Date => Boolean(date));
       const cycle = inferCycle(dates);
-      const recurring = items.length >= 2 || cycle !== "UNKNOWN";
+      const recurring = items.length >= CSV_RECURRING_MIN_OCCURRENCES || cycle !== "UNKNOWN";
       const existing = subscriptions.find((subscription) =>
         first.merchant.toLowerCase().includes(subscription.name.toLowerCase()) ||
         subscription.name.toLowerCase().includes(first.merchant.toLowerCase()) ||
-        Math.abs(subscription.price - first.amount) <= 20,
+        Math.abs(subscription.price - first.amount) <= CSV_EXISTING_PRICE_TOLERANCE,
       );
-      const confidence = Math.min(98, (known ? 36 : 0) + (recurring ? 34 : 0) + (items.length >= 3 ? 14 : 0) + (existing ? 12 : 0) + (dates.length ? 4 : 0));
+      const confidence = Math.min(
+        CSV_MAX_CONFIDENCE,
+        (known ? CSV_CONFIDENCE_WEIGHTS.knownMerchant : 0) +
+          (recurring ? CSV_CONFIDENCE_WEIGHTS.recurringCycle : 0) +
+          (items.length >= CSV_RECURRING_OCCURRENCE_THRESHOLD ? CSV_CONFIDENCE_WEIGHTS.enoughOccurrences : 0) +
+          (existing ? CSV_CONFIDENCE_WEIGHTS.alreadyRegistered : 0) +
+          (dates.length ? CSV_CONFIDENCE_WEIGHTS.hasDates : 0),
+      );
       const sortedDates = [...dates].sort((a, b) => a.getTime() - b.getTime());
       return {
         name: existing?.name ?? known ?? first.merchant,
         merchant: first.merchant,
         amount: first.amount,
         occurrences: items.length,
-        firstDate: sortedDates[0]?.toISOString().slice(0, 10) ?? "",
-        lastDate: sortedDates.at(-1)?.toISOString().slice(0, 10) ?? "",
+        firstDate: isoDate(sortedDates[0]),
+        lastDate: isoDate(sortedDates.at(-1)),
         confidence,
         reason: [
           known ? "有名サービス名を検出" : "同一明細を検出",
@@ -167,9 +190,9 @@ export async function POST(request: Request) {
         billingCycle: cycle === "UNKNOWN" ? "MONTHLY" : cycle,
       };
     })
-    .filter((item) => item.confidence >= 45)
+    .filter((item) => item.confidence >= CSV_MIN_CANDIDATE_CONFIDENCE)
     .sort((a, b) => b.confidence - a.confidence || b.occurrences - a.occurrences)
-    .slice(0, 30);
+    .slice(0, CSV_MAX_CANDIDATE_COUNT);
 
   return NextResponse.json({ candidates, totalRows: body.length, detected: candidates.length });
 }

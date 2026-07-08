@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
+import { MAX_CATEGORY_NAME_LENGTH } from "@/lib/app-constants";
 import { prisma } from "@/lib/prisma";
 import { FREE_CATEGORY_LIMIT } from "@/lib/plans";
 
 const schema = z.object({
-  name: z.string().trim().min(1).max(50),
+  name: z.string().trim().min(1).max(MAX_CATEGORY_NAME_LENGTH),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
 });
 

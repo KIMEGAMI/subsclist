@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
+import { MAX_PAYMENT_HISTORY_MEMO_LENGTH } from "@/lib/app-constants";
 import { prisma } from "@/lib/prisma";
 
 const schema = z.object({
   subscriptionId: z.string().min(1),
   amount: z.coerce.number().int().min(0),
   paidAt: z.string().min(1),
-  memo: z.string().max(500).optional(),
+  memo: z.string().max(MAX_PAYMENT_HISTORY_MEMO_LENGTH).optional(),
 });
 
 export async function POST(request: Request) {
