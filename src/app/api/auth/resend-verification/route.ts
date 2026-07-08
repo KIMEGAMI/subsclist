@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { createVerificationToken, getCurrentUser, hashToken } from "@/lib/auth";
+import { EMAIL_VERIFICATION_TOKEN_TTL_MS } from "@/lib/app-constants";
 import { assertMailEnv } from "@/lib/env";
+import { userErrorMessage } from "@/lib/error-messages";
 import { sendVerificationEmail } from "@/lib/mail";
 import { prisma } from "@/lib/prisma";
 
@@ -8,7 +10,7 @@ export async function POST() {
   try {
     assertMailEnv();
   } catch (error) {
-    return NextResponse.json({ message: error instanceof Error ? error.message : "メール送信設定を確認してください。" }, { status: 500 });
+    return NextResponse.json({ message: userErrorMessage(error, "メール送信設定を確認してください。") }, { status: 500 });
   }
 
   const user = await getCurrentUser();
@@ -24,7 +26,7 @@ export async function POST() {
     data: {
       userId: user.id,
       tokenHash: hashToken(token),
-      expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
+      expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TOKEN_TTL_MS),
     },
   });
 

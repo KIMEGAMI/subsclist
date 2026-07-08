@@ -1,7 +1,7 @@
 function required(name: string) {
   const value = process.env[name];
   if (!value) {
-    throw new Error(name + " is not set.");
+    throw new Error(`${name}が設定されていません。`);
   }
   return value;
 }
@@ -31,14 +31,14 @@ export const env = {
 
 export function assertAuthSecret() {
   if (env.authSecret.length < 32) {
-    throw new Error("AUTH_SECRET or NEXTAUTH_SECRET must be at least 32 characters.");
+    throw new Error("AUTH_SECRETまたはNEXTAUTH_SECRETは32文字以上で設定してください。");
   }
 }
 
 export function assertMailEnv() {
   for (const name of ["MAIL_FROM", "SMTP_HOST", "SMTP_USER", "SMTP_PASS"] as const) {
     if (!process.env[name]) {
-      throw new Error(name + " is not set.");
+      throw new Error(`${name}が設定されていません。`);
     }
   }
 }
@@ -46,7 +46,7 @@ export function assertMailEnv() {
 export function assertStripeEnv() {
   for (const name of ["STRIPE_SECRET_KEY"] as const) {
     if (!process.env[name]) {
-      throw new Error(name + " is not set.");
+      throw new Error(`${name}が設定されていません。`);
     }
   }
 }
@@ -54,7 +54,7 @@ export function assertStripeEnv() {
 export function assertStripeWebhookEnv() {
   for (const name of ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"] as const) {
     if (!process.env[name]) {
-      throw new Error(name + " is not set.");
+      throw new Error(`${name}が設定されていません。`);
     }
   }
 }
@@ -62,7 +62,7 @@ export function assertStripeWebhookEnv() {
 export function assertGoogleEnv() {
   for (const name of ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"] as const) {
     if (!process.env[name]) {
-      throw new Error(name + " is not set.");
+      throw new Error(`${name}が設定されていません。`);
     }
   }
 }

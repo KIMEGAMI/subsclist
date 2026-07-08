@@ -4,6 +4,7 @@ import { z } from "zod";
 import { createVerificationToken, hashToken, setSession } from "@/lib/auth";
 import { EMAIL_VERIFICATION_TOKEN_TTL_MS, MAX_EMAIL_LENGTH, MAX_PASSWORD_LENGTH, MAX_USER_NAME_LENGTH, MIN_PASSWORD_LENGTH } from "@/lib/app-constants";
 import { assertMailEnv } from "@/lib/env";
+import { userErrorMessage } from "@/lib/error-messages";
 import { sendVerificationEmail } from "@/lib/mail";
 import { prisma } from "@/lib/prisma";
 
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
   try {
     assertMailEnv();
   } catch (error) {
-    return NextResponse.json({ message: error instanceof Error ? error.message : "メール送信設定を確認してください。" }, { status: 500 });
+    return NextResponse.json({ message: userErrorMessage(error, "メール送信設定を確認してください。") }, { status: 500 });
   }
 
   const parsed = schema.safeParse(await request.json());

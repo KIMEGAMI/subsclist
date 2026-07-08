@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { userErrorMessage, userMessage } from "@/lib/error-messages";
 
 export function DemoLoginButton() {
   const router = useRouter();
@@ -14,11 +15,11 @@ export function DemoLoginButton() {
     try {
       const response = await fetch("/api/auth/demo-login", { method: "POST" });
       const data = (await response.json().catch(() => ({ message: "デモを開始できませんでした。" }))) as { message?: string };
-      if (!response.ok) throw new Error(data.message ?? "デモを開始できませんでした。");
+      if (!response.ok) throw new Error(userMessage(data.message, "デモを開始できませんでした。"));
       router.push("/dashboard");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "デモを開始できませんでした。");
+      setError(userErrorMessage(err, "デモを開始できませんでした。"));
     } finally {
       setLoading(false);
     }

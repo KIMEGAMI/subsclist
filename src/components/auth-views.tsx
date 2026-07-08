@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Card } from "@/components/app-shell";
 import { MAX_USER_NAME_LENGTH } from "@/lib/app-constants";
+import { userErrorMessage, userMessage } from "@/lib/error-messages";
 
 const t = {
   brand: "サブスクリスト",
@@ -69,7 +70,7 @@ async function postJson(url: string, body?: unknown) {
     mailSent?: boolean;
   };
   if (!response.ok && response.status !== 202) {
-    throw new Error(data.message ?? t.processFailed);
+    throw new Error(userMessage(data.message, t.processFailed));
   }
   return data;
 }
@@ -109,7 +110,7 @@ export function LoginView({ googleStatus }: { googleStatus?: string } = {}) {
       router.push(data.emailVerified ? "/dashboard" : "/verify-email");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t.loginFailed);
+      setError(userErrorMessage(err, t.loginFailed));
     } finally {
       setLoading(false);
     }
@@ -169,7 +170,7 @@ export function RegisterView() {
       router.push(data.mailSent === false ? "/verify-email?mail=failed" : "/verify-email");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : t.registerFailed);
+      setError(userErrorMessage(err, t.registerFailed));
     } finally {
       setLoading(false);
     }
@@ -220,7 +221,7 @@ export function ResendVerificationButton() {
       const data = await postJson("/api/auth/resend-verification");
       setMessage(data.message ?? t.resendSuccess);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : t.resendFailed);
+      setMessage(userErrorMessage(err, t.resendFailed));
     } finally {
       setLoading(false);
     }

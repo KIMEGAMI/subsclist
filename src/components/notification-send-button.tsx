@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { userErrorMessage, userMessage } from "@/lib/error-messages";
 
 export function NotificationSendButton() {
   const [message, setMessage] = useState("");
@@ -17,11 +18,11 @@ export function NotificationSendButton() {
         skipped?: number;
         failures?: string[];
       };
-      if (!response.ok) throw new Error(data.message ?? "通知送信に失敗しました。");
+      if (!response.ok) throw new Error(userMessage(data.message, "通知送信に失敗しました。"));
       const failed = data.failures?.length ? ` / 失敗 ${data.failures.length}件` : "";
       setMessage(`送信 ${data.sent ?? 0}件 / 重複スキップ ${data.skipped ?? 0}件${failed}`);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "通知送信に失敗しました。");
+      setMessage(userErrorMessage(err, "通知送信に失敗しました。"));
     } finally {
       setLoading(false);
     }

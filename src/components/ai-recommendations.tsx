@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { userErrorMessage, userMessage } from "@/lib/error-messages";
 
 type Recommendation = {
   currentService: string;
@@ -31,7 +32,7 @@ async function postRecommendations(subscriptionId: string) {
     body: JSON.stringify({ subscriptionId }),
   });
   const data = (await response.json().catch(() => ({ message: "AIレコメンドの生成に失敗しました。" }))) as Result & { message?: string };
-  if (!response.ok) throw new Error(data.message ?? "AIレコメンドの生成に失敗しました。");
+  if (!response.ok) throw new Error(userMessage(data.message, "AIレコメンドの生成に失敗しました。"));
   return data;
 }
 
@@ -52,7 +53,7 @@ export function AiRecommendationsPanel({ subscriptionId, serviceName }: { subscr
     try {
       setResult(await postRecommendations(subscriptionId));
     } catch (err) {
-      setError(err instanceof Error ? err.message : "AIレコメンドの生成に失敗しました。");
+      setError(userErrorMessage(err, "AIレコメンドの生成に失敗しました。"));
     } finally {
       setLoading(false);
     }

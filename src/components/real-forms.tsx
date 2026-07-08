@@ -14,6 +14,7 @@ import {
   MIN_PASSWORD_LENGTH,
 } from "@/lib/app-constants";
 import { isoDate } from "@/lib/billing";
+import { userErrorMessage, userMessage } from "@/lib/error-messages";
 
 type SubscriptionFormValue = {
   id: string;
@@ -109,7 +110,7 @@ async function request(url: string, method: string, body?: unknown) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = (await response.json().catch(() => ({}))) as { message?: string; id?: string };
-  if (!response.ok) throw new Error(data.message ?? "処理に失敗しました。");
+  if (!response.ok) throw new Error(userMessage(data.message, "処理に失敗しました。"));
   return data;
 }
 
@@ -166,7 +167,7 @@ export function SubscriptionForm({
       router.push(`/subscriptions/${data.id ?? subscription?.id}`);
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "保存に失敗しました。");
+      setError(userErrorMessage(err, "保存に失敗しました。"));
     } finally {
       setLoading(false);
     }
@@ -324,7 +325,7 @@ export function CategoryForm() {
           formElement.reset();
           router.refresh();
         } catch (err) {
-          setError(err instanceof Error ? err.message : "追加に失敗しました。");
+          setError(userErrorMessage(err, "追加に失敗しました。"));
         }
       }}
       noValidate
@@ -354,7 +355,7 @@ export function PaymentMethodForm() {
           formElement.reset();
           router.refresh();
         } catch (err) {
-          setError(err instanceof Error ? err.message : "追加に失敗しました。");
+          setError(userErrorMessage(err, "追加に失敗しました。"));
         }
       }}
       noValidate
@@ -432,7 +433,7 @@ export function ProfileSettingsForm({ name, email }: { name: string; email: stri
       setMessage("プロフィールを更新しました。");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "更新に失敗しました。");
+      setError(userErrorMessage(err, "更新に失敗しました。"));
     } finally {
       setLoading(false);
     }
@@ -472,7 +473,7 @@ export function PlanSettingsForm({ plan, stripeTestMode }: { plan: "FREE" | "PRE
       if (!response.ok || !data.url) throw new Error(data.message ?? "Stripeページを開けませんでした。");
       window.location.href = data.url;
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Stripeページを開けませんでした。");
+      setError(userErrorMessage(err, "Stripeページを開けませんでした。"));
       setLoading("");
     }
   }
@@ -488,7 +489,7 @@ export function PlanSettingsForm({ plan, stripeTestMode }: { plan: "FREE" | "PRE
       setMessage(data.message ?? "課金状態を確認しました。");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "課金状態の確認に失敗しました。");
+      setError(userErrorMessage(err, "課金状態の確認に失敗しました。"));
     } finally {
       setLoading("");
     }
@@ -503,7 +504,7 @@ export function PlanSettingsForm({ plan, stripeTestMode }: { plan: "FREE" | "PRE
       setMessage("アプリ表示をFreeに変更しました。Stripeで課金中の場合は、Stripeポータルから解約も行ってください。");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "プラン変更に失敗しました。");
+      setError(userErrorMessage(err, "プラン変更に失敗しました。"));
     } finally {
       setLoading("");
     }
@@ -591,7 +592,7 @@ export function PasswordSettingsForm() {
       formElement.reset();
       setMessage("パスワードを変更しました。");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "パスワード変更に失敗しました。");
+      setError(userErrorMessage(err, "パスワード変更に失敗しました。"));
     } finally {
       setLoading(false);
     }
@@ -639,7 +640,7 @@ export function PaymentHistoryForm({
       setMessage("支払い履歴を登録しました。");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "支払い履歴の登録に失敗しました。");
+      setError(userErrorMessage(err, "支払い履歴の登録に失敗しました。"));
     } finally {
       setLoading(false);
     }
@@ -728,7 +729,7 @@ export function CancellationPlanForm({
       setMessage("解約支援の状態を更新しました。");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "更新に失敗しました。");
+      setError(userErrorMessage(err, "更新に失敗しました。"));
     } finally {
       setLoading(false);
     }
@@ -781,7 +782,7 @@ export function BudgetSettingsForm({
       setMessage("予算と通知設定を更新しました。");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "更新に失敗しました。");
+      setError(userErrorMessage(err, "更新に失敗しました。"));
     } finally {
       setLoading(false);
     }
@@ -821,7 +822,7 @@ export function CsvImportForm({ disabled }: { disabled: boolean }) {
       formElement.reset();
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "インポートに失敗しました。");
+      setError(userErrorMessage(err, "インポートに失敗しました。"));
     } finally {
       setLoading(false);
     }
@@ -900,7 +901,7 @@ export function CancellationEvidenceForm({ subscriptionId }: { subscriptionId: s
       setMessage("証跡を追加しました。");
       router.refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "証跡の追加に失敗しました。");
+      setError(userErrorMessage(err, "証跡の追加に失敗しました。"));
     } finally {
       setLoading(false);
     }
@@ -979,7 +980,7 @@ export function CsvCandidateDetectorForm({ disabled }: { disabled: boolean }) {
       if (!response.ok) throw new Error(data.message ?? "候補検出に失敗しました。");
       setResult(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "候補検出に失敗しました。");
+      setError(userErrorMessage(err, "候補検出に失敗しました。"));
     } finally {
       setLoading(false);
     }

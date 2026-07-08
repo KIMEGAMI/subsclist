@@ -63,12 +63,12 @@ async function fetchGoogleProfile(code: string): Promise<GoogleProfile & { email
   });
   const tokenData = (await tokenResponse.json()) as GoogleTokenResponse;
   if (!tokenResponse.ok || !tokenData.id_token) {
-    throw new Error(tokenData.error_description ?? tokenData.error ?? "Google token request failed.");
+    throw new Error("Google認証トークンの取得に失敗しました。Googleログイン設定を確認してください。");
   }
 
   const profile = decodeJwtPayload(tokenData.id_token);
   if (!profile?.email || !profile.email_verified) {
-    throw new Error("Google account email is not verified.");
+    throw new Error("Googleアカウントのメールアドレスが確認済みではありません。");
   }
   return profile as GoogleProfile & { email: string };
 }
