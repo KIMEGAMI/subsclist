@@ -1,0 +1,282 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1900" height="1370" viewBox="0 0 1900 1370" role="img" aria-labelledby="title desc">
+  <title id="title">SubscList ER Diagram</title>
+  <desc id="desc">Entity relationship diagram for all SubscList database tables and foreign key relationships.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#f8fbff"/>
+      <stop offset="0.52" stop-color="#eef8ff"/>
+      <stop offset="1" stop-color="#f7fbff"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="125%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#0f172a" flood-opacity="0.11"/>
+    </filter>
+    <marker id="arrowUser" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrowSub" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#ea580c"/>
+    </marker>
+    <marker id="arrowLookup" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#059669"/>
+    </marker>
+    <style>
+      .page-title { font: 800 34px Arial, sans-serif; fill: #0f172a; }
+      .page-subtitle { font: 600 15px Arial, sans-serif; fill: #475569; }
+      .legend { font: 700 14px Arial, sans-serif; fill: #334155; }
+      .table-box { fill: rgba(255,255,255,0.94); stroke: #dbeafe; stroke-width: 1.4; filter: url(#shadow); }
+      .header { fill: #0f172a; }
+      .header.lookup { fill: #047857; }
+      .header.child { fill: #1d4ed8; }
+      .header.sub { fill: #9a3412; }
+      .table-title { font: 800 18px Arial, sans-serif; fill: #ffffff; letter-spacing: 0.2px; }
+      .field { font: 13px Consolas, "Courier New", monospace; fill: #334155; }
+      .key { font-weight: 700; fill: #0f172a; }
+      .note { font: 700 12px Arial, sans-serif; fill: #64748b; }
+      .line-user { fill: none; stroke: #2563eb; stroke-width: 2.2; marker-end: url(#arrowUser); }
+      .line-sub { fill: none; stroke: #ea580c; stroke-width: 2.2; marker-end: url(#arrowSub); }
+      .line-lookup { fill: none; stroke: #059669; stroke-width: 2.2; marker-end: url(#arrowLookup); }
+      .cardinality { font: 800 13px Arial, sans-serif; fill: #0f172a; paint-order: stroke; stroke: #ffffff; stroke-width: 4px; }
+      .label-user { font: 700 12px Arial, sans-serif; fill: #1d4ed8; paint-order: stroke; stroke: #ffffff; stroke-width: 4px; }
+      .label-sub { font: 700 12px Arial, sans-serif; fill: #c2410c; paint-order: stroke; stroke: #ffffff; stroke-width: 4px; }
+      .label-lookup { font: 700 12px Arial, sans-serif; fill: #047857; paint-order: stroke; stroke: #ffffff; stroke-width: 4px; }
+    </style>
+  </defs>
+
+  <rect width="1900" height="1370" fill="url(#bg)"/>
+  <circle cx="270" cy="1250" r="360" fill="#dbeafe" opacity="0.38"/>
+  <circle cx="1690" cy="160" r="260" fill="#ccfbf1" opacity="0.38"/>
+
+  <text x="64" y="54" class="page-title">SubscList ER Diagram</text>
+  <text x="64" y="82" class="page-subtitle">All tables and foreign key relationships from prisma/schema.prisma</text>
+
+  <g transform="translate(1270,34)">
+    <rect x="0" y="0" width="540" height="84" rx="14" fill="#ffffff" stroke="#e2e8f0"/>
+    <line x1="22" y1="24" x2="82" y2="24" class="line-user"/>
+    <text x="96" y="29" class="legend">User ownership / account-scoped data</text>
+    <line x1="22" y1="48" x2="82" y2="48" class="line-sub"/>
+    <text x="96" y="53" class="legend">Subscription dependent data</text>
+    <line x1="22" y1="72" x2="82" y2="72" class="line-lookup"/>
+    <text x="96" y="77" class="legend">Optional lookup used by subscriptions</text>
+  </g>
+
+  <!-- Relationship lines are drawn below table cards. -->
+  <path d="M740 178 C650 150 610 150 510 174" class="line-user"/>
+  <path d="M740 248 C620 300 570 378 470 432" class="line-user"/>
+  <path d="M800 320 C670 428 610 588 470 688" class="line-user"/>
+  <path d="M850 320 C700 520 650 850 470 956" class="line-user"/>
+  <path d="M950 320 L950 430" class="line-user"/>
+  <path d="M1160 160 C1240 120 1320 118 1400 172" class="line-user"/>
+  <path d="M1160 220 C1240 248 1310 330 1400 424" class="line-user"/>
+  <path d="M1160 270 C1260 360 1320 540 1400 664" class="line-user"/>
+  <path d="M1080 320 C1250 470 1330 760 1400 910" class="line-user"/>
+  <path d="M1120 320 C1300 560 1360 1000 1400 1196" class="line-user"/>
+
+  <path d="M470 440 C570 452 615 494 700 520" class="line-lookup"/>
+  <path d="M470 688 C570 690 610 660 700 642" class="line-lookup"/>
+
+  <path d="M1200 520 C1280 430 1320 250 1400 188" class="line-sub"/>
+  <path d="M1200 584 C1285 560 1320 470 1400 428" class="line-sub"/>
+  <path d="M1200 652 C1275 658 1320 660 1400 668" class="line-sub"/>
+  <path d="M1200 742 C1290 800 1340 862 1400 916" class="line-sub"/>
+  <path d="M1200 804 C1310 914 1365 1112 1400 1198" class="line-sub"/>
+
+  <!-- Cardinality and relation labels. -->
+  <text x="700" y="160" class="cardinality">1</text><text x="528" y="166" class="cardinality">0..*</text>
+  <text x="632" y="336" class="label-user">userId</text>
+  <text x="702" y="266" class="cardinality">1</text><text x="488" y="424" class="cardinality">0..*</text>
+  <text x="624" y="504" class="label-user">userId</text>
+  <text x="816" y="340" class="cardinality">1</text><text x="488" y="688" class="cardinality">0..*</text>
+  <text x="630" y="720" class="label-user">userId</text>
+  <text x="858" y="342" class="cardinality">1</text><text x="488" y="948" class="cardinality">0..1</text>
+  <text x="620" y="910" class="label-user">userId unique</text>
+  <text x="962" y="346" class="cardinality">1</text><text x="962" y="420" class="cardinality">0..*</text>
+  <text x="968" y="384" class="label-user">userId</text>
+  <text x="1170" y="154" class="cardinality">1</text><text x="1360" y="166" class="cardinality">0..*</text>
+  <text x="1245" y="130" class="label-user">userId</text>
+  <text x="1170" y="220" class="cardinality">1</text><text x="1360" y="418" class="cardinality">0..*</text>
+  <text x="1258" y="340" class="label-user">userId</text>
+  <text x="1168" y="282" class="cardinality">1</text><text x="1360" y="656" class="cardinality">0..*</text>
+  <text x="1266" y="500" class="label-user">userId</text>
+  <text x="1080" y="344" class="cardinality">1</text><text x="1360" y="902" class="cardinality">0..*</text>
+  <text x="1272" y="760" class="label-user">userId</text>
+  <text x="1122" y="346" class="cardinality">1</text><text x="1360" y="1188" class="cardinality">0..*</text>
+  <text x="1282" y="1040" class="label-user">userId</text>
+
+  <text x="486" y="458" class="cardinality">1</text><text x="676" y="510" class="cardinality">0..*</text>
+  <text x="552" y="482" class="label-lookup">categoryId nullable</text>
+  <text x="486" y="706" class="cardinality">1</text><text x="676" y="636" class="cardinality">0..*</text>
+  <text x="530" y="654" class="label-lookup">paymentMethodId nullable</text>
+
+  <text x="1212" y="514" class="cardinality">1</text><text x="1360" y="184" class="cardinality">0..*</text>
+  <text x="1286" y="350" class="label-sub">subscriptionId</text>
+  <text x="1212" y="578" class="cardinality">1</text><text x="1360" y="422" class="cardinality">0..*</text>
+  <text x="1280" y="522" class="label-sub">subscriptionId</text>
+  <text x="1212" y="646" class="cardinality">1</text><text x="1360" y="666" class="cardinality">0..*</text>
+  <text x="1268" y="644" class="label-sub">subscriptionId</text>
+  <text x="1212" y="736" class="cardinality">1</text><text x="1360" y="912" class="cardinality">0..*</text>
+  <text x="1272" y="830" class="label-sub">subscriptionId</text>
+  <text x="1212" y="798" class="cardinality">1</text><text x="1360" y="1194" class="cardinality">0..*</text>
+  <text x="1282" y="1054" class="label-sub">subscriptionId</text>
+
+  <!-- Table cards. -->
+  <g transform="translate(740,70)">
+    <rect class="table-box" width="420" height="250" rx="16"/>
+    <rect class="header child" width="420" height="42" rx="16"/>
+    <text x="18" y="27" class="table-title">USER</text>
+    <text x="18" y="64" class="field key">PK id</text>
+    <text x="18" y="84" class="field">name</text>
+    <text x="18" y="104" class="field key">UK email</text>
+    <text x="18" y="124" class="field">emailVerified</text>
+    <text x="18" y="144" class="field">passwordHash</text>
+    <text x="18" y="164" class="field">plan: Plan</text>
+    <text x="18" y="184" class="field">stripeCustomerId</text>
+    <text x="18" y="204" class="field">stripeSubscriptionId</text>
+    <text x="18" y="224" class="field">createdAt, updatedAt</text>
+  </g>
+
+  <g transform="translate(80,90)">
+    <rect class="table-box" width="430" height="190" rx="16"/>
+    <rect class="header child" width="430" height="42" rx="16"/>
+    <text x="18" y="27" class="table-title">EMAIL_VERIFICATION_TOKEN</text>
+    <text x="18" y="64" class="field key">PK id</text>
+    <text x="18" y="84" class="field key">FK userId -> USER.id</text>
+    <text x="18" y="104" class="field key">UK tokenHash</text>
+    <text x="18" y="124" class="field">expiresAt</text>
+    <text x="18" y="144" class="field">usedAt</text>
+    <text x="18" y="164" class="field">createdAt</text>
+  </g>
+
+  <g transform="translate(80,350)">
+    <rect class="table-box" width="390" height="180" rx="16"/>
+    <rect class="header lookup" width="390" height="42" rx="16"/>
+    <text x="18" y="27" class="table-title">CATEGORY</text>
+    <text x="18" y="64" class="field key">PK id</text>
+    <text x="18" y="84" class="field key">FK userId -> USER.id</text>
+    <text x="18" y="104" class="field">name</text>
+    <text x="18" y="124" class="field">color</text>
+    <text x="18" y="144" class="field">createdAt, updatedAt</text>
+    <text x="18" y="164" class="note">unique(userId, name)</text>
+  </g>
+
+  <g transform="translate(80,590)">
+    <rect class="table-box" width="390" height="200" rx="16"/>
+    <rect class="header lookup" width="390" height="42" rx="16"/>
+    <text x="18" y="27" class="table-title">PAYMENT_METHOD</text>
+    <text x="18" y="64" class="field key">PK id</text>
+    <text x="18" y="84" class="field key">FK userId -> USER.id</text>
+    <text x="18" y="104" class="field">name</text>
+    <text x="18" y="124" class="field">type: PaymentMethodType</text>
+    <text x="18" y="144" class="field">memo</text>
+    <text x="18" y="164" class="field">createdAt, updatedAt</text>
+  </g>
+
+  <g transform="translate(80,860)">
+    <rect class="table-box" width="390" height="190" rx="16"/>
+    <rect class="header child" width="390" height="42" rx="16"/>
+    <text x="18" y="27" class="table-title">USER_PREFERENCE</text>
+    <text x="18" y="64" class="field key">PK id</text>
+    <text x="18" y="84" class="field key">FK/UK userId -> USER.id</text>
+    <text x="18" y="104" class="field">monthlyBudget</text>
+    <text x="18" y="124" class="field">defaultNotifyDaysBefore</text>
+    <text x="18" y="144" class="field">notificationHour</text>
+    <text x="18" y="164" class="field">createdAt, updatedAt</text>
+  </g>
+
+  <g transform="translate(700,430)">
+    <rect class="table-box" width="500" height="440" rx="16"/>
+    <rect class="header sub" width="500" height="42" rx="16"/>
+    <text x="18" y="27" class="table-title">SUBSCRIPTION</text>
+    <text x="18" y="64" class="field key">PK id</text>
+    <text x="18" y="84" class="field key">FK userId -> USER.id</text>
+    <text x="18" y="104" class="field key">FK categoryId -> CATEGORY.id nullable</text>
+    <text x="18" y="124" class="field key">FK paymentMethodId -> PAYMENT_METHOD.id nullable</text>
+    <text x="18" y="144" class="field">name</text>
+    <text x="18" y="164" class="field">price, currency</text>
+    <text x="18" y="184" class="field">billingCycle: BillingCycle, customCycleDays</text>
+    <text x="18" y="204" class="field">nextBillingDate</text>
+    <text x="18" y="224" class="field">status: SubscriptionStatus</text>
+    <text x="18" y="244" class="field">memo, serviceUrl, cancellationUrl</text>
+    <text x="18" y="264" class="field">trialEndsAt, cancellationDeadline</text>
+    <text x="18" y="284" class="field">lastReviewedAt, notifyDaysBefore</text>
+    <text x="18" y="304" class="field">usageFrequency, priority</text>
+    <text x="18" y="324" class="field">logoUrl</text>
+    <text x="18" y="344" class="field">cancellationStatus, plannedCancelAt</text>
+    <text x="18" y="364" class="field">cancellationMemo, cancellationCompletedAt</text>
+    <text x="18" y="384" class="field">createdAt, updatedAt, deletedAt</text>
+    <text x="18" y="414" class="note">index(userId, status, nextBillingDate)</text>
+  </g>
+
+  <g transform="translate(1400,90)">
+    <rect class="table-box" width="420" height="190" rx="16"/>
+    <rect class="header sub" width="420" height="42" rx="16"/>
+    <text x="18" y="27" class="table-title">PAYMENT_HISTORY</text>
+    <text x="18" y="64" class="field key">PK id</text>
+    <text x="18" y="84" class="field key">FK subscriptionId -> SUBSCRIPTION.id</text>
+    <text x="18" y="104" class="field key">FK userId -> USER.id</text>
+    <text x="18" y="124" class="field">amount</text>
+    <text x="18" y="144" class="field">paidAt, memo</text>
+    <text x="18" y="164" class="field">createdAt</text>
+  </g>
+
+  <g transform="translate(1400,330)">
+    <rect class="table-box" width="420" height="190" rx="16"/>
+    <rect class="header sub" width="420" height="42" rx="16"/>
+    <text x="18" y="27" class="table-title">NOTIFICATION_SETTING</text>
+    <text x="18" y="64" class="field key">PK id</text>
+    <text x="18" y="84" class="field key">FK userId -> USER.id</text>
+    <text x="18" y="104" class="field key">FK subscriptionId -> SUBSCRIPTION.id</text>
+    <text x="18" y="124" class="field">daysBefore</text>
+    <text x="18" y="144" class="field">enabled</text>
+    <text x="18" y="164" class="field">createdAt, updatedAt</text>
+  </g>
+
+  <g transform="translate(1400,570)">
+    <rect class="table-box" width="420" height="190" rx="16"/>
+    <rect class="header sub" width="420" height="42" rx="16"/>
+    <text x="18" y="27" class="table-title">NOTIFICATION_DELIVERY</text>
+    <text x="18" y="64" class="field key">PK id</text>
+    <text x="18" y="84" class="field key">FK userId -> USER.id</text>
+    <text x="18" y="104" class="field key">FK subscriptionId -> SUBSCRIPTION.id</text>
+    <text x="18" y="124" class="field">type</text>
+    <text x="18" y="144" class="field">scheduledFor, sentAt</text>
+    <text x="18" y="164" class="note">unique(subscriptionId, type, scheduledFor)</text>
+  </g>
+
+  <g transform="translate(1400,810)">
+    <rect class="table-box" width="420" height="210" rx="16"/>
+    <rect class="header sub" width="420" height="42" rx="16"/>
+    <text x="18" y="27" class="table-title">CANCELLATION_CHECKLIST_ITEM</text>
+    <text x="18" y="64" class="field key">PK id</text>
+    <text x="18" y="84" class="field key">FK subscriptionId -> SUBSCRIPTION.id</text>
+    <text x="18" y="104" class="field key">FK userId -> USER.id</text>
+    <text x="18" y="124" class="field">label</text>
+    <text x="18" y="144" class="field">sortOrder</text>
+    <text x="18" y="164" class="field">completedAt</text>
+    <text x="18" y="184" class="field">createdAt, updatedAt</text>
+  </g>
+
+  <g transform="translate(1400,1080)">
+    <rect class="table-box" width="420" height="230" rx="16"/>
+    <rect class="header sub" width="420" height="42" rx="16"/>
+    <text x="18" y="27" class="table-title">CANCELLATION_EVIDENCE</text>
+    <text x="18" y="64" class="field key">PK id</text>
+    <text x="18" y="84" class="field key">FK subscriptionId -> SUBSCRIPTION.id</text>
+    <text x="18" y="104" class="field key">FK userId -> USER.id</text>
+    <text x="18" y="124" class="field">title</text>
+    <text x="18" y="144" class="field">kind, referenceUrl</text>
+    <text x="18" y="164" class="field">memo</text>
+    <text x="18" y="184" class="field">recordedAt</text>
+    <text x="18" y="204" class="field">createdAt, updatedAt</text>
+  </g>
+
+  <g transform="translate(80,1120)">
+    <rect x="0" y="0" width="610" height="190" rx="16" fill="#ffffff" stroke="#e2e8f0"/>
+    <text x="20" y="32" class="legend">Enums used by columns</text>
+    <text x="20" y="62" class="field">Plan: FREE, PREMIUM, LIFETIME</text>
+    <text x="20" y="82" class="field">BillingCycle: MONTHLY, YEARLY, WEEKLY, CUSTOM</text>
+    <text x="20" y="102" class="field">SubscriptionStatus: ACTIVE, PAUSED, CANCELLED</text>
+    <text x="20" y="122" class="field">UsageFrequency: DAILY, WEEKLY, MONTHLY, RARELY, UNKNOWN</text>
+    <text x="20" y="142" class="field">SubscriptionPriority: ESSENTIAL, USEFUL, OPTIONAL, UNKNOWN</text>
+    <text x="20" y="162" class="field">CancellationStatus: NONE, CONSIDERING, PLANNED, REQUESTED, COMPLETED</text>
+  </g>
+</svg>

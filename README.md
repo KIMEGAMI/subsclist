@@ -1,142 +1,223 @@
 # SubscList
 
-SubscList is a Next.js subscription management app for tracking recurring contracts, renewal dates, payment methods, payment history, analytics, cancellation workflows, and AI-powered switching recommendations.
+サブスクリプション管理サービス「SubscList」
 
-## Stack
+利用中のサブスクリプションを一元管理し、毎月の支払額や年間支払額を可視化できるWebアプリケーションです。
 
-- Next.js App Router
+URL:
+https://subsclist.shinji.work
+
+---
+
+# 概要
+
+動画配信サービス、音楽配信サービス、クラウドサービスなど、近年増加しているサブスクリプション契約を管理するために開発しました。
+
+契約状況や支払額を一覧で管理し、ユーザーが不要な契約を見直せるようにすることを目的としています。
+
+また、ポートフォリオとしてだけでなく、実際に月額500円程度で販売できるレベルのサービスを目指して設計・開発を行いました。
+
+---
+
+# 開発目的
+
+近年はサブスクリプションサービスが増加し、
+
+- 何に加入しているか分からない
+- 毎月いくら支払っているか把握できない
+- 解約忘れが発生する
+
+といった問題があります。
+
+その課題を解決するために、サブスクリプション情報を管理し、支出を可視化するサービスとして開発しました。
+
+---
+
+# 使用技術
+
+## フロントエンド
+
+- Next.js
 - TypeScript
+- React
 - Tailwind CSS
+
+## バックエンド
+
+- Next.js Route Handlers
 - Prisma
+
+## データベース
+
 - MySQL
-- Stripe Checkout / Billing Portal / Webhook
-- Nodemailer SMTP
-- OpenAI Responses API
 
-## Implemented Features
+## 認証
 
-- Landing page, pricing page, login, registration, and email verification
-- Database-backed authentication and verified-user access control
-- Dashboard KPIs, upcoming renewals, category summaries
-- Subscription create/list/detail/edit/delete and cancellation state management
-- Category and payment method management
-- Calendar view with subscriptions placed on billing dates
-- Analytics, review report, monthly report, payment history, and payment totals
-- Notification settings and reminder delivery history
-- CSV import/export and CSV statement candidate detection
-- AI switching recommendation on subscription detail pages
-- Free/Premium plan limits
-- Stripe Checkout, Customer Portal, and Webhook-based Premium sync
-- Demo data seed for production/demo environments
+- NextAuth
+- Google OAuth
 
-## Pages
+## 課金
 
-- `/`
-- `/login`
-- `/register`
-- `/verify-email`
-- `/pricing`
-- `/dashboard`
-- `/subscriptions`
-- `/subscriptions/new`
-- `/subscriptions/[id]`
-- `/subscriptions/[id]/edit`
-- `/calendar`
-- `/analytics`
-- `/monthly-report`
-- `/review`
-- `/categories`
-- `/payment-methods`
-- `/payments`
-- `/payment-totals`
-- `/notifications`
-- `/export`
-- `/settings`
+- Stripe Subscription
+- Stripe Webhook
 
-## Setup
+## インフラ
 
-```bash
-npm install
-cp .env.example .env
-npm run prisma:generate
-npm run dev
-```
+- Ubuntu
+- Apache
+- PM2
+- VPS
 
-## Required Environment
+---
 
-See `.env.example`. Do not commit secrets.
+# 主な機能
 
-For Google SMTP, enable 2-step verification on the Google account, create an app password, and set it as `SMTP_PASS`.
+## ユーザー機能
 
-For Stripe Premium billing, create a JPY 480 monthly Price and set `STRIPE_PREMIUM_PRICE_ID`. Configure the webhook endpoint at `/api/stripe/webhook`.
+- ユーザー登録
+- ログイン
+- Googleログイン
+- ログアウト
+- プロフィール管理
 
-## Stripe Test Billing
+## サブスクリプション管理
 
-Use Stripe test keys for a full checkout rehearsal before switching to live mode.
+- サブスク登録
+- サブスク編集
+- サブスク削除
+- カテゴリ管理
+- 契約状況管理
 
-1. In Stripe Dashboard, enable test mode.
-2. Create a JPY 480 monthly test Price and set it as `STRIPE_PREMIUM_PRICE_ID`.
-3. Set `STRIPE_SECRET_KEY` to a `sk_test_...` key.
-4. Configure the webhook endpoint and set `STRIPE_WEBHOOK_SECRET` to the test webhook signing secret.
-5. Open Settings, click `Upgrade to Premium`, and use card `4242 4242 4242 4242`.
+## 集計機能
 
-For the test card, use any future expiry date, any 3-digit CVC, and any name/address/ZIP. Stripe does not create a real charge in test mode.
+- 月額料金集計
+- 年額料金集計
+- ダッシュボード表示
+- カテゴリ別分析
 
-For AI recommendations, set `OPENAI_API_KEY`.
+## AI機能
 
-## Database
+- 契約内容分析
+- 利用状況レビュー
+- コスト削減提案
 
-For local development:
+## 課金機能
 
-```bash
-npm run prisma:migrate
-```
+- Stripe Checkout
+- Premiumプラン
+- サブスクリプション課金
+- Webhookによる課金状態同期
 
-For production:
+---
 
-```bash
-npm run prisma:deploy
-```
+# ER図（概要）
 
-## Verification
+Users
 
-```bash
-npm run lint
-npm run build
-```
+↓
 
-`npm run build` generates Prisma Client before the Next.js build. During generation only, it uses a fallback URL when `DATABASE_URL` is not set. `npm run prisma:deploy` still requires the production `DATABASE_URL`.
+Subscriptions
 
-## Production Deploy
+↓
 
-See [docs/production-deploy.md](docs/production-deploy.md).
+Categories
 
-## Demo Data
+↓
 
-```bash
-npm run seed:demo
-```
+Payments
 
-This creates the demo user, verified email state, Premium plan, sample subscriptions, payment methods, categories, notification settings, payment history from 2025-01 to 2026-06, and cancellation evidence.
+---
 
+# 工夫した点
 
-## Google OAuth Login
+本システムでは、単なるCRUDアプリケーションではなく、実際にサービスとして販売できる品質を目標に開発を行いました。
 
-Create an OAuth client in Google Cloud Console and set:
+特に以下の点を重視しました。
 
-```env
-GOOGLE_CLIENT_ID="...apps.googleusercontent.com"
-GOOGLE_CLIENT_SECRET="..."
-```
+## 実際に課金できるサービスとして設計
 
-Authorized redirect URI:
+Stripeを利用したサブスクリプション課金機能を実装し、実サービスとして運用可能な構成にしました。
 
-```text
-https://your-domain.example/api/auth/google/callback
-```
+単なるポートフォリオではなく、実際に月額500円程度で販売できるレベルを目指して開発しています。
 
-For local development, also add:
+## UXを意識した管理画面
 
-```text
-http://localhost:3000/api/auth/google/callback
-```
+利用中サービスや支払額が直感的に把握できるよう、ダッシュボード形式で情報を可視化しました。
+
+## Googleログイン対応
+
+ユーザー登録の手間を減らし、利便性を向上させるためGoogle OAuth認証を実装しました。
+
+## AI活用
+
+利用状況の分析や契約見直し提案を行える仕組みを実装しました。
+
+---
+
+# 苦労した点
+
+## Stripe課金機能
+
+最も苦労したのはStripeによるサブスクリプション課金機能です。
+
+特に以下の点で多くの調査と検証を行いました。
+
+- Stripe Checkout
+- Price ID管理
+- Webhook設定
+- サブスクリプション状態管理
+- 本番環境とテスト環境の切り替え
+
+決済処理はユーザー情報と連携する必要があり、認証機能との整合性を考慮して実装しました。
+
+## TypeScript
+
+本プロジェクトはTypeScriptを使用しています。
+
+TypeScriptは本プロジェクトが初めてであり、
+
+- 型定義
+- Interface
+- Prismaの型
+- APIレスポンス型
+
+などに苦労しました。
+
+エラー解決を繰り返しながら、型安全な実装を学びました。
+
+## Next.js
+
+Next.jsも本プロジェクトが初めてでした。
+
+特に以下で苦労しました。
+
+- App Router
+- Server Components
+- Route Handlers
+- Server Actions
+- 環境変数管理
+
+Laravelとは考え方が異なるため、多くの検証を行いながら実装しました。
+
+## Google OAuth
+
+開発環境では動作しても、本番環境で
+
+- redirect_uri_mismatch
+- OAuth設定不備
+
+などが発生し、Google Cloud Console側の設定との整合性調査に時間を要しました。
+
+---
+
+# 今後追加予定
+
+- メール通知
+- サブスク更新通知
+- 家族共有機能
+- モバイルアプリ対応
+- AI分析強化
+- 利用履歴分析
+- CSVエクスポート強化
+
+---
