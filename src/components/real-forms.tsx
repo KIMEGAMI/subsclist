@@ -538,6 +538,12 @@ export function PlanSettingsForm({ plan, stripeTestMode }: { plan: "FREE" | "PRE
       )}
       {message && <p className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p>}
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
+      {paidPlan && (
+        <div className="rounded-lg border border-blue-100 bg-blue-50 p-4 text-sm leading-6 text-blue-900">
+          <p className="font-black">契約管理・解約</p>
+          <p>解約、支払い方法の変更、領収書の確認は「契約管理・解約（Stripe）を開く」から行えます。</p>
+        </div>
+      )}
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
         {plan === "FREE" ? (
           <button type="button" disabled={Boolean(loading)} onClick={() => openStripe("/api/stripe/checkout", "checkout", "LIFETIME")} className="btn-primary">
@@ -548,9 +554,9 @@ export function PlanSettingsForm({ plan, stripeTestMode }: { plan: "FREE" | "PRE
             Premium適用済み
           </button>
         )}
-        {plan === "PREMIUM" && (
+        {paidPlan && (
           <button type="button" disabled={Boolean(loading)} onClick={() => openStripe("/api/stripe/portal", "portal")} className="btn-secondary">
-            {loading === "portal" ? "Stripeを開いています..." : "Stripe契約を管理"}
+            {loading === "portal" ? "Stripeを開いています..." : "契約管理・解約（Stripe）を開く"}
           </button>
         )}
         <button type="button" disabled={Boolean(loading)} onClick={syncBilling} className="btn-secondary">
