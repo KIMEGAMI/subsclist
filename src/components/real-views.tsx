@@ -19,6 +19,7 @@ import { annualAmount, daysUntil, isoDate, MONTHS_PER_YEAR, monthlyAmount as mon
 import { prisma } from "@/lib/prisma";
 import { env } from "@/lib/env";
 import { FREE_SUBSCRIPTION_LIMIT, hiddenByPlan, isPremiumPlan, limitByPlan } from "@/lib/plans";
+import { buildForecastSeries } from "@/lib/premium-insights";
 import { estimatedMonthlySaving, reviewScore } from "@/lib/subscription-insights";
 import { syncStripeCheckoutSessionById } from "@/lib/stripe-billing";
 
@@ -225,6 +226,70 @@ function OperationalCommandCard({
   );
 }
 
+function PremiumForecastCard({
+  series,
+  forecastTotal,
+  peakMonth,
+  cancellationCoverage,
+  missingCancellationCount,
+  duplicateCategoryCount,
+  duplicateCategoryGroups,
+}: {
+  series: ReturnType<typeof buildForecastSeries>;
+  forecastTotal: number;
+  peakMonth: { label: string; total: number };
+  cancellationCoverage: number;
+  missingCancellationCount: number;
+  duplicateCategoryCount: number;
+  duplicateCategoryGroups: number;
+}) {
+  const max = Math.max(...series.map((item) => item.total), 0);
+
+  return (
+    <Card className="mt-6 border-blue-100 bg-gradient-to-br from-blue-50/95 to-cyan-50/90">
+      <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
+        <div>
+          <p className="text-xs font-black uppercase text-blue-700">Premium Forecast</p>
+          <h2 className="mt-2 text-xl font-black text-blue-950">12ヶ月先の支出と解約導線を見通す</h2>
+          <p className="mt-2 text-sm leading-6 text-blue-900">
+            今後1年の支払い予測、解約ページの有無、カテゴリ重複をまとめて確認できます。更新前に動くべき契約が見えます。
+          </p>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <MiniMetric label="12ヶ月予測" value={yen.format(forecastTotal)} />
+            <MiniMetric label="ピーク月" value={`${peakMonth.label} ${yen.format(peakMonth.total)}`} />
+            <MiniMetric label="解約導線あり率" value={`${cancellationCoverage}%`} />
+            <MiniMetric label="カテゴリ重複" value={`${duplicateCategoryCount}件`} />
+          </div>
+          <div className="mt-4 rounded-lg border border-white/70 bg-white/75 p-4">
+            <p className="text-sm font-bold text-slate-700">要対応メモ</p>
+            <div className="mt-3 grid gap-2 text-sm font-semibold text-slate-700">
+              <p>解約ページ未設定: {missingCancellationCount}件</p>
+              <p>同カテゴリ重複: {duplicateCategoryGroups}グループ</p>
+            </div>
+          </div>
+        </div>
+        <div className="space-y-3">
+          {series.map((bucket) => {
+            const width = max ? Math.max(6, Math.round((bucket.total / max) * 100)) : 0;
+            return (
+              <div key={bucket.key} className="rounded-lg border border-white/70 bg-white/75 p-3 shadow-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-bold text-slate-700">{bucket.label}</p>
+                  <p className="text-sm font-black text-slate-950">{yen.format(bucket.total)}</p>
+                </div>
+                <div className="mt-2 h-3 overflow-hidden rounded-full bg-slate-100">
+                  <div className="h-full rounded-full bg-gradient-to-r from-blue-600 to-cyan-500" style={{ width: `${width}%` }} />
+                </div>
+                <p className="mt-2 text-xs font-semibold text-slate-500">{bucket.payments}件</p>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function SetupChecklistCard({
   subscriptionCount,
   hasCategory,
@@ -366,11 +431,21 @@ export async function DashboardView() {
   const urgentItems = active.filter((item) => daysUntil(item.nextBillingDate) <= 7 || (item.trialEndsAt && daysUntil(item.trialEndsAt) <= 7) || (item.cancellationDeadline && daysUntil(item.cancellationDeadline) <= 7));
   const reviewItems = active.filter((item) => needsReview(item.lastReviewedAt));
   const saving = active.reduce((sum, item) => sum + estimatedMonthlySaving(item), 0);
+  const forecastSeries = buildForecastSeries(active);
+  const forecastTotal = forecastSeries.reduce((sum, item) => sum + item.total, 0);
+  const peakForecastMonth = forecastSeries.reduce(
+    (best, item) => (item.total > best.total ? item : best),
+    forecastSeries[0] ?? { key: "none", label: "未設定", total: 0, payments: 0 },
+  );
+  const cancelableCount = active.filter((item) => Boolean(safeExternalUrl(item.cancellationUrl))).length;
   const categoryCounts = active.reduce<Record<string, number>>((acc, item) => {
     const key = item.categoryId ?? "none";
     acc[key] = (acc[key] ?? 0) + 1;
     return acc;
   }, {});
+  const duplicateCategoryCount = Object.values(categoryCounts).reduce((sum, count) => sum + Math.max(0, count - 1), 0);
+  const duplicateCategoryGroups = Object.values(categoryCounts).filter((count) => count > 1).length;
+  const cancellationCoverage = active.length ? Math.round((cancelableCount / active.length) * 100) : 0;
   const scoredItems = active.map((item) => reviewScore(item, categoryCounts[item.categoryId ?? "none"] ?? 1));
   const reviewPriorityCount = scoredItems.filter((item) => item.score >= REVIEW_CAUTION_SCORE_THRESHOLD).length;
   const lowUsageCount = active.filter((item) => item.usageFrequency === "RARELY" || item.priority === "OPTIONAL").length;
@@ -408,6 +483,15 @@ export async function DashboardView() {
       </div>
       <PremiumValueCard monthlyTotal={monthlyTotal} saving={saving} reviewCount={reviewItems.length} urgentCount={urgentItems.length} />
       <OperationalCommandCard score={operationScore} dataQuality={dataQuality} urgentCount={urgentItems.length} reviewCount={reviewPriorityCount} lowUsageCount={lowUsageCount} budgetRate={budget ? budgetRate : 0} budgetExceeded={budgetExceeded} />
+      <PremiumForecastCard
+        series={forecastSeries}
+        forecastTotal={forecastTotal}
+        peakMonth={peakForecastMonth}
+        cancellationCoverage={cancellationCoverage}
+        missingCancellationCount={active.length - cancelableCount}
+        duplicateCategoryCount={duplicateCategoryCount}
+        duplicateCategoryGroups={duplicateCategoryGroups}
+      />
       {budget && (
         <Card className="mt-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
