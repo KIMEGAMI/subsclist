@@ -18,8 +18,6 @@ export const env = {
   smtpPass: process.env.SMTP_PASS ?? "",
   demoUserEmail: process.env.DEMO_USER_EMAIL ?? "",
   notificationJobSecret: process.env.NOTIFICATION_JOB_SECRET ?? "",
-  openaiApiKey: process.env.OPENAI_API_KEY ?? "",
-  openaiModel: process.env.OPENAI_MODEL ?? "gpt-4.1-mini",
   stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? "",
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? "",
   stripePremiumPriceId: process.env.STRIPE_PREMIUM_PRICE_ID ?? "",
