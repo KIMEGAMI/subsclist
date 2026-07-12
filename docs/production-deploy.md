@@ -1,6 +1,6 @@
 # SubscList Production Deploy
 
-This guide is for deploying SubscList with Next.js, Prisma, MySQL, Google SMTP, OpenAI, and Stripe.
+This guide is for deploying SubscList with Next.js, Prisma, MySQL, Google SMTP, and Stripe.
 
 Do not run development migration commands against production. Use `npm run prisma:deploy` for production database migrations.
 
@@ -10,7 +10,6 @@ Do not run development migration commands against production. Use `npm run prism
 - MySQL 8.0 or compatible database
 - GitHub repository: https://github.com/KIMEGAMI/subsclist
 - Gmail app password for SMTP
-- OpenAI API key
 - Stripe secret key, webhook secret, and Premium Price ID
 
 ## 2. Environment Variables
@@ -30,9 +29,6 @@ SMTP_PORT="587"
 SMTP_SECURE="false"
 SMTP_USER="your-gmail-address@gmail.com"
 SMTP_PASS="your-google-app-password"
-
-OPENAI_API_KEY="sk-proj-..."
-OPENAI_MODEL="gpt-4.1-mini"
 
 STRIPE_SECRET_KEY="sk_live_or_sk_test_..."
 STRIPE_WEBHOOK_SECRET="whsec_..."
@@ -125,7 +121,7 @@ curl -X POST "https://your-domain.example/api/notifications/send" \
 - Email verification completes
 - Authenticated pages such as `/dashboard`, `/subscriptions`, and `/calendar` load
 - Subscription create, edit, and delete work
-- OpenAI recommendations work when `OPENAI_API_KEY` is set
+- Premium-only viewing and review flows work correctly
 - Stripe test checkout completes and the webhook updates the user to Premium
 
 ## 8. Production Database Safety

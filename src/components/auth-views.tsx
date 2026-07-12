@@ -38,7 +38,7 @@ const t = {
   resend: "認証メールを再送する",
   backTop: "トップへ戻る",
   pricingTitle: "料金プラン",
-  pricingLead: "Freeで始めて、必要になったらPremiumへ。Premiumは買い切り480円で、本格運用に必要な分析、CSV、AI、解約支援をまとめて利用できます。",
+  pricingLead: "Freeで始めて、必要になったらPremiumへ。Premiumは買い切り480円で、本格運用に必要な分析、CSV、解約支援をまとめて利用できます。",
 };
 
 function AuthFrame({ title, children }: { title: string; children: React.ReactNode }) {
@@ -252,7 +252,7 @@ export function PricingView() {
               <li>サブスク10件まで表示・管理</li>
               <li>カテゴリ5件まで</li>
               <li>基本ダッシュボード、一覧、カレンダー、通知確認</li>
-              <li>CSV、AI、高度分析、解約支援は利用不可</li>
+              <li>CSV、高度分析、解約支援は利用不可</li>
             </ul>
           </Card>
           <Card className="border-blue-400">
@@ -263,7 +263,7 @@ export function PricingView() {
               <li>サブスク登録・表示無制限</li>
               <li>CSV入出力、CSV明細候補検出</li>
               <li>高度分析、支払い累計、見直しレポート</li>
-              <li>AI乗り換え診断、解約チェックリスト、証跡管理</li>
+              <li>乗り換え診断、解約チェックリスト、証跡管理</li>
             </ul>
           </Card>
         </div>

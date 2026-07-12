@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell, Card, PageHeader } from "@/components/app-shell";
-import { AiRecommendationsPanel } from "@/components/ai-recommendations";
 import { NotificationSendButton } from "@/components/notification-send-button";
 import { BudgetSettingsForm, CancellationChecklist, CancellationEvidenceForm, CancellationPlanForm, CategoryForm, CsvCandidateDetectorForm, CsvDownloadButton, CsvImportForm, DeleteCancellationEvidenceButton, DeletePaymentHistoryButton, LogoutButton, PasswordSettingsForm, PaymentHistoryForm, PaymentMethodForm, PlanSettingsForm, ProfileSettingsForm, SubscriptionActions, SubscriptionForm } from "@/components/real-forms";
 import { requireVerifiedUser } from "@/lib/auth";
@@ -124,7 +123,7 @@ function PlanLimitBanner({ hiddenCount }: { hiddenCount: number }) {
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
         <div>
           <p className="font-black text-amber-900">Freeプランではサブスクは{FREE_SUBSCRIPTION_LIMIT}件まで表示・管理できます。</p>
-          <p className="mt-1 text-sm font-semibold text-amber-800">現在 {hiddenCount}件 が非表示です。Premiumに変更すると全件表示、AI診断、CSV、高度分析、解約支援が使えます。</p>
+          <p className="mt-1 text-sm font-semibold text-amber-800">現在 {hiddenCount}件 が非表示です。Premiumに変更すると全件表示、CSV、高度分析、解約支援が使えます。</p>
         </div>
         <Link href="/settings" className="btn-primary shrink-0">Premiumに変更</Link>
       </div>
@@ -697,9 +696,6 @@ export async function SubscriptionDetailView({ id }: { id: string }) {
         <Card>
           <h2 className="mb-4 font-bold">操作</h2>
           <SubscriptionActions id={item.id} />
-          <div className="mt-5 border-t border-slate-200 pt-5">
-            {isPremiumPlan(user.plan) ? <AiRecommendationsPanel subscriptionId={item.id} serviceName={item.name} /> : <PremiumOnlyNotice title="AI乗り換え診断" description="AIによる代替候補、統合、解約検討はPremium限定です。" />}
-          </div>
         </Card>
       </div>
       {isPremiumPlan(user.plan) ? (

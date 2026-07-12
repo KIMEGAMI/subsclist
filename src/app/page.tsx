@@ -4,7 +4,7 @@ import { Card } from "@/components/app-shell";
 import { DemoLoginButton } from "@/components/demo-login-button";
 
 const features = [
-  ["削減見込みを表示", "利用頻度、重要度、AI診断をもとに、月額・年額でどれだけ削減できるかを確認できます。"],
+  ["削減見込みを表示", "利用頻度、重要度、更新日をもとに、月額・年額でどれだけ削減できるかを確認できます。"],
   ["解約まで支援", "検討中、解約予定、申請済み、完了までを記録し、解約URLやメモを一緒に管理できます。"],
   ["CSVから取り込める", "カード明細や既存の管理表から取り込み、手入力の負担を減らします。"],
   ["運用スコアで判断", "期限リスク、予算、見直し状況、データ充実度をまとめて、今月の優先対応を表示します。"],
@@ -78,7 +78,7 @@ export default function Home() {
             <p className="text-sm font-bold text-fuchsia-600">機能紹介</p>
             <h2 className="mt-2 text-3xl font-bold">管理、分析、課金制御まで。</h2>
             <p className="mt-4 leading-7 text-slate-600">
-              サブスクCRUD、カテゴリ・支払い方法管理、分析、CSV入出力、予算管理、見直しスコア、解約支援、AI提案に対応します。認証後のデータはユーザーごとにDBで分離します。
+              サブスクCRUD、カテゴリ・支払い方法管理、分析、CSV入出力、予算管理、見直しスコア、解約支援、見直し候補の整理に対応します。認証後のデータはユーザーごとにDBで分離します。
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -100,7 +100,7 @@ export default function Home() {
             <h3 className="text-2xl font-bold">Premium</h3>
             <p className="mt-2 text-4xl font-black">買い切り480円</p>
             <p className="mt-2 text-sm font-bold text-blue-700">一度の購入でPremium機能を利用できます。</p>
-            <p className="mt-3 text-sm text-slate-600">登録無制限、CSV入出力、CSV明細候補検出、高度分析、支払い累計、見直しレポート、AI診断、解約支援。</p>
+            <p className="mt-3 text-sm text-slate-600">登録無制限、CSV入出力、CSV明細候補検出、高度分析、支払い累計、見直しレポート、解約支援。</p>
           </Card>
         </div>
         <div className="mx-auto mt-8 flex max-w-7xl flex-wrap gap-4 text-sm font-bold text-slate-300">
