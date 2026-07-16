@@ -1,10 +1,8 @@
-import { SettingsView } from "@/components/real-views";
+import { SettingsView } from "@/components/admin-views";
+import { noIndexMetadata } from "@/lib/seo";
 
-type SettingsPageProps = {
-  searchParams?: Promise<{ checkout?: string; session_id?: string }>;
-};
+export const metadata = noIndexMetadata;
 
-export default async function SettingsPage({ searchParams }: SettingsPageProps) {
-  const params = await searchParams;
-  return <SettingsView checkoutStatus={params?.checkout} checkoutSessionId={params?.session_id} />;
+export default function SettingsPage() {
+  return <SettingsView />;
 }
