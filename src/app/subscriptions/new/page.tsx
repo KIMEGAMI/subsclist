@@ -1,4 +1,7 @@
-import { SubscriptionFormView } from "@/components/real-views";
+import { SubscriptionFormView } from "@/components/subscription-views";
+import { noIndexMetadata } from "@/lib/seo";
+
+export const metadata = noIndexMetadata;
 
 export default function NewSubscriptionPage() {
   return <SubscriptionFormView />;

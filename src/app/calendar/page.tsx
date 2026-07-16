@@ -1,10 +1,8 @@
-import { CalendarView } from "@/components/real-views";
+import { CalendarView } from "@/components/subscription-views";
+import { noIndexMetadata } from "@/lib/seo";
 
-export default async function CalendarPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ month?: string }>;
-}) {
-  const { month } = await searchParams;
-  return <CalendarView month={month} />;
+export const metadata = noIndexMetadata;
+
+export default function CalendarPage() {
+  return <CalendarView />;
 }
