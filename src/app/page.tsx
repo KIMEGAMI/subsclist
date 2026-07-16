@@ -72,7 +72,7 @@ export default function Home() {
           </div>
           <div className="relative min-h-[430px] lg:min-h-[620px]">
             <Image
-              src="/hero-subsclist.png"
+              src="/hero-subsclist.svg"
               alt="サブスクリストのトップページビジュアル"
               fill
               unoptimized
