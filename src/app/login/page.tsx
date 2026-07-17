@@ -1,8 +1,10 @@
 import { LoginView } from "@/components/auth-views";
-import { noIndexMetadata } from "@/lib/seo";
 
-export const metadata = noIndexMetadata;
+type LoginPageProps = {
+  searchParams?: Promise<{ google?: string }>;
+};
 
-export default function LoginPage() {
-  return <LoginView />;
+export default async function LoginPage({ searchParams }: LoginPageProps) {
+  const params = await searchParams;
+  return <LoginView googleStatus={params?.google} />;
 }
