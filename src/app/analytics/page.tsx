@@ -1,7 +1,4 @@
-import { AnalyticsView } from "@/components/subscription-views";
-import { noIndexMetadata } from "@/lib/seo";
-
-export const metadata = noIndexMetadata;
+import { AnalyticsView } from "@/components/real-views";
 
 export default function AnalyticsPage() {
   return <AnalyticsView />;
