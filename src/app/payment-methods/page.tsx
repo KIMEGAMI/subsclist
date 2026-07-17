@@ -1,7 +1,4 @@
-import { PaymentMethodsView } from "@/components/admin-views";
-import { noIndexMetadata } from "@/lib/seo";
-
-export const metadata = noIndexMetadata;
+import { PaymentMethodsView } from "@/components/real-views";
 
 export default function PaymentMethodsPage() {
   return <PaymentMethodsView />;
