@@ -1,7 +1,4 @@
-import { ExportView } from "@/components/subscription-views";
-import { noIndexMetadata } from "@/lib/seo";
-
-export const metadata = noIndexMetadata;
+import { ExportView } from "@/components/real-views";
 
 export default function ExportPage() {
   return <ExportView />;
