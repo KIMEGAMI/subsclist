@@ -79,7 +79,7 @@ function GoogleLoginButton() {
   return (
     <a href="/api/auth/google/start" className="mt-5 flex min-h-12 w-full items-center justify-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src="/google-logo.svg" alt="" className="size-5" />
+      <img src="/google-logo.png" alt="" className="size-5" />
       {t.googleLogin}
     </a>
   );
