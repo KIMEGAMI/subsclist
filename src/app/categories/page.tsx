@@ -1,7 +1,4 @@
-import { CategoriesView } from "@/components/admin-views";
-import { noIndexMetadata } from "@/lib/seo";
-
-export const metadata = noIndexMetadata;
+import { CategoriesView } from "@/components/real-views";
 
 export default function CategoriesPage() {
   return <CategoriesView />;
