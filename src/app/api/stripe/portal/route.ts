@@ -34,7 +34,7 @@ export async function POST() {
       return null;
     });
     if (!customer || customer.deleted) {
-      return NextResponse.json({ message: "DBに保存されていたStripe顧客IDが現在のStripeキーで見つかりませんでした。古いIDを解除しました。もう一度Premiumにアップグレードしてください。" }, { status: 409 });
+      return NextResponse.json({ message: "DBに保存されていたStripe顧客IDが現在のStripeキーで見つかりませんでした。古いIDを解除しました。もう一度Premiumに加入してください。" }, { status: 409 });
     }
 
     const session = await client.billingPortal.sessions.create({

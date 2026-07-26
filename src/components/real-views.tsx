@@ -1,11 +1,13 @@
-import Link from "next/link";
+﻿import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AppShell, Card, PageHeader } from "@/components/app-shell";
+import { DashboardAnnouncements } from "@/components/dashboard-announcements";
 import { NotificationSendButton } from "@/components/notification-send-button";
-import { BudgetSettingsForm, CancellationChecklist, CancellationEvidenceForm, CancellationPlanForm, CategoryForm, CsvCandidateDetectorForm, CsvDownloadButton, CsvImportForm, DeleteCancellationEvidenceButton, DeletePaymentHistoryButton, LogoutButton, PasswordSettingsForm, PaymentHistoryForm, PaymentMethodForm, PlanSettingsForm, ProfileSettingsForm, SubscriptionActions, SubscriptionForm } from "@/components/real-forms";
+import { AccountDeleteForm, BudgetSettingsForm, CancellationChecklist, CancellationEvidenceForm, CancellationPlanForm, CategoryForm, CsvCandidateDetectorForm, CsvDownloadButton, CsvImportForm, DeleteCancellationEvidenceButton, DeletePaymentHistoryButton, LogoutButton, PasswordSettingsForm, PaymentHistoryForm, PaymentMethodForm, PlanSettingsForm, ProfileSettingsForm, SubscriptionActions, SubscriptionForm } from "@/components/real-forms";
 import { requireVerifiedUser } from "@/lib/auth";
 import {
   ALLOWED_URL_PROTOCOLS,
+  DASHBOARD_ANNOUNCEMENT_MAX_ITEMS,
   DEFAULT_NOTIFICATION_HOUR,
   DEFAULT_NOTIFY_DAYS_BEFORE,
   PLACEHOLDER_HOSTS,
@@ -16,8 +18,9 @@ import {
 } from "@/lib/app-constants";
 import { annualAmount, daysUntil, isoDate, MONTHS_PER_YEAR, monthlyAmount as monthly } from "@/lib/billing";
 import { prisma } from "@/lib/prisma";
-import { env } from "@/lib/env";
+import { env, isProtectedAccountEmail } from "@/lib/env";
 import { FREE_SUBSCRIPTION_LIMIT, hiddenByPlan, isPremiumPlan, limitByPlan } from "@/lib/plans";
+import { getPublishedAnnouncements } from "@/lib/admin";
 import { buildForecastSeries } from "@/lib/premium-insights";
 import { estimatedMonthlySaving, reviewScore } from "@/lib/subscription-insights";
 import { syncStripeCheckoutSessionById } from "@/lib/stripe-billing";
@@ -29,6 +32,14 @@ type CancellationStatusValue = "NONE" | "CONSIDERING" | "PLANNED" | "REQUESTED" 
 type CategoryView = { id: string; name: string; color: string };
 
 type PaymentMethodView = { id: string; name: string; type: string; memo: string | null };
+
+type AnnouncementView = {
+  id: string;
+  title: string;
+  body: string;
+  pinned: boolean;
+  createdAt: Date;
+};
 
 type PaymentHistoryView = {
   id: string;
@@ -413,14 +424,15 @@ const defaultCancellationChecklist = [
 
 export async function DashboardView() {
   const user = await requireVerifiedUser();
-  const [allSubscriptions, preference] = (await Promise.all([
+  const [allSubscriptions, preference, announcements] = (await Promise.all([
     prisma.subscription.findMany({
       where: { userId: user.id, deletedAt: null },
       include: { category: true, paymentMethod: true },
       orderBy: { nextBillingDate: "asc" },
     }),
     prisma.userPreference.findUnique({ where: { userId: user.id } }),
-  ])) as unknown as [SubscriptionView[], UserPreferenceView | null];
+    getPublishedAnnouncements(DASHBOARD_ANNOUNCEMENT_MAX_ITEMS),
+  ])) as unknown as [SubscriptionView[], UserPreferenceView | null, AnnouncementView[]];
   const subscriptions = limitByPlan(allSubscriptions, user.plan);
   const hiddenCount = hiddenByPlan(allSubscriptions.length, user.plan);
   const active = subscriptions.filter((item) => item.status === "ACTIVE");
@@ -466,19 +478,22 @@ export async function DashboardView() {
       <PageHeader title="ダッシュボード" description="登録済みサブスクリプションの月額、更新予定、期限リスク、見直し候補を確認します。" action={<Link href="/subscriptions/new" className="btn-primary">サブスク追加</Link>} />
       <SetupChecklistCard subscriptionCount={allSubscriptions.length} hasCategory={active.some((item) => Boolean(item.categoryId))} hasPaymentMethod={active.some((item) => Boolean(item.paymentMethodId))} hasBudget={Boolean(budget)} hasReviewData={active.some((item) => item.usageFrequency !== "UNKNOWN" && Boolean(item.lastReviewedAt))} />
       <PlanLimitBanner hiddenCount={hiddenCount} />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {[
-          ["月額合計", yen.format(monthlyTotal), "from-blue-600 to-cyan-500"],
-          ["年額換算", yen.format(monthlyTotal * MONTHS_PER_YEAR), "from-slate-900 to-blue-700"],
-          ["アクティブ件数", `${active.length}件`, "from-emerald-500 to-teal-500"],
-          ["予算消化", budget ? `${budgetRate}%` : "未設定", "from-fuchsia-500 to-rose-500"],
-        ].map(([label, value, gradient]) => (
-          <Card key={label} className="relative overflow-hidden">
-            <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${gradient}`} />
-            <p className="text-sm font-black text-slate-500">{label}</p>
-            <p className="mt-2 text-3xl font-black text-slate-950">{value}</p>
-          </Card>
-        ))}
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]">
+        <div className="grid gap-4 sm:grid-cols-2">
+          {[
+            ["月額合計", yen.format(monthlyTotal), "from-blue-600 to-cyan-500"],
+            ["年額換算", yen.format(monthlyTotal * MONTHS_PER_YEAR), "from-slate-900 to-blue-700"],
+            ["アクティブ件数", `${active.length}件`, "from-emerald-500 to-teal-500"],
+            ["予算消化", budget ? `${budgetRate}%` : "未設定", "from-fuchsia-500 to-rose-500"],
+          ].map(([label, value, gradient]) => (
+            <Card key={label} className="relative overflow-hidden">
+              <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${gradient}`} />
+              <p className="text-sm font-black text-slate-500">{label}</p>
+              <p className="mt-2 text-3xl font-black text-slate-950">{value}</p>
+            </Card>
+          ))}
+        </div>
+        <DashboardAnnouncements announcements={announcements} />
       </div>
       <PremiumValueCard monthlyTotal={monthlyTotal} saving={saving} reviewCount={reviewItems.length} urgentCount={urgentItems.length} />
       <OperationalCommandCard score={operationScore} dataQuality={dataQuality} urgentCount={urgentItems.length} reviewCount={reviewPriorityCount} lowUsageCount={lowUsageCount} budgetRate={budget ? budgetRate : 0} budgetExceeded={budgetExceeded} />
@@ -1427,7 +1442,7 @@ function statusLabel(status: string) {
 }
 
 function planLabel(plan: string) {
-  if (plan === "LIFETIME") return "買い切り";
+  if (plan === "LIFETIME") return "Premium";
   if (plan === "PREMIUM") return "Premium";
   return "Free";
 }
@@ -1611,12 +1626,14 @@ export async function ExportView() {
   const disabled = !isPremiumPlan(user.plan);
   return (
     <AppShell>
-      <PageHeader title="CSV入出力" description="カード明細や既存管理表から候補を検出し、登録済みデータの入出力もできます。" />
+      <PageHeader title="CSV入出力" description="CSVテンプレート、明細サンプル、インポート、エクスポートをまとめて扱えます。1行目がヘッダのCSVにも対応しています。" />
       <Card className="mb-5 border-blue-100 bg-blue-50/80">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
             <h2 className="text-lg font-bold text-blue-950">CSVを迷わず始める</h2>
-            <p className="mt-2 text-sm leading-6 text-blue-800">インポート用テンプレートと、明細候補検出を試せるサンプルCSVを用意しました。列名の確認や動作テストに使えます。</p>
+            <p className="mt-2 text-sm leading-6 text-blue-800">
+              インポート用テンプレートと、明細候補検出を試せるサンプルCSVを用意しました。1行目をヘッダとして使う場合は、そのまま列名を入力して使えます。
+            </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row">
             <Link href="/api/import/template" className="btn-secondary">インポート用テンプレート</Link>
@@ -1635,7 +1652,9 @@ export async function ExportView() {
         </Card>
         <Card>
           <h2 className="text-lg font-bold">CSV出力</h2>
-          <p className="mt-3 text-sm leading-6 text-slate-600">出力項目: サービス名、金額、請求周期、月額換算、年額換算、次回更新日、カテゴリ、支払い方法、ステータス、メモ。</p>
+          <p className="mt-3 text-sm leading-6 text-slate-600">
+            出力CSVの1行目はヘッダです。サービス名、金額、請求周期、月額換算、年額換算、次回更新日、カテゴリ、支払い方法、ステータス、メモの対応関係を確認できます。
+          </p>
           <CsvDownloadButton disabled={disabled} />
           {disabled && <p className="mt-3 text-sm font-semibold text-amber-700">CSV入出力はPremium限定です。</p>}
         </Card>
@@ -1766,7 +1785,7 @@ export async function SettingsView({ checkoutStatus, checkoutSessionId }: { chec
   const preference = await prisma.userPreference.findUnique({ where: { userId: user.id } });
   return (
     <AppShell>
-      <PageHeader title="設定" description="プロフィール、プラン、パスワード、予算、通知の標準値を変更できます。" action={<LogoutButton />} />
+      <PageHeader title="設定" description="プロフィール、月額Premium、パスワード、予算、通知の標準値を変更できます。" action={<LogoutButton />} />
       {checkoutNotice && (
         <div className={checkoutNotice.type === "success" ? "mb-5 rounded-lg bg-emerald-50 p-4 text-sm font-semibold text-emerald-700" : "mb-5 rounded-lg bg-red-50 p-4 text-sm font-semibold text-red-700"}>
           {checkoutNotice.message}
@@ -1780,7 +1799,7 @@ export async function SettingsView({ checkoutStatus, checkoutSessionId }: { chec
         </Card>
         <Card>
           <h2 className="text-lg font-bold">プラン</h2>
-          <p className="mt-2 text-sm text-slate-600">Freeと買い切りPremiumの利用状態を確認・変更します。</p>
+          <p className="mt-2 text-sm text-slate-600">Freeと月額Premiumの利用状態を確認・変更します。</p>
           <div className="mt-5"><PlanSettingsForm plan={user.plan} stripeTestMode={env.stripeTestMode} /></div>
         </Card>
         <Card>
@@ -1802,6 +1821,22 @@ export async function SettingsView({ checkoutStatus, checkoutSessionId }: { chec
             <Info label="登録日" value={isoDate(user.createdAt)} />
           </div>
         </Card>
+        {isProtectedAccountEmail(user.email) ? (
+          <Card className="border-slate-200 bg-slate-50/70">
+            <h2 className="text-lg font-bold text-slate-900">アカウント削除</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              このアカウントは削除できません。デモアカウントと管理者アカウントは保護されています。
+            </p>
+          </Card>
+        ) : (
+          <Card className="border-rose-200 bg-rose-50/70">
+            <h2 className="text-lg font-bold text-rose-950">アカウント削除</h2>
+            <p className="mt-2 text-sm leading-6 text-rose-900">
+              完全削除を行うと、アカウントに紐づくサブスク、カテゴリ、支払い方法、通知設定、証跡、履歴をDBから削除します。取り消しはできません。
+            </p>
+            <div className="mt-5"><AccountDeleteForm email={user.email} /></div>
+          </Card>
+        )}
       </div>
     </AppShell>
   );

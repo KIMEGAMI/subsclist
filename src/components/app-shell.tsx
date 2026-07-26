@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 const brand = "サブスクリスト";
 const nav = [
@@ -21,8 +21,33 @@ const nav = [
   { label: "設定", href: "/settings", icon: "G" },
 ];
 
+const adminNav = [
+  { label: "管理者ホーム", href: "/admin", icon: "A" },
+  { label: "お知らせ", href: "/admin#announcements", icon: "I" },
+  { label: "ユーザー一覧", href: "/admin#users", icon: "U" },
+  { label: "メンテナンス", href: "/admin#maintenance", icon: "M" },
+];
+
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    fetch("/api/admin/me", { cache: "no-store" })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data: { isAdmin?: boolean } | null) => {
+        if (active) setIsAdmin(Boolean(data?.isAdmin));
+      })
+      .catch(() => {
+        if (active) setIsAdmin(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#eef9fb] bg-[url('/app-background.png')] bg-cover bg-fixed bg-center text-slate-950">
@@ -53,16 +78,45 @@ export function AppShell({ children }: { children: ReactNode }) {
               </Link>
             );
           })}
+          {isAdmin && (
+            <div className="mt-5 border-t border-slate-200 pt-4">
+              <p className="px-3 text-xs font-black text-slate-500">管理者メニュー</p>
+              <div className="mt-2 space-y-1.5">
+                {adminNav.map(({ label, href, icon }) => {
+                  const active = pathname === "/admin";
+                  return (
+                    <Link
+                      key={href}
+                      href={href}
+                      className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-bold transition ${
+                        active ? "bg-slate-900 text-white shadow-lg shadow-slate-900/18" : "text-slate-600 hover:bg-white hover:text-slate-950 hover:shadow-sm"
+                      }`}
+                    >
+                      <span className={`grid size-7 place-items-center rounded-md text-[11px] font-black ${
+                        active ? "bg-white/18 text-white" : "bg-slate-100 text-slate-500 group-hover:bg-slate-200 group-hover:text-slate-900"
+                      }`}>{icon}</span>
+                      {label}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </nav>
         <div className="mt-auto rounded-lg border border-blue-100 bg-gradient-to-br from-blue-50 to-cyan-50 p-4">
           <p className="text-sm font-black text-blue-950">{"固定費を見える化"}</p>
           <p className="mt-2 text-xs leading-5 text-blue-800">{"更新日、解約期限、見直し候補、支払い履歴をまとめて確認できます。"}</p>
+          <Link href="/settings" className="btn-secondary mt-4 inline-flex min-h-0 px-3 py-2 text-sm">
+            設定
+          </Link>
         </div>
       </aside>
       <header className="sticky top-0 z-20 border-b border-white/65 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-xl lg:hidden">
         <div className="flex items-center justify-between">
           <Link href="/dashboard" className="font-black">{brand}</Link>
-          <Link href="/subscriptions/new" className="btn-primary min-h-0 px-3 py-2 text-sm">{"追加"}</Link>
+          <div className="flex items-center gap-2">
+            <Link href="/subscriptions/new" className="btn-primary min-h-0 px-3 py-2 text-sm">{"追加"}</Link>
+          </div>
         </div>
         <div className="subtle-scrollbar mt-3 flex gap-2 overflow-x-auto pb-1">
           {nav.map(({ label, href }) => (
@@ -72,10 +126,24 @@ export function AppShell({ children }: { children: ReactNode }) {
               {label}
             </Link>
           ))}
+          {isAdmin && adminNav.map(({ label, href }) => (
+            <Link key={href} href={href} className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-bold ${
+              pathname === "/admin" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white/80 text-slate-700"
+            }`}>
+              {label}
+            </Link>
+          ))}
         </div>
       </header>
       <main className="relative z-10 lg:pl-[17.5rem]">
-        <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">{children}</div>
+        <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
+          <div className="mb-4 flex items-center justify-end gap-2 sm:mb-5">
+            <Link href="/settings" className="btn-secondary min-h-0 px-3 py-2 text-sm">
+              設定
+            </Link>
+          </div>
+          {children}
+        </div>
       </main>
     </div>
   );
@@ -102,6 +170,6 @@ export function PageHeader({
   );
 }
 
-export function Card({ children, className = "" }: { children: ReactNode; className?: string }) {
-  return <section className={`rounded-lg border border-white/75 bg-white/92 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur-xl ${className}`}>{children}</section>;
+export function Card({ children, className = "", id }: { children: ReactNode; className?: string; id?: string }) {
+  return <section id={id} className={`rounded-lg border border-white/75 bg-white/92 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur-xl ${className}`}>{children}</section>;
 }

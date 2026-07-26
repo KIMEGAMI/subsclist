@@ -33,7 +33,7 @@ export async function syncStripeCheckoutSession(session: Stripe.Checkout.Session
     await prisma.user.update({
       where: { id: userId },
       data: {
-        plan: "LIFETIME",
+        plan: "PREMIUM",
         stripeCustomerId: customerId,
         stripeSubscriptionId: null,
       },
@@ -75,7 +75,13 @@ export async function syncLatestStripeSubscriptionForUser(userId: string) {
     where: { id: userId },
     select: { plan: true, stripeCustomerId: true, stripeSubscriptionId: true },
   });
-  if (user?.plan === "LIFETIME") return "lifetime" as const;
+  if (user?.plan === "LIFETIME") {
+    await prisma.user.update({
+      where: { id: userId },
+      data: { plan: "PREMIUM" },
+    });
+    return "premium" as const;
+  }
   if (!user?.stripeCustomerId && !user?.stripeSubscriptionId) return "not_found" as const;
 
   const client = stripe();
