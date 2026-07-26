@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -114,21 +114,7 @@ async function request(url: string, method: string, body?: unknown) {
   return data;
 }
 
-export function LogoutButton() {
-  const router = useRouter();
-  return (
-    <button
-      onClick={async () => {
-        await request("/api/auth/logout", "POST");
-        router.push("/login");
-        router.refresh();
-      }}
-      className="btn-secondary min-h-0 px-3 py-2 text-sm"
-    >
-      ログアウト
-    </button>
-  );
-}
+export { LogoutButton } from "@/components/logout-button";
 
 export function SubscriptionForm({
   subscription,
@@ -268,7 +254,62 @@ function dateValue(value?: Date | string | null) {
   if (!value) return "";
   return isoDate(value);
 }
+type CsvHelpRow = {
+  label: string;
+  description: string;
+};
 
+function CsvHelpPopover({
+  title,
+  note,
+  rows,
+}: {
+  title: string;
+  note: string;
+  rows: CsvHelpRow[];
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <div className="relative inline-flex items-center">
+      <button
+        type="button"
+        onClick={() => setOpen((current) => !current)}
+        className="inline-flex size-7 items-center justify-center rounded-full border border-slate-200 bg-white text-xs font-black text-slate-600 shadow-sm transition hover:border-blue-300 hover:text-blue-700"
+        aria-expanded={open}
+        aria-label={`${title}の説明を表示`}
+      >
+        i
+      </button>
+      {open && (
+        <div className="absolute left-0 top-full z-20 mt-2 w-[22rem] rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-2xl">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="font-black text-slate-900">{title}</p>
+              <p className="mt-1 leading-6 text-slate-600">{note}</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="rounded-full px-2 py-1 text-xs font-bold text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+              aria-label="説明を閉じる"
+            >
+              閉じる
+            </button>
+          </div>
+          <dl className="mt-4 space-y-3">
+            {rows.map((row) => (
+              <div key={row.label} className="grid gap-1 rounded-lg bg-slate-50 px-3 py-2">
+                <dt className="text-xs font-black uppercase tracking-wide text-blue-700">{row.label}</dt>
+                <dd className="text-sm leading-6 text-slate-700">{row.description}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      )}
+    </div>
+  );
+}
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <label className="grid gap-2 text-sm font-semibold text-slate-700">{label}{children}</label>;
 }
@@ -402,15 +443,33 @@ export function PaymentMethodForm() {
 
 export function CsvDownloadButton({ disabled }: { disabled: boolean }) {
   return (
-    <button
-      disabled={disabled}
-      onClick={() => {
-        window.location.href = "/api/export";
-      }}
-      className="btn-primary mt-5"
-    >
-      CSVをダウンロード
-    </button>
+    <div className="mt-5 flex flex-wrap items-center gap-3">
+      <button
+        disabled={disabled}
+        onClick={() => {
+          window.location.href = "/api/export";
+        }}
+        className="btn-primary"
+      >
+        CSV繧偵ム繧ｦ繝ｳ繝ｭ繝ｼ繝・
+      </button>
+      <CsvHelpPopover
+        title="CSV出力の見方"
+        note="出力されるCSVは1行目がヘッダです。列の意味を確認して、そのまま別の表計算ソフトに取り込めます。"
+        rows={[
+          { label: "サービス名", description: "登録済みのサービス名です。" },
+          { label: "金額", description: "請求金額です。" },
+          { label: "請求周期", description: "月額・年額・週額・カスタムの区分です。" },
+          { label: "月額換算", description: "請求周期を月あたりに換算した金額です。" },
+          { label: "年額換算", description: "請求周期を年あたりに換算した金額です。" },
+          { label: "次回更新日", description: "次の請求予定日です。" },
+          { label: "カテゴリ", description: "設定しているカテゴリ名です。" },
+          { label: "支払い方法", description: "設定している支払い方法名です。" },
+          { label: "ステータス", description: "有効・停止中・解約済みなどの状態です。" },
+          { label: "メモ", description: "登録されている補足メモです。" },
+        ]}
+      />
+    </div>
   );
 }
 
@@ -459,15 +518,15 @@ export function PlanSettingsForm({ plan, stripeTestMode }: { plan: "FREE" | "PRE
   const [loading, setLoading] = useState<"checkout" | "portal" | "downgrade" | "sync" | "">("");
   const paidPlan = plan === "PREMIUM" || plan === "LIFETIME";
 
-  async function openStripe(path: "/api/stripe/checkout" | "/api/stripe/portal", mode: "checkout" | "portal", checkoutPlan?: "PREMIUM" | "LIFETIME") {
+  async function openStripe(path: "/api/stripe/checkout" | "/api/stripe/portal", mode: "checkout" | "portal") {
     setMessage("");
     setError("");
     setLoading(mode);
     try {
       const response = await fetch(path, {
         method: "POST",
-        headers: checkoutPlan ? { "Content-Type": "application/json" } : undefined,
-        body: checkoutPlan ? JSON.stringify({ plan: checkoutPlan }) : undefined,
+        headers: path === "/api/stripe/checkout" ? { "Content-Type": "application/json" } : undefined,
+        body: path === "/api/stripe/checkout" ? JSON.stringify({ plan: "PREMIUM" }) : undefined,
       });
       const data = (await response.json().catch(() => ({}))) as { message?: string; url?: string };
       if (!response.ok || !data.url) throw new Error(data.message ?? "Stripeページを開けませんでした。");
@@ -501,12 +560,12 @@ export function PlanSettingsForm({ plan, stripeTestMode }: { plan: "FREE" | "PRE
     setLoading("downgrade");
     try {
       await request("/api/settings/plan", "PUT", { plan: "FREE" });
-      setMessage("アプリ表示をFreeに変更しました。Stripeで課金中の場合は、Stripeポータルから解約も行ってください。");
-      router.refresh();
-    } catch (err) {
-      setError(userErrorMessage(err, "プラン変更に失敗しました。"));
-    } finally {
-      setLoading("");
+        setMessage("アプリ表示をFreeに変更しました。Stripeで契約中の場合は、Stripeポータルから解約も行ってください。");
+        router.refresh();
+      } catch (err) {
+        setError(userErrorMessage(err, "プラン変更に失敗しました。"));
+      } finally {
+        setLoading("");
     }
   }
 
@@ -522,7 +581,7 @@ export function PlanSettingsForm({ plan, stripeTestMode }: { plan: "FREE" | "PRE
         </div>
         <div className="rounded-lg border border-blue-100 bg-blue-50/80 p-4 shadow-sm">
           <div className="flex items-center justify-between gap-3">
-            <p className="font-bold text-blue-900">Premium（買い切り480円）</p>
+            <p className="font-bold text-blue-900">Premium（月額480円）</p>
             {paidPlan && <span className="rounded-full bg-blue-600 px-2 py-1 text-xs font-black text-white">現在のプラン</span>}
           </div>
           <p className="mt-2 text-sm text-blue-800">サブスク無制限、CSV入出力、明細検出、高度な分析、月次レポート、解約支援を利用できます。</p>
@@ -546,8 +605,8 @@ export function PlanSettingsForm({ plan, stripeTestMode }: { plan: "FREE" | "PRE
       )}
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
         {plan === "FREE" ? (
-          <button type="button" disabled={Boolean(loading)} onClick={() => openStripe("/api/stripe/checkout", "checkout", "LIFETIME")} className="btn-primary">
-            {loading === "checkout" ? "Stripeを開いています..." : "Premiumを買い切りで購入（480円）"}
+          <button type="button" disabled={Boolean(loading)} onClick={() => openStripe("/api/stripe/checkout", "checkout")} className="btn-primary">
+            {loading === "checkout" ? "Stripeを開いています..." : "Premiumに加入（月額480円）"}
           </button>
         ) : (
           <button type="button" disabled className="btn-primary opacity-80">
@@ -562,7 +621,7 @@ export function PlanSettingsForm({ plan, stripeTestMode }: { plan: "FREE" | "PRE
         <button type="button" disabled={Boolean(loading)} onClick={syncBilling} className="btn-secondary">
           {loading === "sync" ? "確認中..." : "課金状態を再確認"}
         </button>
-        {plan === "PREMIUM" && (
+        {paidPlan && (
           <button type="button" disabled={Boolean(loading)} onClick={downgrade} className="btn-secondary">
             {loading === "downgrade" ? "更新中..." : "アプリ表示をFreeに変更"}
           </button>
@@ -613,6 +672,63 @@ export function PasswordSettingsForm() {
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
       <button disabled={loading} className="btn-primary">
         {loading ? "変更中..." : "パスワードを変更"}
+      </button>
+    </form>
+  );
+}
+
+export function AccountDeleteForm({ email }: { email: string }) {
+  const router = useRouter();
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage("");
+    setError("");
+    setLoading(true);
+    const formElement = event.currentTarget;
+
+    const form = new FormData(formElement);
+    const confirmText = String(form.get("confirmText") ?? "");
+    if (confirmText !== "削除する") {
+      setError("確認のため「削除する」と入力してください。");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/settings/account", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(Object.fromEntries(form.entries())),
+      });
+      const data = (await response.json().catch(() => ({}))) as { message?: string };
+      if (!response.ok) throw new Error(data.message ?? "アカウント削除に失敗しました。");
+      formElement.reset();
+      setMessage("アカウントを削除しました。ログイン画面へ移動します。");
+      router.replace("/login");
+    } catch (err) {
+      setError(userErrorMessage(err, "アカウント削除に失敗しました。"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} noValidate className="space-y-4">
+      <input type="hidden" name="email" value={email} />
+      <Field label="現在のパスワード"><input name="currentPassword" className="input" type="password" required /></Field>
+      <Field label="確認入力"><input name="confirmText" className="input" type="text" placeholder="削除する" required /></Field>
+      <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm leading-6 text-rose-900">
+        <p className="font-black">完全削除</p>
+        <p className="mt-1">この操作で、アカウントに紐づくデータをDBから完全に削除します。取り消しはできません。</p>
+      </div>
+      {message && <p className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p>}
+      {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
+      <button disabled={loading} className="btn-danger">
+        {loading ? "削除中..." : "アカウントを完全削除"}
       </button>
     </form>
   );
@@ -823,12 +939,12 @@ export function CsvImportForm({ disabled }: { disabled: boolean }) {
     try {
       const response = await fetch("/api/import/subscriptions", { method: "POST", body: form });
       const data = (await response.json().catch(() => ({}))) as { message?: string; created?: number; skipped?: number };
-      if (!response.ok) throw new Error(data.message ?? "インポートに失敗しました。");
-      setMessage(`${data.created ?? 0}件を取り込みました。スキップ: ${data.skipped ?? 0}件`);
+      if (!response.ok) throw new Error(data.message ?? "繧､繝ｳ繝昴・繝医↓螟ｱ謨励＠縺ｾ縺励◆縲・");
+      setMessage(`${data.created ?? 0}莉ｶ繧貞叙繧願ｾｼ縺ｿ縺ｾ縺励◆縲ゅせ繧ｭ繝・・: ${data.skipped ?? 0}莉ｶ`);
       formElement.reset();
       router.refresh();
     } catch (err) {
-      setError(userErrorMessage(err, "インポートに失敗しました。"));
+      setError(userErrorMessage(err, "繧､繝ｳ繝昴・繝医↓螟ｱ謨励＠縺ｾ縺励◆縲・"));
     } finally {
       setLoading(false);
     }
@@ -836,12 +952,31 @@ export function CsvImportForm({ disabled }: { disabled: boolean }) {
 
   return (
     <form onSubmit={submit} noValidate className="space-y-4">
-      <Field label="CSVファイル"><input name="file" type="file" accept=".csv,text/csv" className="input" disabled={disabled} required /></Field>
-      <p className="text-sm leading-6 text-slate-600">対応列: サービス名、料金、請求周期、次回更新日、カテゴリ、支払い方法、サービスURL、解約URL、メモ。</p>
+      <Field label="CSV繝輔ぃ繧､繝ｫ"><input name="file" type="file" accept=".csv,text/csv" className="input" disabled={disabled} required /></Field>
+      <div className="flex flex-wrap items-start gap-3">
+        <p className="text-sm leading-6 text-slate-600">
+          蟇ｾ蠢懷・: 繝・け繧ｹ繝・け繝ｬ繝ｼ繝牙諢溘・1陦・目縺ｯ繝輔Ο繝ｳ繝医Ρ繝ｼ縺ｫ縺ｯ縺・ｋ縺ｮ縲∵侭驥代∬ｫ区ｱょ捉譛溘∵ｬ｡蝗樊峩譁ｰ譌･縲√き繝・ざ繝ｪ縲∵髪謇輔＞譁ｹ豕輔√し繝ｼ繝薙せURL縲∬ｧ｣邏ФRL縲√Γ繝｢縺ｮ鬨・ｱｱ繧帝・蜉帙☆繧九□縺代縺ｧ縺吶・
+        </p>
+        <CsvHelpPopover
+          title="CSVインポートの見方"
+          note="CSVの1行目をヘッダにする場合は、下の列名をこの順で入れてください。ヘッダがないCSVでも取り込めますが、列の順番は合わせてください。"
+          rows={[
+            { label: "サービス名", description: "登録するサービスの名前です。" },
+            { label: "料金", description: "1回分の請求金額です。" },
+            { label: "請求周期", description: "MONTHLY / YEARLY / WEEKLY / CUSTOM を入れます。" },
+            { label: "次回更新日", description: "YYYY-MM-DD 形式の日付です。" },
+            { label: "カテゴリ", description: "既存カテゴリ名を入れます。未設定なら空欄でも大丈夫です。" },
+            { label: "支払い方法", description: "既存の支払い方法名を入れます。未設定なら空欄でも大丈夫です。" },
+            { label: "サービスURL", description: "サービスの公式ページや管理ページです。" },
+            { label: "解約URL", description: "解約ページや退会ページのURLです。" },
+            { label: "メモ", description: "補足情報を自由に書けます。" },
+          ]}
+        />
+      </div>
       {message && <p className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p>}
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
       <button disabled={disabled || loading} className="btn-primary">{loading ? "取り込み中..." : "CSVをインポート"}</button>
-      {disabled && <p className="text-sm font-semibold text-amber-700">CSVインポートはPremium限定です。</p>}
+      {disabled && <p className="text-sm font-semibold text-amber-700">CSV繧､繝ｳ繝昴・繝医・Premium髯仙ｮ壹〒縺吶・</p>}
     </form>
   );
 }

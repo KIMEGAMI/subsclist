@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "build": "node scripts/prisma-generate.cjs && next build",
     "start": "next start",
     "lint": "eslint",
@@ -11,7 +11,8 @@
     "prisma:deploy": "prisma migrate deploy",
     "prisma:migrate": "prisma migrate dev",
     "format": "prettier --write .",
-    "seed:demo": "node scripts/seed-demo-production.cjs"
+    "seed:demo": "node scripts/seed-demo-production.cjs",
+    "seed:admin": "node scripts/seed-admin.cjs"
   },
   "dependencies": {
     "@prisma/adapter-mariadb": "^7.8.0",

@@ -1,4 +1,4 @@
-function required(name: string) {
+﻿function required(name: string) {
   const value = process.env[name];
   if (!value) {
     throw new Error(`${name}が設定されていません。`);
@@ -17,11 +17,11 @@ export const env = {
   smtpUser: process.env.SMTP_USER ?? "",
   smtpPass: process.env.SMTP_PASS ?? "",
   demoUserEmail: process.env.DEMO_USER_EMAIL ?? "",
+  adminUserEmail: process.env.ADMIN_USER_EMAIL ?? "",
   notificationJobSecret: process.env.NOTIFICATION_JOB_SECRET ?? "",
   stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? "",
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? "",
   stripePremiumPriceId: process.env.STRIPE_PREMIUM_PRICE_ID ?? "",
-  stripeLifetimePriceId: process.env.STRIPE_LIFETIME_PRICE_ID ?? "",
   stripeTestMode: (process.env.STRIPE_SECRET_KEY ?? "").startsWith("sk_test_"),
   googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
@@ -63,4 +63,8 @@ export function assertGoogleEnv() {
       throw new Error(`${name}が設定されていません。`);
     }
   }
+}
+
+export function isProtectedAccountEmail(email: string) {
+  return email === env.demoUserEmail || email === env.adminUserEmail;
 }

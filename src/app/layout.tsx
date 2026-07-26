@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { DevServiceWorkerCleanup } from "@/components/dev-sw-cleanup";
+import { MaintenanceModeGate } from "@/components/maintenance-mode-gate";
 
 export const metadata: Metadata = {
   title: "サブスクリスト | サブスクリプション管理システム",
@@ -19,7 +21,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ja" className="h-full antialiased">
-      <body className="min-h-full">{children}</body>
+      <body className="min-h-full">
+        <DevServiceWorkerCleanup />
+        <MaintenanceModeGate>{children}</MaintenanceModeGate>
+      </body>
     </html>
   );
 }

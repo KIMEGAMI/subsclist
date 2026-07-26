@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { setSession } from "@/lib/auth";
+import { isAdminEmail, setSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const schema = z.object({
@@ -30,5 +30,6 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ok: true,
     emailVerified: Boolean(user.emailVerified),
+    redirectTo: isAdminEmail(user.email) ? "/admin" : Boolean(user.emailVerified) ? "/dashboard" : "/verify-email",
   });
 }
