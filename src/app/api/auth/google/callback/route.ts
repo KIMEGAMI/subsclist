@@ -2,7 +2,7 @@ import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
-import { setSession } from "@/lib/auth";
+import { isAdminEmail, setSession } from "@/lib/auth";
 import { assertGoogleEnv, env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 
@@ -116,7 +116,7 @@ export async function GET(request: NextRequest) {
         });
 
     await setSession(user.id, true);
-    return NextResponse.redirect(new URL("/dashboard", env.appUrl));
+    return NextResponse.redirect(new URL(isAdminEmail(user.email) ? "/admin" : "/dashboard", env.appUrl));
   } catch (error) {
     console.error("Google login failed.", error);
     return redirectToLogin("failed");

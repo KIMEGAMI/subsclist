@@ -1,7 +1,7 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import crypto from "node:crypto";
-import { SESSION_MAX_AGE_SECONDS } from "@/lib/app-constants";
+import { DEFAULT_ADMIN_USER_EMAIL, SESSION_MAX_AGE_SECONDS } from "@/lib/app-constants";
 import { prisma } from "@/lib/prisma";
 import { assertAuthSecret, env } from "@/lib/env";
 
@@ -89,6 +89,17 @@ export async function getCurrentUser() {
     },
   });
 
+  return user;
+}
+
+export function isAdminEmail(email?: string | null) {
+  const adminEmail = env.adminUserEmail || DEFAULT_ADMIN_USER_EMAIL;
+  return Boolean(email && email.toLowerCase() === adminEmail.toLowerCase());
+}
+
+export async function requireAdminUser() {
+  const user = await requireVerifiedUser();
+  if (!isAdminEmail(user.email)) redirect("/dashboard");
   return user;
 }
 

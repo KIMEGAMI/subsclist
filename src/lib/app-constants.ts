@@ -17,6 +17,10 @@ export const MAX_SUBSCRIPTION_NAME_LENGTH = 100;
 export const MAX_MEMO_LENGTH = 1000;
 export const MAX_PAYMENT_HISTORY_MEMO_LENGTH = 500;
 
+export const DEFAULT_ADMIN_USER_EMAIL = "admin@shinji.work";
+export const DASHBOARD_ANNOUNCEMENT_PAGE_SIZE = 5;
+export const DASHBOARD_ANNOUNCEMENT_MAX_ITEMS = 100;
+
 export const ALLOWED_URL_PROTOCOLS = ["http:", "https:"] as const;
 export const PLACEHOLDER_HOSTS = ["example.com", "www.example.com"] as const;
 

@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createVerificationToken, hashToken, setSession } from "@/lib/auth";
+import { clearSession, createVerificationToken, hashToken, setSession } from "@/lib/auth";
 import { EMAIL_VERIFICATION_TOKEN_TTL_MS, MAX_EMAIL_LENGTH, MAX_PASSWORD_LENGTH, MAX_USER_NAME_LENGTH, MIN_PASSWORD_LENGTH } from "@/lib/app-constants";
 import { assertMailEnv } from "@/lib/env";
 import { userErrorMessage } from "@/lib/error-messages";
@@ -56,7 +56,7 @@ export async function POST(request: Request) {
   if (exists && !exists.emailVerified) {
     try {
       await createTokenAndSend(exists.id, exists.email);
-      await setSession(exists.id, false);
+      await clearSession();
       return NextResponse.json({
         ok: true,
         alreadyRegistered: true,
@@ -64,7 +64,7 @@ export async function POST(request: Request) {
       });
     } catch (error) {
       console.error("Failed to resend verification email during registration.", error);
-      await setSession(exists.id, false);
+      await clearSession();
       return NextResponse.json(
         {
           message:

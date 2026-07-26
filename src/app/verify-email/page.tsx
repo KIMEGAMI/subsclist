@@ -59,7 +59,9 @@ export default async function VerifyEmailPage({
                 </p>
               )}
               {user && !user.emailVerified ? (
-                <ResendVerificationButton />
+                <div className="mt-6 space-y-3">
+                  <ResendVerificationButton />
+                </div>
               ) : (
                 <Link href="/login" className="btn-primary mt-6 w-full">
                   ログインへ
