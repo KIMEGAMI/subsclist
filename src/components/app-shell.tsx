@@ -103,13 +103,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           )}
         </nav>
-        <div className="mt-auto rounded-lg border border-blue-100 bg-gradient-to-br from-blue-50 to-cyan-50 p-4">
-          <p className="text-sm font-black text-blue-950">{"固定費を見える化"}</p>
-          <p className="mt-2 text-xs leading-5 text-blue-800">{"更新日、解約期限、見直し候補、支払い履歴をまとめて確認できます。"}</p>
-          <Link href="/settings" className="btn-secondary mt-4 inline-flex min-h-0 px-3 py-2 text-sm">
-            設定
-          </Link>
-        </div>
       </aside>
       <header className="sticky top-0 z-20 border-b border-white/65 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-xl lg:hidden">
         <div className="flex items-center justify-between">
