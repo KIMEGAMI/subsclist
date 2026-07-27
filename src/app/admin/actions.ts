@@ -1,7 +1,6 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { cookies } from "next/headers";
 import { z } from "zod";
 import { requireAdminUser } from "@/lib/auth";
 import {
@@ -10,7 +9,6 @@ import {
   setMaintenanceMode,
   updateAnnouncementStatus as updateAnnouncementStatusRecord,
 } from "@/lib/admin";
-import { maintenanceModeCookie } from "@/lib/admin-constants";
 
 const titleMaxLength = 80;
 const bodyMaxLength = 1000;
@@ -71,13 +69,6 @@ export async function updateMaintenanceMode(formData: FormData) {
 
   const enabled = formData.get("mode") === "enabled";
   await setMaintenanceMode(enabled);
-  const cookieStore = await cookies();
-  cookieStore.set(maintenanceModeCookie, enabled ? "enabled" : "disabled", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-  });
   revalidatePath("/admin");
   revalidatePath("/");
 }
