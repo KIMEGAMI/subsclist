@@ -160,6 +160,8 @@ export function RegisterView() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -172,10 +174,12 @@ export function RegisterView() {
     if (!email.includes("@")) return setError(t.invalidEmail);
     if (password.length < 8) return setError(t.passwordLength);
     if (password !== confirmPassword) return setError(t.passwordMismatch);
+    if (!termsAccepted) return setError("利用規約に同意してください。");
+    if (!privacyAccepted) return setError("プライバシーポリシーに同意してください。");
 
     setLoading(true);
     try {
-      const data = await postJson("/api/auth/register", { name, email, password });
+      const data = await postJson("/api/auth/register", { name, email, password, termsAccepted, privacyAccepted });
       if (data.message) setMessage(data.message);
       if (data.alreadyRegistered) {
         router.push(data.mailSent === false ? "/login?notice=verification-failed" : "/login?notice=verification");
@@ -213,7 +217,37 @@ export function RegisterView() {
           {t.confirmPassword}
           <input value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="input" type="password" />
         </label>
-        <button disabled={loading} className="btn-primary w-full">
+        <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-semibold text-slate-700">
+          <label className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              checked={termsAccepted}
+              onChange={(event) => setTermsAccepted(event.target.checked)}
+              className="mt-1 size-4 rounded border-slate-300"
+            />
+            <span>
+              <Link href="/terms" className="text-blue-700 underline underline-offset-2">
+                利用規約
+              </Link>
+              に同意します
+            </span>
+          </label>
+          <label className="flex items-start gap-3">
+            <input
+              type="checkbox"
+              checked={privacyAccepted}
+              onChange={(event) => setPrivacyAccepted(event.target.checked)}
+              className="mt-1 size-4 rounded border-slate-300"
+            />
+            <span>
+              <Link href="/privacy" className="text-blue-700 underline underline-offset-2">
+                プライバシーポリシー
+              </Link>
+              に同意します
+            </span>
+          </label>
+        </div>
+        <button disabled={loading || !termsAccepted || !privacyAccepted} className="btn-primary w-full">
           {loading ? t.registerLoading : t.registerAndSend}
         </button>
       </form>

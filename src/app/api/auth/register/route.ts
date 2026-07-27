@@ -12,6 +12,8 @@ const schema = z.object({
   name: z.string().trim().min(1).max(MAX_USER_NAME_LENGTH),
   email: z.string().trim().email().max(MAX_EMAIL_LENGTH),
   password: z.string().min(MIN_PASSWORD_LENGTH).max(MAX_PASSWORD_LENGTH),
+  termsAccepted: z.literal(true),
+  privacyAccepted: z.literal(true),
 });
 
 const initialCategories = [
@@ -43,6 +45,10 @@ export async function POST(request: Request) {
 
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success) {
+    const consentMissing = parsed.error.issues.some((issue) => issue.path[0] === "termsAccepted" || issue.path[0] === "privacyAccepted");
+    if (consentMissing) {
+      return NextResponse.json({ message: "利用規約とプライバシーポリシーに同意してください。" }, { status: 400 });
+    }
     return NextResponse.json({ message: "入力内容を確認してください。" }, { status: 400 });
   }
 
