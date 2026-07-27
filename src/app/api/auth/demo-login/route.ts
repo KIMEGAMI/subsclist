@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
-import { setSession } from "@/lib/auth";
+import { getMaintenanceMode } from "@/lib/admin";
+import { isAdminEmail, setSession } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 
@@ -14,6 +15,10 @@ export async function POST() {
   }
   if (!user.emailVerified) {
     return NextResponse.json({ message: "デモユーザーのメール認証が完了していません。" }, { status: 409 });
+  }
+
+  if ((await getMaintenanceMode()) && !isAdminEmail(user.email)) {
+    return NextResponse.json({ message: "現在メンテナンス中です。管理者のみログインできます。" }, { status: 503 });
   }
 
   await setSession(user.id, true);

@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import { z } from "zod";
+import { getMaintenanceMode } from "@/lib/admin";
 import { isAdminEmail, setSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
@@ -23,6 +24,10 @@ export async function POST(request: Request) {
   const valid = await bcrypt.compare(parsed.data.password, user.passwordHash);
   if (!valid) {
     return NextResponse.json({ message: "ログイン情報が正しくありません。" }, { status: 401 });
+  }
+
+  if ((await getMaintenanceMode()) && !isAdminEmail(user.email)) {
+    return NextResponse.json({ message: "現在メンテナンス中です。管理者のみログインできます。" }, { status: 503 });
   }
 
   await setSession(user.id, Boolean(user.emailVerified));

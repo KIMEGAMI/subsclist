@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import { DEFAULT_ADMIN_USER_EMAIL, SESSION_MAX_AGE_SECONDS } from "@/lib/app-constants";
 import { prisma } from "@/lib/prisma";
 import { assertAuthSecret, env } from "@/lib/env";
+import { getMaintenanceMode } from "@/lib/admin";
 
 const sessionCookie = "subsclist_session";
 
@@ -97,6 +98,11 @@ export function isAdminEmail(email?: string | null) {
   return Boolean(email && email.toLowerCase() === adminEmail.toLowerCase());
 }
 
+async function redirectNonAdminDuringMaintenance(email?: string | null) {
+  if (isAdminEmail(email)) return;
+  if (await getMaintenanceMode()) redirect("/maintenance");
+}
+
 export async function requireAdminUser() {
   const user = await requireVerifiedUser();
   if (!isAdminEmail(user.email)) redirect("/dashboard");
@@ -106,6 +112,7 @@ export async function requireAdminUser() {
 export async function requireUser() {
   const user = await getCurrentUser();
   if (!user) redirect("/login");
+  await redirectNonAdminDuringMaintenance(user.email);
   return user;
 }
 

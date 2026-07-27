@@ -2,6 +2,7 @@ import bcrypt from "bcryptjs";
 import crypto from "node:crypto";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
+import { getMaintenanceMode } from "@/lib/admin";
 import { isAdminEmail, setSession } from "@/lib/auth";
 import { assertGoogleEnv, env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
@@ -93,6 +94,12 @@ export async function GET(request: NextRequest) {
   try {
     const profile = await fetchGoogleProfile(code);
     const email = profile.email.toLowerCase();
+    const admin = isAdminEmail(email);
+
+    if ((await getMaintenanceMode()) && !admin) {
+      return NextResponse.redirect(new URL("/maintenance", env.appUrl));
+    }
+
     const existing = await prisma.user.findUnique({ where: { email } });
 
     const user = existing
@@ -116,7 +123,7 @@ export async function GET(request: NextRequest) {
         });
 
     await setSession(user.id, true);
-    return NextResponse.redirect(new URL(isAdminEmail(user.email) ? "/admin" : "/dashboard", env.appUrl));
+    return NextResponse.redirect(new URL(admin ? "/admin" : "/dashboard", env.appUrl));
   } catch (error) {
     console.error("Google login failed.", error);
     return redirectToLogin("failed");
