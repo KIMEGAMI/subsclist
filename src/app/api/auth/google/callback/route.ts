@@ -96,7 +96,7 @@ export async function GET(request: NextRequest) {
     const email = profile.email.toLowerCase();
     const admin = isAdminEmail(email);
 
-    if ((await getMaintenanceMode()) && !admin) {
+    if (!admin && (await getMaintenanceMode())) {
       return NextResponse.redirect(new URL("/maintenance", env.appUrl));
     }
 

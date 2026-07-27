@@ -17,7 +17,7 @@ export async function POST() {
     return NextResponse.json({ message: "デモユーザーのメール認証が完了していません。" }, { status: 409 });
   }
 
-  if ((await getMaintenanceMode()) && !isAdminEmail(user.email)) {
+  if (!isAdminEmail(user.email) && (await getMaintenanceMode())) {
     return NextResponse.json({ message: "現在メンテナンス中です。管理者のみログインできます。" }, { status: 503 });
   }
 

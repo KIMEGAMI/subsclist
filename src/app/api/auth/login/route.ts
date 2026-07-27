@@ -26,7 +26,9 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "ログイン情報が正しくありません。" }, { status: 401 });
   }
 
-  if ((await getMaintenanceMode()) && !isAdminEmail(user.email)) {
+  const admin = isAdminEmail(user.email);
+
+  if (!admin && (await getMaintenanceMode())) {
     return NextResponse.json({ message: "現在メンテナンス中です。管理者のみログインできます。" }, { status: 503 });
   }
 
@@ -35,6 +37,6 @@ export async function POST(request: Request) {
   return NextResponse.json({
     ok: true,
     emailVerified: Boolean(user.emailVerified),
-    redirectTo: isAdminEmail(user.email) ? "/admin" : Boolean(user.emailVerified) ? "/dashboard" : "/verify-email",
+    redirectTo: admin ? "/admin" : Boolean(user.emailVerified) ? "/dashboard" : "/verify-email",
   });
 }
