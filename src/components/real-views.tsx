@@ -24,6 +24,7 @@ import { getPublishedAnnouncements } from "@/lib/admin";
 import { buildForecastSeries } from "@/lib/premium-insights";
 import { estimatedMonthlySaving, reviewScore } from "@/lib/subscription-insights";
 import { syncStripeCheckoutSessionById } from "@/lib/stripe-billing";
+import { paymentMethodTypeLabel, stripePaymentMethodTypes } from "@/lib/stripe-payment-methods";
 
 const yen = new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 });
 
@@ -91,36 +92,6 @@ type SubscriptionView = {
   category?: CategoryView | null;
   paymentMethod?: PaymentMethodView | null;
   paymentHistories: PaymentHistoryView[];
-};
-
-const paymentMethodTypeLabels: Record<string, string> = {
-  APPLE_PAY: "Apple Pay",
-  AMAZON_PAY: "Amazon Pay",
-  AU_PAY: "au PAY",
-  BANK: "銀行口座振替",
-  BANK_TRANSFER: "銀行振込",
-  CARRIER_BILLING: "キャリア決済",
-  CASH: "現金",
-  CONVENIENCE_STORE: "コンビニ払い",
-  CREDIT_CARD: "クレジットカード",
-  D_BARAI: "d Barai",
-  DEBIT_CARD: "デビットカード",
-  GOOGLE_PAY: "Google Pay",
-  ID: "iD",
-  INVOICE: "請求書払い",
-  LINE_PAY: "LINE Pay",
-  MERPAY: "メルペイ",
-  NANACO: "nanaco",
-  PASMO: "PASMO",
-  PAYPAL: "PayPal",
-  PAYPAY: "PayPay",
-  PREPAID_CARD: "プリペイドカード",
-  QUICPAY: "QUICPay",
-  RAKUTEN_EDY: "楽天Edy",
-  RAKUTEN_PAY: "楽天ペイ",
-  SUICA: "Suica",
-  WAON: "WAON",
-  OTHER: "その他",
 };
 
 function EmptyState({ text }: { text: string }) {
@@ -621,7 +592,7 @@ export async function SubscriptionFormView({ id }: { id?: string }) {
   const [subscription, categories, paymentMethods] = await Promise.all([
     id ? prisma.subscription.findFirst({ where: { id, userId: user.id, deletedAt: null } }) : Promise.resolve(null),
     prisma.category.findMany({ where: { userId: user.id }, orderBy: { name: "asc" } }),
-    prisma.paymentMethod.findMany({ where: { userId: user.id }, orderBy: { name: "asc" } }),
+    prisma.paymentMethod.findMany({ where: { userId: user.id, type: { in: [...stripePaymentMethodTypes] } }, orderBy: { name: "asc" } }),
   ]);
   if (id && !subscription) notFound();
   if (!id && !isPremiumPlan(user.plan)) {
@@ -801,8 +772,8 @@ export async function CategoriesView() {
 
 export async function PaymentMethodsView() {
   const user = await requireVerifiedUser();
-  const methods = (await prisma.paymentMethod.findMany({ where: { userId: user.id }, orderBy: { name: "asc" } })) as unknown as PaymentMethodView[];
-  return <AppShell><PageHeader title="支払い方法" description="ユーザーの支払い方法だけを管理します。" /><div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]"><Card><PaymentMethodForm /></Card><Card><div className="divide-y divide-slate-100">{methods.length === 0 ? <EmptyState text="支払い方法がありません。" /> : methods.map((item) => <div key={item.id} className="py-3"><p className="font-semibold">{item.name}</p><p className="text-sm text-slate-500">{paymentMethodTypeLabels[item.type] ?? item.type}{item.memo ? ` / ${item.memo}` : ""}</p></div>)}</div></Card></div></AppShell>;
+  const methods = (await prisma.paymentMethod.findMany({ where: { userId: user.id, type: { in: [...stripePaymentMethodTypes] } }, orderBy: { name: "asc" } })) as unknown as PaymentMethodView[];
+  return <AppShell><PageHeader title="支払い方法" description="Stripeで決済できる支払い方法だけを管理します。" /><div className="grid gap-5 lg:grid-cols-[0.8fr_1.2fr]"><Card><PaymentMethodForm /></Card><Card><div className="divide-y divide-slate-100">{methods.length === 0 ? <EmptyState text="支払い方法がありません。" /> : methods.map((item) => <div key={item.id} className="py-3"><p className="font-semibold">{item.name}</p><p className="text-sm text-slate-500">{paymentMethodTypeLabel(item.type)}{item.memo ? ` / ${item.memo}` : ""}</p></div>)}</div></Card></div></AppShell>;
 }
 
 export async function PaymentsView() {

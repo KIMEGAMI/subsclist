@@ -3,38 +3,11 @@ import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
 import { MAX_PAYMENT_METHOD_NAME_LENGTH } from "@/lib/app-constants";
 import { prisma } from "@/lib/prisma";
+import { stripePaymentMethodTypes } from "@/lib/stripe-payment-methods";
 
 const schema = z.object({
   name: z.string().trim().min(1).max(MAX_PAYMENT_METHOD_NAME_LENGTH),
-  type: z.enum([
-    "CREDIT_CARD",
-    "DEBIT_CARD",
-    "PREPAID_CARD",
-    "BANK",
-    "BANK_TRANSFER",
-    "CONVENIENCE_STORE",
-    "CARRIER_BILLING",
-    "PAYPAY",
-    "RAKUTEN_PAY",
-    "D_BARAI",
-    "AU_PAY",
-    "MERPAY",
-    "LINE_PAY",
-    "APPLE_PAY",
-    "GOOGLE_PAY",
-    "AMAZON_PAY",
-    "PAYPAL",
-    "RAKUTEN_EDY",
-    "SUICA",
-    "PASMO",
-    "NANACO",
-    "WAON",
-    "ID",
-    "QUICPAY",
-    "INVOICE",
-    "CASH",
-    "OTHER",
-  ]),
+  type: z.enum(stripePaymentMethodTypes),
   memo: z.string().optional(),
 });
 

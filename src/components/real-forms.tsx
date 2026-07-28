@@ -15,6 +15,7 @@ import {
 } from "@/lib/app-constants";
 import { isoDate } from "@/lib/billing";
 import { userErrorMessage, userMessage } from "@/lib/error-messages";
+import { stripePaymentMethodOptions } from "@/lib/stripe-payment-methods";
 
 type SubscriptionFormValue = {
   id: string;
@@ -406,33 +407,11 @@ export function PaymentMethodForm() {
       <Field label="名前"><input name="name" className="input" maxLength={MAX_PAYMENT_METHOD_NAME_LENGTH} required /></Field>
       <Field label="種別">
         <select name="type" className="input" required>
-          <option value="APPLE_PAY">Apple Pay</option>
-          <option value="AMAZON_PAY">Amazon Pay</option>
-          <option value="AU_PAY">au PAY</option>
-          <option value="BANK">銀行引落</option>
-          <option value="BANK_TRANSFER">銀行振込</option>
-          <option value="CARRIER_BILLING">キャリア決済</option>
-          <option value="CASH">現金</option>
-          <option value="CONVENIENCE_STORE">コンビニ払い</option>
-          <option value="CREDIT_CARD">クレジットカード</option>
-          <option value="D_BARAI">d払い</option>
-          <option value="DEBIT_CARD">デビットカード</option>
-          <option value="GOOGLE_PAY">Google Pay</option>
-          <option value="ID">iD</option>
-          <option value="INVOICE">請求書払い</option>
-          <option value="LINE_PAY">LINE Pay</option>
-          <option value="MERPAY">メルペイ</option>
-          <option value="NANACO">nanaco</option>
-          <option value="PASMO">PASMO</option>
-          <option value="PAYPAL">PayPal</option>
-          <option value="PAYPAY">PayPay</option>
-          <option value="PREPAID_CARD">プリペイドカード</option>
-          <option value="QUICPAY">QUICPay</option>
-          <option value="RAKUTEN_EDY">楽天Edy</option>
-          <option value="RAKUTEN_PAY">楽天ペイ</option>
-          <option value="SUICA">Suica</option>
-          <option value="WAON">WAON</option>
-          <option value="OTHER">その他</option>
+          {stripePaymentMethodOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
         </select>
       </Field>
       <Field label="メモ"><textarea name="memo" className="input" /></Field>
