@@ -91,10 +91,10 @@ export default function Home() {
 
       <section className="bg-slate-950 px-4 py-16 text-white sm:px-6 lg:px-8">
         <div className="mx-auto grid max-w-7xl gap-5 md:grid-cols-2">
-          <Card className="border-white/10 bg-white/5 text-white">
+          <Card className="border-slate-200 bg-white text-slate-950">
             <h3 className="text-2xl font-bold">Free</h3>
             <p className="mt-2 text-4xl font-black">お試し</p>
-            <p className="mt-3 text-sm text-slate-300">10件まで登録、基本通知、基本集計。</p>
+            <p className="mt-3 text-sm text-slate-950">10件まで登録、基本通知、基本集計。</p>
           </Card>
           <Card className="border-fuchsia-300/40 bg-white text-slate-950">
             <h3 className="text-2xl font-bold">Premium</h3>
