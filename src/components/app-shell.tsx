@@ -130,11 +130,6 @@ export function AppShell({ children }: { children: ReactNode }) {
       </header>
       <main className="relative z-10 lg:pl-[17.5rem]">
         <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
-          <div className="mb-4 flex items-center justify-end gap-2 sm:mb-5">
-            <Link href="/settings" className="btn-secondary min-h-0 px-3 py-2 text-sm">
-              設定
-            </Link>
-          </div>
           {children}
         </div>
       </main>
