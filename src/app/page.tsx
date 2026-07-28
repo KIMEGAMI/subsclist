@@ -104,6 +104,7 @@ export default function Home() {
           </Card>
         </div>
         <div className="mx-auto mt-8 flex max-w-7xl flex-wrap gap-4 text-sm font-bold text-slate-300">
+          <Link href="/legal-notice" className="hover:text-white">特定商取引法に基づく表記</Link>
           <Link href="/privacy" className="hover:text-white">プライバシーポリシー</Link>
           <Link href="/terms" className="hover:text-white">利用規約</Link>
           <Link href="/security" className="hover:text-white">セキュリティ</Link>
