@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import type Stripe from "stripe";
 import { requireVerifiedUser } from "@/lib/auth";
 import { env } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
@@ -6,11 +7,19 @@ import { stripe } from "@/lib/stripe";
 
 function portalErrorMessage(error: unknown) {
   if (error instanceof Error) {
-    if (error.message === "STRIPE_SECRET_KEY is not set.") return "STRIPE_SECRET_KEYが設定されていません。Stripeのシークレットキーを.envに設定してください。";
-    if (error.message === "STRIPE_PREMIUM_PRICE_ID is not set.") return "STRIPE_PREMIUM_PRICE_IDが設定されていません。Stripeの価格IDを.envに設定してください。";
+    if (error.message.includes("STRIPE_SECRET_KEY")) return "STRIPE_SECRET_KEYが設定されていません。Stripeのテスト用シークレットキーを.envに設定してください。";
+    if (error.message.includes("STRIPE_PREMIUM_PRICE_ID")) return "STRIPE_PREMIUM_PRICE_IDが設定されていません。Stripeの価格IDを.envに設定してください。";
+    if (error.message.includes("No configuration provided")) {
+      return "Stripeカスタマーポータルが未設定です。Stripeダッシュボードのテストモードで、BillingのCustomer portal設定を保存してください。";
+    }
   }
-  const stripeError = error as { type?: string; code?: string };
+
+  const stripeError = error as { type?: string; param?: string };
   if (stripeError.type === "StripeAuthenticationError") return "Stripeのシークレットキーが正しくありません。STRIPE_SECRET_KEYを確認してください。";
+  if (stripeError.type === "StripeInvalidRequestError" && stripeError.param === "return_url") {
+    return "Stripeの戻り先URLが正しくありません。APP_URLまたはNEXTAUTH_URLを確認してください。";
+  }
+
   return "Stripe管理画面を開けませんでした。Stripe設定を確認してください。";
 }
 
@@ -34,13 +43,17 @@ export async function POST() {
       return null;
     });
     if (!customer || customer.deleted) {
-      return NextResponse.json({ message: "DBに保存されていたStripe顧客IDが現在のStripeキーで見つかりませんでした。古いIDを解除しました。もう一度Premiumに加入してください。" }, { status: 409 });
+      return NextResponse.json({ message: "保存済みのStripe顧客IDが現在のStripeテストキーで見つかりませんでした。古いIDを解除しました。もう一度Premiumに登録してください。" }, { status: 409 });
     }
 
-    const session = await client.billingPortal.sessions.create({
+    const sessionParams: Stripe.BillingPortal.SessionCreateParams = {
       customer: dbUser.stripeCustomerId,
       return_url: `${env.appUrl}/settings`,
-    });
+    };
+    if (env.stripePortalConfigurationId) {
+      sessionParams.configuration = env.stripePortalConfigurationId;
+    }
+    const session = await client.billingPortal.sessions.create(sessionParams);
     return NextResponse.json({ url: session.url });
   } catch (error) {
     console.error("Stripe portal creation failed.", error);

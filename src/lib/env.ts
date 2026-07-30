@@ -1,4 +1,4 @@
-﻿function required(name: string) {
+function required(name: string) {
   const value = process.env[name];
   if (!value) {
     throw new Error(`${name}が設定されていません。`);
@@ -6,8 +6,19 @@
   return value;
 }
 
+function validAppUrl(value?: string) {
+  if (!value || value.includes('"') || value.includes("'")) return null;
+  try {
+    const url = new URL(value);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+    return url.origin;
+  } catch {
+    return null;
+  }
+}
+
 export const env = {
-  appUrl: process.env.APP_URL ?? process.env.NEXTAUTH_URL ?? "http://localhost:3000",
+  appUrl: validAppUrl(process.env.APP_URL) ?? validAppUrl(process.env.NEXTAUTH_URL) ?? "http://localhost:3000",
   authSecret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? "",
   databaseUrl: required("DATABASE_URL"),
   mailFrom: process.env.MAIL_FROM ?? "",
@@ -22,6 +33,7 @@ export const env = {
   stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? "",
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? "",
   stripePremiumPriceId: process.env.STRIPE_PREMIUM_PRICE_ID ?? "",
+  stripePortalConfigurationId: process.env.STRIPE_PORTAL_CONFIGURATION_ID ?? "",
   stripeTestMode: (process.env.STRIPE_SECRET_KEY ?? "").startsWith("sk_test_"),
   googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",

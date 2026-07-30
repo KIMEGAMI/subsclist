@@ -4,11 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Card } from "@/components/app-shell";
-import { MAX_USER_NAME_LENGTH } from "@/lib/app-constants";
+import { MAX_USER_NAME_LENGTH, MIN_PASSWORD_LENGTH } from "@/lib/app-constants";
 import { userErrorMessage, userMessage } from "@/lib/error-messages";
 
 const t = {
-  brand: "サブスクリスト",
+  brand: "SubscList",
   serverError: "サーバーでエラーが発生しました。",
   processFailed: "処理に失敗しました。",
   googleLogin: "Googleでログイン",
@@ -31,7 +31,7 @@ const t = {
   emailPasswordRequired: "メールアドレスとパスワードを入力してください。",
   invalidEmail: "メールアドレスの形式を確認してください。",
   registerRequired: "名前、メールアドレス、パスワードを入力してください。",
-  passwordLength: "パスワードは8文字以上で入力してください。",
+  passwordLength: `パスワードは${MIN_PASSWORD_LENGTH}文字以上で入力してください。`,
   passwordMismatch: "パスワードが一致しません。",
   firstTime: "はじめて利用する方はこちら",
   alreadyRegistered: "既に登録済みの方はこちら",
@@ -41,8 +41,26 @@ const t = {
   sending: "送信中...",
   resend: "認証メールを再送する",
   backTop: "トップへ戻る",
+  forgotPassword: "パスワードを忘れた方",
+  forgotPasswordTitle: "パスワード再設定",
+  forgotPasswordLead: "登録済みのメールアドレスを入力してください。再設定用URLを送信します。",
+  resetPasswordTitle: "新しいパスワードを設定",
+  resetPasswordLead: "メールに記載されたURLから、新しいパスワードを設定してください。",
+  resetPassword: "パスワードを再設定",
+  resetPasswordLoading: "再設定中...",
+  resetPasswordSuccess: "パスワードを再設定しました。新しいパスワードでログインしてください。",
+  missingResetToken: "再設定URLが無効です。もう一度パスワード再設定を行ってください。",
+  termsRequired: "利用規約とプライバシーポリシーへの同意が必要です。",
   pricingTitle: "料金プラン",
   pricingLead: "Freeで始めて、必要になったらPremiumへ。Premiumは月額480円で、本格運用に必要な分析、CSV、解約支援をまとめて利用できます。",
+};
+
+type ApiResponse = {
+  message?: string;
+  emailVerified?: boolean;
+  redirectTo?: string;
+  mailSent?: boolean;
+  alreadyRegistered?: boolean;
 };
 
 function AuthFrame({ title, children }: { title: string; children: React.ReactNode }) {
@@ -68,13 +86,7 @@ async function postJson(url: string, body?: unknown) {
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
-  const data = (await response.json().catch(() => ({ message: t.serverError }))) as {
-    message?: string;
-    emailVerified?: boolean;
-    redirectTo?: string;
-    mailSent?: boolean;
-    alreadyRegistered?: boolean;
-  };
+  const data = (await response.json().catch(() => ({ message: t.serverError }))) as ApiResponse;
   if (!response.ok && response.status !== 202) {
     throw new Error(userMessage(data.message, t.processFailed));
   }
@@ -139,6 +151,11 @@ export function LoginView({ googleStatus, notice }: { googleStatus?: string; not
           {t.password}
           <input value={password} onChange={(e) => setPassword(e.target.value)} className="input" type="password" />
         </label>
+        <div className="text-right">
+          <Link href="/forgot-password" className="text-sm font-bold text-blue-700 hover:text-blue-900">
+            {t.forgotPassword}
+          </Link>
+        </div>
         <button disabled={loading} className="btn-primary w-full">
           {loading ? t.loginLoading : t.login}
         </button>
@@ -154,12 +171,111 @@ export function LoginView({ googleStatus, notice }: { googleStatus?: string; not
   );
 }
 
+export function ForgotPasswordView() {
+  const [email, setEmail] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setMessage("");
+    setError("");
+    if (!email.includes("@")) return setError(t.invalidEmail);
+
+    setLoading(true);
+    try {
+      const data = await postJson("/api/auth/forgot-password", { email });
+      setMessage(data.message ?? "パスワード再設定URLを送信しました。");
+    } catch (err) {
+      setError(userErrorMessage(err, "パスワード再設定メールを送信できませんでした。"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <AuthFrame title={t.forgotPasswordTitle}>
+      <p className="mt-3 text-sm leading-6 text-slate-600">{t.forgotPasswordLead}</p>
+      <form onSubmit={submit} noValidate className="mt-5 space-y-4">
+        {message && <p className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p>}
+        {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
+        <label className="grid gap-2 text-sm font-semibold">
+          {t.email}
+          <input value={email} onChange={(e) => setEmail(e.target.value)} className="input" type="email" />
+        </label>
+        <button disabled={loading} className="btn-primary w-full">
+          {loading ? t.sending : "再設定URLを送信"}
+        </button>
+      </form>
+      <Link href="/login" className="btn-secondary mt-5 w-full">
+        {t.login}
+      </Link>
+    </AuthFrame>
+  );
+}
+
+export function ResetPasswordView({ token }: { token?: string }) {
+  const router = useRouter();
+  const [newPassword, setNewPassword] = useState("");
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState("");
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState(token ? "" : t.missingResetToken);
+  const [loading, setLoading] = useState(false);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setMessage("");
+    setError("");
+    if (!token) return setError(t.missingResetToken);
+    if (newPassword.length < MIN_PASSWORD_LENGTH) return setError(t.passwordLength);
+    if (newPassword !== newPasswordConfirm) return setError(t.passwordMismatch);
+
+    setLoading(true);
+    try {
+      const data = await postJson("/api/auth/reset-password", { token, newPassword, newPasswordConfirm });
+      setMessage(data.message ?? t.resetPasswordSuccess);
+      setTimeout(() => router.push("/login"), 1200);
+    } catch (err) {
+      setError(userErrorMessage(err, "パスワード再設定に失敗しました。"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <AuthFrame title={t.resetPasswordTitle}>
+      <p className="mt-3 text-sm leading-6 text-slate-600">{t.resetPasswordLead}</p>
+      <form onSubmit={submit} noValidate className="mt-5 space-y-4">
+        {message && <p className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p>}
+        {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
+        <label className="grid gap-2 text-sm font-semibold">
+          新しいパスワード
+          <input value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="input" type="password" minLength={MIN_PASSWORD_LENGTH} disabled={!token} />
+        </label>
+        <label className="grid gap-2 text-sm font-semibold">
+          新しいパスワード（確認）
+          <input value={newPasswordConfirm} onChange={(e) => setNewPasswordConfirm(e.target.value)} className="input" type="password" minLength={MIN_PASSWORD_LENGTH} disabled={!token} />
+        </label>
+        <button disabled={loading || !token} className="btn-primary w-full">
+          {loading ? t.resetPasswordLoading : t.resetPassword}
+        </button>
+      </form>
+      <Link href="/forgot-password" className="btn-secondary mt-5 w-full">
+        再設定URLをもう一度送る
+      </Link>
+    </AuthFrame>
+  );
+}
+
 export function RegisterView() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -170,12 +286,13 @@ export function RegisterView() {
     setMessage("");
     if (!name || !email || !password) return setError(t.registerRequired);
     if (!email.includes("@")) return setError(t.invalidEmail);
-    if (password.length < 8) return setError(t.passwordLength);
+    if (password.length < MIN_PASSWORD_LENGTH) return setError(t.passwordLength);
     if (password !== confirmPassword) return setError(t.passwordMismatch);
+    if (!termsAccepted || !privacyAccepted) return setError(t.termsRequired);
 
     setLoading(true);
     try {
-      const data = await postJson("/api/auth/register", { name, email, password });
+      const data = await postJson("/api/auth/register", { name, email, password, termsAccepted, privacyAccepted });
       if (data.message) setMessage(data.message);
       if (data.alreadyRegistered) {
         router.push(data.mailSent === false ? "/login?notice=verification-failed" : "/login?notice=verification");
@@ -212,6 +329,14 @@ export function RegisterView() {
         <label className="grid gap-2 text-sm font-semibold">
           {t.confirmPassword}
           <input value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="input" type="password" />
+        </label>
+        <label className="flex items-start gap-3 text-sm font-semibold text-slate-700">
+          <input type="checkbox" checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} className="mt-1 size-4" />
+          <span><Link href="/terms" className="text-blue-700 underline">利用規約</Link>に同意します</span>
+        </label>
+        <label className="flex items-start gap-3 text-sm font-semibold text-slate-700">
+          <input type="checkbox" checked={privacyAccepted} onChange={(e) => setPrivacyAccepted(e.target.checked)} className="mt-1 size-4" />
+          <span><Link href="/privacy" className="text-blue-700 underline">プライバシーポリシー</Link>に同意します</span>
         </label>
         <button disabled={loading} className="btn-primary w-full">
           {loading ? t.registerLoading : t.registerAndSend}

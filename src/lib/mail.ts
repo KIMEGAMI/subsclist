@@ -25,12 +25,12 @@ export async function sendVerificationEmail(email: string, token: string) {
   const verifyUrl = new URL("/api/auth/verify-email", env.appUrl);
   verifyUrl.searchParams.set("token", token);
 
-  const mail = {
+  await sendMailWithRetry({
     from: env.mailFrom,
     to: email,
-    subject: "サブスクリスト メール認証",
+    subject: "SubscList メール認証",
     text: [
-      "サブスクリストへの登録ありがとうございます。",
+      "SubscListへの登録ありがとうございます。",
       "以下のURLを開いてメール認証を完了してください。",
       "",
       verifyUrl.toString(),
@@ -38,30 +38,39 @@ export async function sendVerificationEmail(email: string, token: string) {
       "このURLの有効期限は24時間です。",
     ].join("\n"),
     html: `
-      <p>サブスクリストへの登録ありがとうございます。</p>
+      <p>SubscListへの登録ありがとうございます。</p>
       <p>以下のリンクを開いてメール認証を完了してください。</p>
-      <p><a href="${verifyUrl.toString()}">メール認証を完了する</a></p>
+      <p><a href="${escapeHtml(verifyUrl.toString())}">メール認証を完了する</a></p>
       <p>このURLの有効期限は24時間です。</p>
     `,
-  };
+  });
+}
 
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= MAX_SEND_ATTEMPTS; attempt += 1) {
-    try {
-      const transporter = createTransporter();
-      await transporter.verify();
-      await transporter.sendMail(mail);
-      return;
-    } catch (error) {
-      lastError = error;
-      console.error(`Verification email failed on attempt ${attempt}.`, error);
-      if (attempt < MAX_SEND_ATTEMPTS) {
-        await wait(RETRY_DELAY_MS);
-      }
-    }
-  }
+export async function sendPasswordResetEmail(email: string, token: string) {
+  const resetUrl = new URL("/reset-password", env.appUrl);
+  resetUrl.searchParams.set("token", token);
 
-  throw lastError instanceof Error ? lastError : new Error("認証メールを送信できませんでした。");
+  await sendMailWithRetry({
+    from: env.mailFrom,
+    to: email,
+    subject: "SubscList パスワード再設定",
+    text: [
+      "SubscListのパスワード再設定を受け付けました。",
+      "以下のURLを開いて新しいパスワードを設定してください。",
+      "",
+      resetUrl.toString(),
+      "",
+      "このURLの有効期限は1時間です。",
+      "心当たりがない場合は、このメールを破棄してください。",
+    ].join("\n"),
+    html: `
+      <p>SubscListのパスワード再設定を受け付けました。</p>
+      <p>以下のリンクを開いて新しいパスワードを設定してください。</p>
+      <p><a href="${escapeHtml(resetUrl.toString())}">パスワードを再設定する</a></p>
+      <p>このURLの有効期限は1時間です。</p>
+      <p>心当たりがない場合は、このメールを破棄してください。</p>
+    `,
+  });
 }
 
 export async function sendSubscriptionReminderEmail({
@@ -78,7 +87,7 @@ export async function sendSubscriptionReminderEmail({
   await sendMailWithRetry({
     from: env.mailFrom,
     to: email,
-    subject: `サブスクリスト ${title}`,
+    subject: `SubscList ${title}`,
     text,
     html,
   });

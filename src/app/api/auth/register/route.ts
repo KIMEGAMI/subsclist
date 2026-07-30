@@ -12,6 +12,8 @@ const schema = z.object({
   name: z.string().trim().min(1).max(MAX_USER_NAME_LENGTH),
   email: z.string().trim().email().max(MAX_EMAIL_LENGTH),
   password: z.string().min(MIN_PASSWORD_LENGTH).max(MAX_PASSWORD_LENGTH),
+  termsAccepted: z.literal(true),
+  privacyAccepted: z.literal(true),
 });
 
 const initialCategories = [
@@ -43,7 +45,7 @@ export async function POST(request: Request) {
 
   const parsed = schema.safeParse(await request.json());
   if (!parsed.success) {
-    return NextResponse.json({ message: "入力内容を確認してください。" }, { status: 400 });
+    return NextResponse.json({ message: "入力内容、利用規約、プライバシーポリシーへの同意を確認してください。" }, { status: 400 });
   }
 
   const { name, email, password } = parsed.data;
@@ -67,8 +69,7 @@ export async function POST(request: Request) {
       await clearSession();
       return NextResponse.json(
         {
-          message:
-            "このメールアドレスは登録済みですが、メール認証が未完了です。認証メールを送信できませんでした。Google SMTPの設定を確認してください。",
+          message: "このメールアドレスは登録済みですが、認証メールを送信できませんでした。メール送信設定を確認してください。",
           alreadyRegistered: true,
           mailSent: false,
         },
@@ -95,7 +96,7 @@ export async function POST(request: Request) {
       emailVerificationTokens: {
         create: {
           tokenHash,
-          expiresAt: new Date(Date.now() + 1000 * 60 * 60 * 24),
+          expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TOKEN_TTL_MS),
         },
       },
     },
@@ -108,8 +109,7 @@ export async function POST(request: Request) {
     await setSession(user.id, false);
     return NextResponse.json(
       {
-        message:
-          "登録は完了しましたが、認証メールを送信できませんでした。Google SMTPの設定を確認してから、メール認証画面で再送してください。",
+        message: "登録は完了しましたが、認証メールを送信できませんでした。メール送信設定を確認してから、メール認証画面で再送してください。",
         registered: true,
         mailSent: false,
       },

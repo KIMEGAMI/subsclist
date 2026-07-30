@@ -430,7 +430,7 @@ export function CsvDownloadButton({ disabled }: { disabled: boolean }) {
         }}
         className="btn-primary"
       >
-        CSV繧偵ム繧ｦ繝ｳ繝ｭ繝ｼ繝・
+        CSVをダウンロード
       </button>
       <CsvHelpPopover
         title="CSV出力の見方"
@@ -494,7 +494,7 @@ export function PlanSettingsForm({ plan, stripeTestMode }: { plan: "FREE" | "PRE
   const router = useRouter();
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
-  const [loading, setLoading] = useState<"checkout" | "portal" | "downgrade" | "sync" | "">("");
+  const [loading, setLoading] = useState<"checkout" | "portal" | "sync" | "">("");
   const paidPlan = plan === "PREMIUM" || plan === "LIFETIME";
 
   async function openStripe(path: "/api/stripe/checkout" | "/api/stripe/portal", mode: "checkout" | "portal") {
@@ -530,21 +530,6 @@ export function PlanSettingsForm({ plan, stripeTestMode }: { plan: "FREE" | "PRE
       setError(userErrorMessage(err, "課金状態の確認に失敗しました。"));
     } finally {
       setLoading("");
-    }
-  }
-
-  async function downgrade() {
-    setMessage("");
-    setError("");
-    setLoading("downgrade");
-    try {
-      await request("/api/settings/plan", "PUT", { plan: "FREE" });
-        setMessage("アプリ表示をFreeに変更しました。Stripeで契約中の場合は、Stripeポータルから解約も行ってください。");
-        router.refresh();
-      } catch (err) {
-        setError(userErrorMessage(err, "プラン変更に失敗しました。"));
-      } finally {
-        setLoading("");
     }
   }
 
@@ -600,11 +585,6 @@ export function PlanSettingsForm({ plan, stripeTestMode }: { plan: "FREE" | "PRE
         <button type="button" disabled={Boolean(loading)} onClick={syncBilling} className="btn-secondary">
           {loading === "sync" ? "確認中..." : "課金状態を再確認"}
         </button>
-        {paidPlan && (
-          <button type="button" disabled={Boolean(loading)} onClick={downgrade} className="btn-secondary">
-            {loading === "downgrade" ? "更新中..." : "アプリ表示をFreeに変更"}
-          </button>
-        )}
       </div>
       <p className="text-xs leading-5 text-slate-500">決済完了後にPremium表示へ切り替わらない場合は「課金状態を再確認」を押してください。通常はCheckout完了後またはWebhook受信時に自動で反映されます。</p>
     </div>
@@ -918,12 +898,12 @@ export function CsvImportForm({ disabled }: { disabled: boolean }) {
     try {
       const response = await fetch("/api/import/subscriptions", { method: "POST", body: form });
       const data = (await response.json().catch(() => ({}))) as { message?: string; created?: number; skipped?: number };
-      if (!response.ok) throw new Error(data.message ?? "繧､繝ｳ繝昴・繝医↓螟ｱ謨励＠縺ｾ縺励◆縲・");
-      setMessage(`${data.created ?? 0}莉ｶ繧貞叙繧願ｾｼ縺ｿ縺ｾ縺励◆縲ゅせ繧ｭ繝・・: ${data.skipped ?? 0}莉ｶ`);
+      if (!response.ok) throw new Error(data.message ?? "インポートに失敗しました。");
+      setMessage(`${data.created ?? 0}件を取り込みました。スキップ: ${data.skipped ?? 0}件`);
       formElement.reset();
       router.refresh();
     } catch (err) {
-      setError(userErrorMessage(err, "繧､繝ｳ繝昴・繝医↓螟ｱ謨励＠縺ｾ縺励◆縲・"));
+      setError(userErrorMessage(err, "インポートに失敗しました。"));
     } finally {
       setLoading(false);
     }
@@ -931,10 +911,10 @@ export function CsvImportForm({ disabled }: { disabled: boolean }) {
 
   return (
     <form onSubmit={submit} noValidate className="space-y-4">
-      <Field label="CSV繝輔ぃ繧､繝ｫ"><input name="file" type="file" accept=".csv,text/csv" className="input" disabled={disabled} required /></Field>
+      <Field label="CSVファイル"><input name="file" type="file" accept=".csv,text/csv" className="input" disabled={disabled} required /></Field>
       <div className="flex flex-wrap items-start gap-3">
         <p className="text-sm leading-6 text-slate-600">
-          蟇ｾ蠢懷・: 繝・け繧ｹ繝・け繝ｬ繝ｼ繝牙諢溘・1陦・目縺ｯ繝輔Ο繝ｳ繝医Ρ繝ｼ縺ｫ縺ｯ縺・ｋ縺ｮ縲∵侭驥代∬ｫ区ｱょ捉譛溘∵ｬ｡蝗樊峩譁ｰ譌･縲√き繝・ざ繝ｪ縲∵髪謇輔＞譁ｹ豕輔√し繝ｼ繝薙せURL縲∬ｧ｣邏ФRL縲√Γ繝｢縺ｮ鬨・ｱｱ繧帝・蜉帙☆繧九□縺代縺ｧ縺吶・
+          対応列: サービス名、料金、請求周期、次回更新日、カテゴリ、支払い方法、サービスURL、解約URL、メモをこの順番で入力してください。
         </p>
         <CsvHelpPopover
           title="CSVインポートの見方"
@@ -955,7 +935,7 @@ export function CsvImportForm({ disabled }: { disabled: boolean }) {
       {message && <p className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p>}
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
       <button disabled={disabled || loading} className="btn-primary">{loading ? "取り込み中..." : "CSVをインポート"}</button>
-      {disabled && <p className="text-sm font-semibold text-amber-700">CSV繧､繝ｳ繝昴・繝医・Premium髯仙ｮ壹〒縺吶・</p>}
+      {disabled && <p className="text-sm font-semibold text-amber-700">CSVインポートはPremium限定です。</p>}
     </form>
   );
 }

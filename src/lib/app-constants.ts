@@ -46,6 +46,7 @@ export const REVIEW_SCORE_WEIGHTS = {
 export const SAME_CATEGORY_REVIEW_THRESHOLD = 3;
 
 export const EMAIL_VERIFICATION_TOKEN_TTL_MS = 24 * 60 * 60 * 1000;
+export const PASSWORD_RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 export const SESSION_MAX_AGE_SECONDS = 14 * 24 * 60 * 60;
 
 export const CSV_MIN_YEARLY_GAP_DAYS = 330;
