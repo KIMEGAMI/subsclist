@@ -1,4 +1,4 @@
-import bcrypt from "bcryptjs";
+﻿import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { clearSession, hashToken } from "@/lib/auth";
@@ -11,16 +11,15 @@ const schema = z.object({
   newPasswordConfirm: z.string().min(MIN_PASSWORD_LENGTH).max(MAX_PASSWORD_LENGTH),
 });
 
-type ResetPasswordTokenRecord = {
-  id: string;
-  userId: string;
-  expiresAt: Date;
-  usedAt: Date | null;
-  passwordHash: string;
-};
-
 export async function POST(request: Request) {
-  const parsed = schema.safeParse(await request.json());
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ message: "入力内容を確認してください。" }, { status: 400 });
+  }
+
+  const parsed = schema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ message: "再設定URLまたはパスワードの入力内容を確認してください。" }, { status: 400 });
   }
@@ -29,36 +28,29 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "新しいパスワードと確認用パスワードが一致しません。" }, { status: 400 });
   }
 
-  const tokenHash = hashToken(parsed.data.token);
-  const records = await prisma.$queryRaw<ResetPasswordTokenRecord[]>`
-    SELECT
-      PasswordResetToken.id,
-      PasswordResetToken.userId,
-      PasswordResetToken.expiresAt,
-      PasswordResetToken.usedAt,
-      User.passwordHash
-    FROM PasswordResetToken
-    INNER JOIN User ON User.id = PasswordResetToken.userId
-    WHERE PasswordResetToken.tokenHash = ${tokenHash}
-    LIMIT 1
-  `;
-  const record = records[0];
+  const record = await prisma.passwordResetToken.findFirst({
+    where: { tokenHash: hashToken(parsed.data.token) },
+    include: { user: { select: { id: true, passwordHash: true } } },
+  });
 
   if (!record || record.usedAt || record.expiresAt < new Date()) {
     return NextResponse.json({ message: "パスワード再設定URLが無効、または有効期限切れです。もう一度やり直してください。" }, { status: 400 });
   }
 
-  const samePassword = await bcrypt.compare(parsed.data.newPassword, record.passwordHash);
+  const samePassword = await bcrypt.compare(parsed.data.newPassword, record.user.passwordHash);
   if (samePassword) {
     return NextResponse.json({ message: "現在とは異なるパスワードを設定してください。" }, { status: 400 });
   }
 
   await prisma.$transaction([
     prisma.user.update({
-      where: { id: record.userId },
+      where: { id: record.user.id },
       data: { passwordHash: await bcrypt.hash(parsed.data.newPassword, 12) },
     }),
-    prisma.$executeRaw`UPDATE PasswordResetToken SET usedAt = ${new Date()} WHERE userId = ${record.userId} AND usedAt IS NULL`,
+    prisma.passwordResetToken.updateMany({
+      where: { userId: record.user.id, usedAt: null },
+      data: { usedAt: new Date() },
+    }),
   ]);
   await clearSession();
 

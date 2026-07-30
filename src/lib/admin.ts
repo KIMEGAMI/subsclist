@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+﻿import { prisma } from "@/lib/prisma";
 import { DASHBOARD_ANNOUNCEMENT_MAX_ITEMS } from "@/lib/app-constants";
 import { maintenanceModeKey } from "@/lib/admin-constants";
 
@@ -18,7 +18,7 @@ export type AnnouncementRecord = {
 export const defaultAnnouncement = {
   id: "default-admin-announcement",
   title: "管理者からのお知らせ",
-  body: "メンテナンス情報や重要なお知らせは、このダッシュボード上部にコンパクトに表示されます。",
+  body: "メンテナンス情報や重要なお知らせは、このダッシュボード上部に表示されます。",
   pinned: true,
   published: true,
   createdAt: new Date("2026-07-26T00:00:00.000Z"),
@@ -72,7 +72,7 @@ export async function getAllAnnouncements() {
   `;
 }
 
-export async function getPublishedAnnouncements(limit = 3) {
+export async function getPublishedAnnouncements(limit = DASHBOARD_ANNOUNCEMENT_MAX_ITEMS) {
   const take = normalizeLimit(limit);
   const announcements = await prisma.$queryRaw<AnnouncementRecord[]>`
     SELECT id, title, body, published, pinned, createdAt, updatedAt

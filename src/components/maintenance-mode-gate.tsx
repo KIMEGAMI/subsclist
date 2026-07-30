@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
@@ -8,7 +8,7 @@ type SystemStatus = {
   isAdmin: boolean;
 };
 
-const allowedDuringMaintenance = ["/login", "/api", "/_next"];
+const allowedDuringMaintenance = ["/login", "/admin", "/api", "/_next", "/maintenance"];
 
 export function MaintenanceModeGate({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -40,7 +40,7 @@ export function MaintenanceModeGate({ children }: { children: ReactNode }) {
           <p className="text-sm font-black text-cyan-200">SubscList</p>
           <h1 className="mt-3 text-2xl font-black">ただいまメンテナンス中です</h1>
           <p className="mt-3 text-sm leading-6 text-slate-200">
-            現在、サービス改善のため一時的にアクセスを制限しています。管理者はログイン後に管理メニューから通常モードへ戻せます。
+            現在、サービス改善のため一時的にアクセスを制限しています。管理者はログイン後に管理者メニューから通常モードへ戻せます。
           </p>
           <a href="/login" className="mt-6 inline-flex rounded-lg bg-white px-4 py-2 text-sm font-black text-slate-950">
             管理者ログインへ

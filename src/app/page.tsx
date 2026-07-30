@@ -1,14 +1,14 @@
-import Image from "next/image";
+﻿import Image from "next/image";
 import Link from "next/link";
 import { Card } from "@/components/app-shell";
 import { DemoLoginButton } from "@/components/demo-login-button";
 
 const features = [
-  ["削減見込みを表示", "利用頻度、重要度、更新日をもとに、月額・年額でどれだけ削減できるかを確認できます。"],
-  ["解約まで支援", "検討中、解約予定、申請済み、完了までを記録し、解約URLやメモを一緒に管理できます。"],
-  ["CSVから取り込める", "カード明細や既存の管理表から取り込み、手入力の負担を減らします。"],
-  ["運用スコアで判断", "期限リスク、予算、見直し状況、データ充実度をまとめて、今月の優先対応を表示します。"],
-];
+  ["固定費を一覧化", "契約名、料金、更新日、解約期限、支払い履歴をまとめて確認できます。"],
+  ["見直しを支援", "金額、利用頻度、更新時期をもとに、今月確認したい契約を見つけやすくします。"],
+  ["CSVで取り込み", "カード明細や管理表から取り込み、手入力の負担を減らせます。"],
+  ["通知と記録", "更新日や無料トライアル終了、解約期限の確認漏れを防ぎます。"],
+] as const;
 
 export default function Home() {
   return (
@@ -22,10 +22,10 @@ export default function Home() {
               サブスクリプション管理システム
             </div>
             <h1 className="text-4xl font-black leading-tight tracking-tight sm:text-6xl">
-              サブスクビジネスを、もっと自由に。
+              SubscListで固定費をわかりやすく管理
             </h1>
             <p className="mt-6 text-lg leading-8 text-slate-600">
-              契約、課金、更新日、支出分析を一元管理。不要な契約の見直しと、毎月の固定費管理を支援します。
+              契約、課金、更新日、解約期限、支払い履歴を一元管理。毎月の固定費を把握し、不要な支出の見直しを支援します。
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link href="/login" className="rounded-full bg-gradient-to-r from-blue-600 via-cyan-500 to-fuchsia-500 px-7 py-4 text-center font-black text-white shadow-lg shadow-blue-200 transition hover:-translate-y-0.5 hover:shadow-xl">
@@ -38,15 +38,7 @@ export default function Home() {
             </div>
           </div>
           <div className="relative min-h-[430px] lg:min-h-[620px]">
-            <Image
-              src="/hero-subsclist.png"
-              alt="サブスクリストのトップページビジュアル"
-              fill
-              unoptimized
-              priority
-              className="object-contain object-center"
-              sizes="(min-width: 1024px) 58vw, 100vw"
-            />
+            <Image src="/hero-subsclist.png" alt="SubscListの画面イメージ" fill unoptimized priority className="object-contain object-center" sizes="(min-width: 1024px) 58vw, 100vw" />
           </div>
         </div>
         <div className="relative h-8 bg-[#f5f8ff]" />
@@ -55,10 +47,10 @@ export default function Home() {
       <section className="bg-[#f5f8ff] px-4 py-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <div className="max-w-3xl">
-            <p className="text-sm font-bold text-blue-700">課題提起</p>
-            <h2 className="mt-2 text-3xl font-bold tracking-tight">増え続ける固定費を、判断できる情報へ。</h2>
+            <p className="text-sm font-bold text-blue-700">管理の課題</p>
+            <h2 className="mt-2 text-3xl font-bold tracking-tight">増え続ける固定費を、判断できる情報へ</h2>
             <p className="mt-4 leading-7 text-slate-600">
-              契約先、料金、更新日、支払い方法が分散すると、使っていないサービスにも気づきにくくなります。サブスクリストは、更新予定と支出構造を同じ画面で確認できる管理体験を提供します。
+              サービス名、料金、更新日、支払い方法が分散すると、使っていない契約に気づきにくくなります。SubscListは更新予定と支出状況を同じ画面で確認できる体験を提供します。
             </p>
           </div>
           <div className="mt-8 grid gap-4 md:grid-cols-4">
@@ -75,14 +67,14 @@ export default function Home() {
       <section className="px-4 py-16 sm:px-6 lg:px-8">
         <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[0.9fr_1.1fr]">
           <div>
-            <p className="text-sm font-bold text-fuchsia-600">機能紹介</p>
-            <h2 className="mt-2 text-3xl font-bold">管理、分析、課金制御まで。</h2>
+            <p className="text-sm font-bold text-fuchsia-600">主な機能</p>
+            <h2 className="mt-2 text-3xl font-bold">管理、分析、支払い履歴まで対応</h2>
             <p className="mt-4 leading-7 text-slate-600">
-              サブスクCRUD、カテゴリ・支払い方法管理、分析、CSV入出力、予算管理、見直しスコア、解約支援、見直し候補の整理に対応します。認証後のデータはユーザーごとにDBで分離します。
+              サブスクCRUD、カテゴリ・支払い方法管理、CSV入出力、通知、支払い集計、見直しレポート、解約支援に対応します。
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            {["削減シミュレーション", "見直しスコア", "解約支援", "CSVインポート"].map((item) => (
+            {["契約管理", "見直しスコア", "解約支援", "CSVインポート"].map((item) => (
               <div key={item} className="rounded-lg border border-slate-100 bg-white p-5 font-bold shadow-[0_12px_30px_rgba(15,23,42,0.07)]">{item}</div>
             ))}
           </div>
