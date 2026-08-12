@@ -32,8 +32,8 @@ export async function POST() {
 
   try {
     await sendVerificationEmail(user.email, token);
-  } catch (error) {
-    console.error("Failed to send verification email from resend endpoint.", error);
+  } catch {
+    console.error("Failed to send verification email from resend endpoint.");
     return NextResponse.json({ message: "認証メールを送信できませんでした。Google SMTPの設定を確認してください。" }, { status: 500 });
   }
   return NextResponse.json({ ok: true, message: "認証メールを再送しました。" });

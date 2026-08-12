@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { clearSession, createVerificationToken, hashToken, setSession } from "@/lib/auth";
 import { EMAIL_VERIFICATION_TOKEN_TTL_MS, MAX_EMAIL_LENGTH, MAX_PASSWORD_LENGTH, MAX_USER_NAME_LENGTH, MIN_PASSWORD_LENGTH } from "@/lib/app-constants";
-import { assertMailEnv } from "@/lib/env";
+import { assertMailEnv, isProtectedAccountEmail } from "@/lib/env";
 import { userErrorMessage } from "@/lib/error-messages";
 import { sendVerificationEmail } from "@/lib/mail";
 import { prisma } from "@/lib/prisma";
@@ -49,6 +49,9 @@ export async function POST(request: Request) {
   }
 
   const { name, email, password } = parsed.data;
+  if (isProtectedAccountEmail(email)) {
+    return NextResponse.json({ message: "このメールアドレスは新規登録に使用できません。" }, { status: 403 });
+  }
   const exists = await prisma.user.findUnique({ where: { email } });
 
   if (exists?.emailVerified) {
@@ -64,8 +67,8 @@ export async function POST(request: Request) {
         alreadyRegistered: true,
         message: "このメールアドレスは登録済みですが、メール認証が未完了です。認証メールを再送しました。",
       });
-    } catch (error) {
-      console.error("Failed to resend verification email during registration.", error);
+    } catch {
+      console.error("Failed to resend verification email during registration.");
       await clearSession();
       return NextResponse.json(
         {
@@ -104,8 +107,8 @@ export async function POST(request: Request) {
 
   try {
     await sendVerificationEmail(email, token);
-  } catch (error) {
-    console.error("Failed to send verification email after registration.", error);
+  } catch {
+    console.error("Failed to send verification email after registration.");
     await setSession(user.id, false);
     return NextResponse.json(
       {

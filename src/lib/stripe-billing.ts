@@ -1,11 +1,31 @@
 import type Stripe from "stripe";
+import {
+  STRIPE_ACTIVE_SUBSCRIPTION_STATUSES,
+  STRIPE_SUBSCRIPTION_STATUS_ALL,
+  STRIPE_TRIAL_LOOKBACK_SUBSCRIPTION_LIMIT,
+} from "@/lib/app-constants";
 import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
+import { hasStripeTrial } from "@/lib/stripe-trial";
 
 export type StripeCheckoutSyncStatus = "synced" | "not_complete" | "invalid_user" | "missing_subscription";
 
 export function activePlan(status: string | null | undefined) {
-  return status === "active" || status === "trialing" ? "PREMIUM" : "FREE";
+  return STRIPE_ACTIVE_SUBSCRIPTION_STATUSES.some((activeStatus) => activeStatus === status) ? "PREMIUM" : "FREE";
+}
+
+async function markTrialUsedByUserId(userId: string) {
+  await prisma.user.updateMany({
+    where: { id: userId, trialUsedAt: null },
+    data: { trialUsedAt: new Date() },
+  });
+}
+
+async function markTrialUsedByCustomerId(customerId: string) {
+  await prisma.user.updateMany({
+    where: { stripeCustomerId: customerId, trialUsedAt: null },
+    data: { trialUsedAt: new Date() },
+  });
 }
 
 export async function syncStripeSubscription(subscription: Stripe.Subscription) {
@@ -18,11 +38,13 @@ export async function syncStripeSubscription(subscription: Stripe.Subscription) 
   };
 
   if (userId) {
-    await prisma.user.update({ where: { id: userId }, data });
+    await prisma.user.updateMany({ where: { id: userId }, data });
+    if (hasStripeTrial(subscription)) await markTrialUsedByUserId(userId);
     return;
   }
 
   await prisma.user.updateMany({ where: { stripeCustomerId: customerId }, data });
+  if (hasStripeTrial(subscription)) await markTrialUsedByCustomerId(customerId);
 }
 
 export async function syncStripeCheckoutSession(session: Stripe.Checkout.Session) {
@@ -43,6 +65,7 @@ export async function syncStripeCheckoutSession(session: Stripe.Checkout.Session
 
   const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
   if (!userId || !customerId || !subscriptionId) return false;
+  const subscription = typeof session.subscription === "string" ? null : session.subscription;
 
   await prisma.user.update({
     where: { id: userId },
@@ -52,6 +75,7 @@ export async function syncStripeCheckoutSession(session: Stripe.Checkout.Session
       stripeSubscriptionId: subscriptionId,
     },
   });
+  if (subscription && hasStripeTrial(subscription)) await markTrialUsedByUserId(userId);
   return true;
 }
 
@@ -100,7 +124,11 @@ export async function syncLatestStripeSubscriptionForUser(userId: string) {
     return activePlan(subscription.status) === "PREMIUM" ? "premium" as const : "free" as const;
   }
 
-  const subscriptions = await client.subscriptions.list({ customer: user.stripeCustomerId ?? undefined, status: "all", limit: 10 }).catch(async (error) => {
+  const subscriptions = await client.subscriptions.list({
+    customer: user.stripeCustomerId ?? undefined,
+    status: STRIPE_SUBSCRIPTION_STATUS_ALL,
+    limit: STRIPE_TRIAL_LOOKBACK_SUBSCRIPTION_LIMIT,
+  }).catch(async (error) => {
     const stripeError = error as { code?: string; param?: string; raw?: { param?: string } };
     if (stripeError.code !== "resource_missing" && stripeError.param !== "customer" && stripeError.raw?.param !== "customer") throw error;
     await prisma.user.update({
@@ -110,7 +138,8 @@ export async function syncLatestStripeSubscriptionForUser(userId: string) {
     return null;
   });
   if (!subscriptions) return "stale_customer" as const;
-  const active = subscriptions.data.find((item) => item.status === "active" || item.status === "trialing") ?? subscriptions.data[0];
+  if (subscriptions.data.some(hasStripeTrial)) await markTrialUsedByUserId(userId);
+  const active = subscriptions.data.find((item) => activePlan(item.status) === "PREMIUM") ?? subscriptions.data[0];
   if (!active) return "not_found" as const;
   await syncStripeSubscription(active);
   return activePlan(active.status) === "PREMIUM" ? "premium" as const : "free" as const;

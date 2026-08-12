@@ -3,7 +3,7 @@ import crypto from "node:crypto";
 import { cookies } from "next/headers";
 import { NextRequest, NextResponse } from "next/server";
 import { isAdminEmail, setSession } from "@/lib/auth";
-import { assertGoogleEnv, env } from "@/lib/env";
+import { assertGoogleEnv, env, isProtectedAccountEmail } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
 
 const stateCookie = "subsclist_google_oauth_state";
@@ -95,6 +95,10 @@ export async function GET(request: NextRequest) {
     const email = profile.email.toLowerCase();
     const existing = await prisma.user.findUnique({ where: { email } });
 
+    if (!existing && isProtectedAccountEmail(email)) {
+      return redirectToLogin("failed");
+    }
+
     const user = existing
       ? await prisma.user.update({
           where: { id: existing.id },
@@ -117,8 +121,8 @@ export async function GET(request: NextRequest) {
 
     await setSession(user.id, true);
     return NextResponse.redirect(new URL(isAdminEmail(user.email) ? "/admin" : "/dashboard", env.appUrl));
-  } catch (error) {
-    console.error("Google login failed.", error);
+  } catch {
+    console.error("Google login failed.");
     return redirectToLogin("failed");
   }
 }

@@ -61,8 +61,8 @@ export async function POST(request: Request) {
     await sendPasswordResetEmail(user.email, token);
 
     return NextResponse.json({ ok: true, message: successMessage });
-  } catch (error) {
-    console.error("Failed to handle password reset request.", error);
+  } catch {
+    console.error("Failed to handle password reset request.");
     return NextResponse.json({ message: "パスワード再設定メールを送信できませんでした。時間をおいて、もう一度お試しください。" }, { status: 500 });
   }
 }

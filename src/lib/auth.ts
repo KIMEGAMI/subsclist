@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import crypto from "node:crypto";
 import { DEFAULT_ADMIN_USER_EMAIL, SESSION_MAX_AGE_SECONDS } from "@/lib/app-constants";
+import { getMaintenanceMode } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
 import { assertAuthSecret, env } from "@/lib/env";
 
@@ -10,6 +11,7 @@ const sessionCookie = "subsclist_session";
 type SessionPayload = {
   userId: string;
   emailVerified: boolean;
+  sessionVersion: number;
   exp: number;
 };
 
@@ -45,12 +47,15 @@ function decodeSession(value?: string): SessionPayload | null {
 }
 
 export async function setSession(userId: string, emailVerified: boolean) {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { sessionVersion: true } });
+  if (!user) throw new Error("Session user was not found.");
   const cookieStore = await cookies();
   cookieStore.set(
     sessionCookie,
     encodeSession({
       userId,
       emailVerified,
+      sessionVersion: user.sessionVersion,
       exp: Math.floor(Date.now() / 1000) + SESSION_MAX_AGE_SECONDS,
     }),
     {
@@ -84,11 +89,14 @@ export async function getCurrentUser() {
       name: true,
       email: true,
       emailVerified: true,
+      sessionVersion: true,
       plan: true,
       createdAt: true,
     },
   });
 
+  if (!user) return null;
+  if (session.sessionVersion !== user.sessionVersion) return null;
   return user;
 }
 
@@ -112,6 +120,7 @@ export async function requireUser() {
 export async function requireVerifiedUser() {
   const user = await requireUser();
   if (!user.emailVerified) redirect("/verify-email");
+  if (!isAdminEmail(user.email) && await getMaintenanceMode()) redirect("/maintenance");
   return user;
 }
 

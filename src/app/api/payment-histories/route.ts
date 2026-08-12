@@ -1,13 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getCurrentUser } from "@/lib/auth";
-import { MAX_PAYMENT_HISTORY_MEMO_LENGTH } from "@/lib/app-constants";
+import { MAX_PAYMENT_HISTORY_MEMO_LENGTH, MAX_SUBSCRIPTION_PRICE } from "@/lib/app-constants";
+import { parseIsoCalendarDate } from "@/lib/calendar-date";
 import { prisma } from "@/lib/prisma";
 
 const schema = z.object({
   subscriptionId: z.string().min(1),
-  amount: z.coerce.number().int().min(0),
-  paidAt: z.string().min(1),
+  amount: z.coerce.number().int().min(0).max(MAX_SUBSCRIPTION_PRICE),
+  paidAt: z.string().refine((value) => parseIsoCalendarDate(value) !== null),
   memo: z.string().max(MAX_PAYMENT_HISTORY_MEMO_LENGTH).optional(),
 });
 
@@ -30,7 +31,7 @@ export async function POST(request: Request) {
       subscriptionId: subscription.id,
       userId: user.id,
       amount: parsed.data.amount,
-      paidAt: new Date(parsed.data.paidAt),
+      paidAt: parseIsoCalendarDate(parsed.data.paidAt) as Date,
       memo: parsed.data.memo || null,
     },
   });

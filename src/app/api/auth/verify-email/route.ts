@@ -35,8 +35,8 @@ export async function GET(request: NextRequest) {
 
     await setSession(record.userId, true);
     return NextResponse.redirect(verifyEmailUrl(request, "success"));
-  } catch (error) {
-    console.error("Failed to verify email token.", error);
+  } catch {
+    console.error("Failed to verify email token.");
     return NextResponse.redirect(verifyEmailUrl(request, "error"));
   }
 }

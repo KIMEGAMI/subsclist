@@ -84,22 +84,28 @@ model User {
   email                   String                   @unique
   emailVerified           DateTime?
   passwordHash            String
+  sessionVersion          Int                      @default(1)
   plan                    Plan                     @default(FREE)
   stripeCustomerId        String?
   stripeSubscriptionId    String?
+  trialUsedAt             DateTime?
   createdAt               DateTime                 @default(now())
   updatedAt               DateTime                 @updatedAt
   categories              Category[]
   cancellationChecklist   CancellationChecklistItem[]
   cancellationEvidences   CancellationEvidence[]
   emailVerificationTokens EmailVerificationToken[]
+  emailChangeTokens      EmailChangeToken[]
   notificationDeliveries  NotificationDelivery[]
+  userNotificationDeliveries UserNotificationDelivery[]
   notificationSettings    NotificationSetting[]
   paymentHistories        PaymentHistory[]
   paymentMethods          PaymentMethod[]
   passwordResetTokens     PasswordResetToken[]
   preference              UserPreference?
   subscriptions           Subscription[]
+  subscriptionUsages      SubscriptionUsage[]
+  subscriptionPriceHistories SubscriptionPriceHistory[]
 }
 
 model Announcement {
@@ -182,9 +188,72 @@ model Subscription {
   notificationDeliveries NotificationDelivery[]
   paymentHistories     PaymentHistory[]
   paymentMethod        PaymentMethod?        @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  usageRecords         SubscriptionUsage[]
+  priceHistories       SubscriptionPriceHistory[]
   user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status, nextBillingDate])
+}
+
+model EmailChangeToken {
+  id        String   @id @default(cuid())
+  userId    String
+  newEmail  String
+  tokenHash String   @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model SavingChallenge {
+  id                     String                @id @default(cuid())
+  userId                 String
+  subscriptionId         String
+  year                   Int
+  month                  Int
+  status                 String
+  potentialMonthlySaving Int
+  createdAt              DateTime              @default(now())
+  updatedAt              DateTime              @updatedAt
+
+  @@unique([userId, year, month])
+  @@index([subscriptionId])
+}
+
+model SubscriptionPriceHistory {
+  id            String       @id @default(cuid())
+  userId        String
+  subscriptionId String
+  price         Int
+  billingCycle  BillingCycle
+  customCycleDays Int?
+  effectiveFrom DateTime     @default(now())
+  createdAt     DateTime     @default(now())
+  subscription  Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, effectiveFrom])
+  @@index([subscriptionId, effectiveFrom])
+}
+
+model SubscriptionUsage {
+  id             String       @id @default(cuid())
+  userId         String
+  subscriptionId String
+  usedDate       DateTime     @db.Date
+  usageCount     Int          @default(1)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, subscriptionId, usedDate])
+  @@index([userId, usedDate])
+  @@index([subscriptionId, usedDate])
 }
 
 model CancellationChecklistItem {
@@ -243,6 +312,18 @@ model NotificationDelivery {
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([subscriptionId, type, scheduledFor])
+  @@index([userId, sentAt])
+}
+
+model UserNotificationDelivery {
+  id           String   @id @default(cuid())
+  userId       String
+  type         String
+  scheduledFor DateTime
+  sentAt       DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type, scheduledFor])
   @@index([userId, sentAt])
 }
 

@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { AppShell, Card, PageHeader } from "@/components/app-shell";
 import { DashboardAnnouncements } from "@/components/dashboard-announcements";
 import { NotificationSendButton } from "@/components/notification-send-button";
-import { AccountDeleteForm, BudgetSettingsForm, CancellationChecklist, CancellationEvidenceForm, CancellationPlanForm, CategoryForm, CsvCandidateDetectorForm, CsvDownloadButton, CsvImportForm, DeleteCancellationEvidenceButton, DeletePaymentHistoryButton, LogoutButton, PasswordSettingsForm, PaymentHistoryForm, PaymentMethodForm, PlanSettingsForm, ProfileSettingsForm, SubscriptionActions, SubscriptionForm } from "@/components/real-forms";
+import { AccountDeleteForm, BudgetSettingsForm, CancellationChecklist, CancellationEvidenceForm, CancellationPlanForm, CategoryForm, CsvCandidateDetectorForm, CsvDownloadButton, CsvImportForm, DailyUsageCheckButtons, DeleteCancellationEvidenceButton, DeletePaymentHistoryButton, EmailSettingsForm, LogoutButton, PasswordSettingsForm, PaymentHistoryForm, PaymentMethodForm, PlanSettingsForm, ProfileSettingsForm, SavingChallengeButtons, SubscriptionActions, SubscriptionForm, WeeklyReviewButton } from "@/components/real-forms";
 import { requireVerifiedUser } from "@/lib/auth";
 import {
   ALLOWED_URL_PROTOCOLS,
@@ -16,15 +16,25 @@ import {
   REVIEW_URGENT_SCORE_THRESHOLD,
   UPCOMING_DEADLINE_DAYS,
 } from "@/lib/app-constants";
-import { annualAmount, daysUntil, isoDate, MONTHS_PER_YEAR, monthlyAmount as monthly } from "@/lib/billing";
+import { annualAmount, AVERAGE_DAYS_PER_MONTH, daysUntil, isoDate, MONTHS_PER_YEAR, monthlyAmount as monthly } from "@/lib/billing";
 import { prisma } from "@/lib/prisma";
 import { env, isProtectedAccountEmail } from "@/lib/env";
 import { FREE_SUBSCRIPTION_LIMIT, hiddenByPlan, isPremiumPlan, limitByPlan } from "@/lib/plans";
 import { getPublishedAnnouncements } from "@/lib/admin";
 import { buildForecastSeries } from "@/lib/premium-insights";
 import { estimatedMonthlySaving, reviewScore } from "@/lib/subscription-insights";
+import { calculateCostPerUsage } from "@/lib/subscription-cost";
+import { calculateSubscriptionHealth } from "@/lib/subscription-health";
+import { detectUnusedSubscriptions } from "@/lib/subscription-unused";
+import { detectCategoryDuplicates } from "@/lib/subscription-duplicates";
+import { detectCancellationCandidates } from "@/lib/subscription-cancellation-candidates";
+import { buildUsagePeriods, countUsageByPeriod, countUsageInRecentDays, type UsagePeriodKey } from "@/lib/subscription-usage";
+import { needsWeeklyReview } from "@/lib/subscription-weekly-review";
+import { UNUSED_USAGE_WINDOWS } from "@/lib/subscription-unused";
 import { syncStripeCheckoutSessionById } from "@/lib/stripe-billing";
+import { stripe } from "@/lib/stripe";
 import { paymentMethodTypeLabel, stripePaymentMethodTypes } from "@/lib/stripe-payment-methods";
+import { SubscriptionSimulator } from "@/components/subscription-simulator";
 
 const yen = new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 });
 
@@ -63,6 +73,76 @@ type CancellationEvidenceView = {
 };
 
 type UserPreferenceView = { monthlyBudget: number | null; defaultNotifyDaysBefore: number; notificationHour: number };
+type StripeInvoiceView = {
+  id: string;
+  amountPaid: number;
+  amountDue: number;
+  currency: string;
+  status: string | null;
+  hostedInvoiceUrl: string | null;
+  invoicePdf: string | null;
+  createdAt: Date;
+};
+
+type SubscriptionUsageView = { subscriptionId: string; usedDate: Date };
+
+type StripeInvoicesResult = { invoices: StripeInvoiceView[]; message: string | null };
+
+async function getStripeInvoicesForSettings(customerId: string | null): Promise<StripeInvoicesResult> {
+  if (!customerId) return { invoices: [], message: "Stripeの顧客情報がまだ作成されていません。Premium契約後に請求書を確認できます。" };
+
+  try {
+    const invoices = await stripe().invoices.list({ customer: customerId, limit: 5 });
+    return {
+      invoices: invoices.data.map((invoice) => ({
+        id: invoice.id,
+        amountPaid: invoice.amount_paid,
+        amountDue: invoice.amount_due,
+        currency: invoice.currency,
+        status: invoice.status,
+        hostedInvoiceUrl: invoice.hosted_invoice_url ?? null,
+        invoicePdf: invoice.invoice_pdf ?? null,
+        createdAt: new Date(invoice.created * 1000),
+      })),
+      message: null,
+    };
+  } catch {
+    console.error("Stripe invoices fetch failed.");
+    return { invoices: [], message: "Stripe請求書を取得できませんでした。Stripe設定または顧客情報を確認してください。" };
+  }
+}
+
+function StripeInvoicesCard({ result }: { result: StripeInvoicesResult }) {
+  return (
+    <Card>
+      <h2 className="text-lg font-bold">請求書</h2>
+      <p className="mt-2 text-sm text-slate-600">Stripeで発行された直近5件の請求書を確認できます。</p>
+      {result.message ? (
+        <p className="mt-5 rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-800">{result.message}</p>
+      ) : result.invoices.length === 0 ? (
+        <div className="mt-5"><EmptyState text="表示できる請求書はまだありません。" /></div>
+      ) : (
+        <div className="mt-5 divide-y divide-slate-100 rounded-lg border border-slate-100 bg-white/70 px-4">
+          {result.invoices.map((invoice) => {
+            const amount = invoice.amountPaid > 0 ? invoice.amountPaid : invoice.amountDue;
+            return (
+              <div key={invoice.id} className="grid gap-3 py-4 md:grid-cols-[1fr_auto] md:items-center">
+                <div>
+                  <p className="font-bold text-slate-950">{dateText(invoice.createdAt)} / {invoice.status ?? "unknown"}</p>
+                  <p className="mt-1 text-sm text-slate-500">{invoice.currency.toUpperCase()} {amount.toLocaleString("ja-JP")}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {invoice.hostedInvoiceUrl && <Link href={invoice.hostedInvoiceUrl} className="btn-secondary min-h-0 px-3 py-2 text-sm" target="_blank" rel="noreferrer">表示</Link>}
+                  {invoice.invoicePdf && <Link href={invoice.invoicePdf} className="btn-secondary min-h-0 px-3 py-2 text-sm" target="_blank" rel="noreferrer">PDF</Link>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </Card>
+  );
+}
 
 type SubscriptionView = {
   id: string;
@@ -89,10 +169,168 @@ type SubscriptionView = {
   plannedCancelAt: Date | null;
   cancellationMemo: string | null;
   cancellationCompletedAt?: Date | null;
+  createdAt: Date;
   category?: CategoryView | null;
   paymentMethod?: PaymentMethodView | null;
   paymentHistories: PaymentHistoryView[];
 };
+
+const usagePeriodLabels: Array<{ key: UsagePeriodKey; label: string }> = [
+  { key: "today", label: "今日" },
+  { key: "week", label: "今週" },
+  { key: "month", label: "今月" },
+  { key: "days30", label: "過去30日" },
+  { key: "days90", label: "過去90日" },
+  { key: "days365", label: "過去365日" },
+];
+
+function usageDatesBySubscription(records: SubscriptionUsageView[]): Map<string, Date[]> {
+  return records.reduce<Map<string, Date[]>>((datesBySubscription, record) => {
+    const dates = datesBySubscription.get(record.subscriptionId) ?? [];
+    dates.push(record.usedDate);
+    datesBySubscription.set(record.subscriptionId, dates);
+    return datesBySubscription;
+  }, new Map<string, Date[]>());
+}
+
+function UsageSummary({
+  usedDates,
+  price,
+  billingCycle,
+  customCycleDays,
+}: {
+  usedDates: Date[];
+  price: number;
+  billingCycle: string;
+  customCycleDays: number | null;
+}) {
+  const counts = countUsageByPeriod(usedDates);
+  const cost = calculateCostPerUsage(price, billingCycle, customCycleDays, counts.month);
+  return (
+    <Card className="mt-5">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-lg font-bold">利用実績</h2>
+          <p className="mt-1 text-sm text-slate-600">利用した日を記録しています。1日あたりの記録は1件です。</p>
+        </div>
+        <p className="text-sm font-black text-blue-700">今月 {counts.month}日</p>
+      </div>
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        {usagePeriodLabels.map((period) => (
+          <div key={period.key} className="rounded-lg border border-slate-100 bg-white/75 p-3 shadow-sm">
+            <p className="text-sm font-bold text-slate-500">{period.label}</p>
+            <p className="mt-1 text-2xl font-black text-slate-950">{counts[period.key]}<span className="ml-1 text-sm">日</span></p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-4 rounded-lg border border-blue-100 bg-blue-50/80 p-4">
+        <p className="text-sm font-black text-blue-900">今月の費用対効果</p>
+        {cost.costPerUsage === null ? (
+          <p className="mt-1 text-sm font-semibold leading-6 text-blue-800">今月まだ利用されていないため、1利用日あたりの費用は算出できません。</p>
+        ) : (
+          <p className="mt-1 text-sm font-semibold leading-6 text-blue-800">月額換算 {yen.format(cost.monthlyCost)} / 今月 {cost.usageDays}日利用 / 1利用日あたり 約 {yen.format(Math.round(cost.costPerUsage))}</p>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+type PriceHistoryView = { id: string; price: number; billingCycle: string; customCycleDays: number | null; effectiveFrom: Date };
+
+function PriceHistoryCard({
+  histories,
+  currentPrice,
+  currentBillingCycle,
+  currentCustomCycleDays,
+}: {
+  histories: PriceHistoryView[];
+  currentPrice: number;
+  currentBillingCycle: string;
+  currentCustomCycleDays: number | null;
+}) {
+  if (histories.length === 0) return null;
+  return (
+    <Card className="mt-5">
+      <h2 className="text-lg font-bold">料金変更履歴</h2>
+      <p className="mt-1 text-sm text-slate-600">料金または請求周期を変更したとき、変更前の条件を記録します。</p>
+      <div className="mt-4 divide-y divide-slate-100">
+        {histories.map((history, index) => {
+          const nextHistory = histories[index + 1];
+          const nextPrice = nextHistory?.price ?? currentPrice;
+          const nextBillingCycle = nextHistory?.billingCycle ?? currentBillingCycle;
+          const nextCustomCycleDays = nextHistory?.customCycleDays ?? currentCustomCycleDays;
+          const beforeMonthly = monthly(history.price, history.billingCycle, history.customCycleDays);
+          const afterMonthly = monthly(nextPrice, nextBillingCycle, nextCustomCycleDays);
+          const difference = afterMonthly - beforeMonthly;
+          return <div key={history.id} className="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between"><div><p className="font-bold">{isoDate(history.effectiveFrom)}</p><p className="mt-1 text-sm text-slate-600">{yen.format(beforeMonthly)} / 月 → {yen.format(afterMonthly)} / 月</p></div><p className={`text-sm font-black ${difference > 0 ? "text-rose-700" : difference < 0 ? "text-emerald-700" : "text-slate-600"}`}>{difference > 0 ? `+${yen.format(difference)}` : difference < 0 ? `-${yen.format(Math.abs(difference))}` : "変更なし"}</p></div>;
+        })}
+      </div>
+    </Card>
+  );
+}
+
+function HealthScoreCard({ result }: { result: ReturnType<typeof calculateSubscriptionHealth> }) {
+  return (
+    <Card className="mb-5 border-emerald-100 bg-emerald-50/70">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-sm font-black text-emerald-800">サブスク健康度</p>
+          <p className="mt-1 text-4xl font-black text-slate-950">{result.score}<span className="text-lg"> / 100</span></p>
+          <p className="mt-1 text-sm font-bold text-emerald-800">{result.label}</p>
+        </div>
+        <div className="max-w-xl space-y-1 text-sm font-semibold leading-6 text-slate-700">
+          {result.reasons.length === 0 ? <p>現在の登録状況に大きな見直し要因は見つかっていません。</p> : result.reasons.map((reason) => <p key={reason}>{reason}</p>)}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function UnusedSubscriptionsCard({ items }: { items: ReturnType<typeof detectUnusedSubscriptions> }) {
+  return (
+    <Card className="mb-5">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold">未使用の可能性</h2>
+          <p className="mt-1 text-sm text-slate-600">登録後に十分な期間があり、利用記録がない契約だけを表示します。</p>
+        </div>
+        <Link href="/review" className="text-sm font-semibold text-blue-700">見直しへ</Link>
+      </div>
+      <div className="mt-4 divide-y divide-slate-100">
+        {items.length === 0 ? <EmptyState text="現在、未使用と判断できる契約はありません。" /> : items.slice(0, 5).map((item) => (
+          <Link key={item.id} href={`/subscriptions/${item.id}`} className="flex items-center justify-between gap-3 py-3">
+            <span className="font-bold text-slate-950">{item.name}</span>
+            <span className="rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-800">{item.unusedDays}日未使用</span>
+          </Link>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function CategoryDuplicatesCard({ groups }: { groups: ReturnType<typeof detectCategoryDuplicates> }) {
+  return (
+    <Card className="mb-5">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="text-lg font-bold">カテゴリ重複の可能性</h2>
+          <p className="mt-1 text-sm text-slate-600">同じカテゴリ内の複数契約を、利用日数が少ない順に確認できます。</p>
+        </div>
+        <Link href="/review" className="text-sm font-semibold text-blue-700">見直しへ</Link>
+      </div>
+      <div className="mt-4 space-y-3">
+        {groups.length === 0 ? <EmptyState text="カテゴリ重複の可能性はありません。" /> : groups.map((group) => (
+          <div key={group.categoryName} className="rounded-lg border border-slate-100 bg-white/75 p-4">
+            <div className="flex items-center justify-between gap-3"><p className="font-black">{group.categoryName}</p><p className="font-black text-slate-950">月額 {yen.format(group.monthlyCost)}</p></div>
+            <div className="mt-3 space-y-2">
+              {group.subscriptions.map((subscription) => <Link key={subscription.id} href={`/subscriptions/${subscription.id}`} className="flex items-center justify-between gap-3 text-sm"><span className="font-semibold text-slate-700">{subscription.name}</span><span className="text-slate-500">30日 {subscription.usageDays30}日</span></Link>)}
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
 
 function EmptyState({ text }: { text: string }) {
   return <p className="rounded-lg border border-dashed border-slate-200 bg-white/70 p-4 text-sm font-semibold text-slate-500">{text}</p>;
@@ -332,6 +570,32 @@ function dateText(value?: Date | null) {
   return value ? isoDate(value) : "未設定";
 }
 
+function notificationTypeLabel(type: string) {
+  if (type === "renewal") return "更新日のお知らせ";
+  if (type === "trial") return "無料トライアル終了";
+  if (type === "cancellation") return "解約期限";
+  if (type === "weekly_review") return "今週の利用確認";
+  if (type === "unused_30") return "30日間未使用";
+  if (type === "unused_60") return "60日間未使用";
+  if (type === "unused_90") return "90日間未使用";
+  if (type === "price_increase") return "値上げ登録";
+  return "通知";
+}
+
+function notificationSentAt(value: Date) {
+  return new Intl.DateTimeFormat("ja-JP", {
+    dateStyle: "medium",
+    timeStyle: "short",
+    timeZone: "Asia/Tokyo",
+  }).format(value);
+}
+
+function userNotificationTypeLabel(type: string) {
+  if (type === "budget_overrun") return "月額予算の超過";
+  if (type === "monthly_saving_challenge") return "月次削減チャレンジ";
+  return "アカウント通知";
+}
+
 function serviceIcon(item: { logoUrl?: string | null; serviceUrl?: string | null; name: string }) {
   if (item.logoUrl) return item.logoUrl;
   if (!item.serviceUrl) return null;
@@ -393,9 +657,179 @@ const defaultCancellationChecklist = [
   "次回請求が止まっているか確認する",
 ];
 
+
+type DailyCheckItem = SubscriptionView & { dailyReason: string; dailyScore: number };
+
+function dailyActionReason(item: SubscriptionView) {
+  if (item.trialEndsAt && daysUntil(item.trialEndsAt) <= UPCOMING_DEADLINE_DAYS) return "無料トライアル終了が近い";
+  if (item.cancellationDeadline && daysUntil(item.cancellationDeadline) <= UPCOMING_DEADLINE_DAYS) return "解約期限が近い";
+  if (daysUntil(item.nextBillingDate) <= 1) return "支払い予定が近い";
+  if (item.usageFrequency === "UNKNOWN") return "利用状況が未設定";
+  if (item.usageFrequency === "RARELY") return "最近使っていない候補";
+  if (needsReview(item.lastReviewedAt)) return "見直し日を更新したい";
+  return "今日の利用確認";
+}
+
+function dailyActionScore(item: SubscriptionView) {
+  const due = daysUntil(item.nextBillingDate);
+  const trialDue = item.trialEndsAt ? daysUntil(item.trialEndsAt) : 999;
+  const cancelDue = item.cancellationDeadline ? daysUntil(item.cancellationDeadline) : 999;
+  return (
+    (due <= 0 ? 50 : due <= 1 ? 42 : due <= 7 ? 28 : 0) +
+    (trialDue <= 7 ? 35 : 0) +
+    (cancelDue <= 7 ? 35 : 0) +
+    (item.usageFrequency === "UNKNOWN" ? 22 : 0) +
+    (item.usageFrequency === "RARELY" ? 26 : 0) +
+    (needsReview(item.lastReviewedAt) ? 18 : 0) +
+    Math.min(20, Math.round(monthly(item.price, item.billingCycle, item.customCycleDays) / 300))
+  );
+}
+
+function DailyCommandCenter({
+  todayDue,
+  weekDue,
+  checkItems,
+  monthlyTotal,
+  budget,
+  usedTodayIds,
+}: {
+  todayDue: SubscriptionView[];
+  weekDue: SubscriptionView[];
+  checkItems: DailyCheckItem[];
+  monthlyTotal: number;
+  budget: number | null;
+  usedTodayIds: Set<string>;
+}) {
+  const weekTotal = weekDue.reduce((sum, item) => sum + monthly(item.price, item.billingCycle, item.customCycleDays), 0);
+  const budgetRemaining = budget === null ? null : budget - monthlyTotal;
+  const primary = checkItems[0] ?? null;
+
+  return (
+    <Card className="mb-5 border-blue-200 bg-gradient-to-br from-white/95 to-blue-50/90">
+      <div className="grid gap-5 xl:grid-cols-[0.95fr_1.05fr]">
+        <div>
+          <p className="text-xs font-black uppercase text-blue-700">今日の確認</p>
+          <h2 className="mt-2 text-xl font-black text-slate-950">毎日見るべき固定費の動き</h2>
+          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+            <MiniMetric label="今日までの支払い" value={`${todayDue.length}件`} />
+            <MiniMetric label="7日以内の支払い" value={yen.format(weekTotal)} />
+            <MiniMetric label="今月の残り予算" value={budgetRemaining === null ? "未設定" : yen.format(budgetRemaining)} />
+          </div>
+          <div className="mt-4 rounded-lg border border-white/80 bg-white/75 p-4">
+            <p className="text-sm font-bold text-slate-700">今日の一手</p>
+            {primary ? (
+              <div className="mt-3 grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
+                <div>
+                  <Link href={`/subscriptions/${primary.id}`} className="font-black text-slate-950 hover:text-blue-700">{primary.name}</Link>
+                  <p className="mt-1 text-sm leading-6 text-slate-600">{primary.dailyReason} / 次回更新 {dateText(primary.nextBillingDate)} / {yen.format(monthly(primary.price, primary.billingCycle, primary.customCycleDays))}/月</p>
+                </div>
+                <DailyUsageCheckButtons id={primary.id} compact usedToday={usedTodayIds.has(primary.id)} />
+              </div>
+            ) : (
+              <EmptyState text="今日確認する契約はありません。サブスクを登録すると毎日の確認項目が表示されます。" />
+            )}
+          </div>
+        </div>
+        <div>
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-bold">使った・使ってないチェック</h2>
+            <Link href="/subscriptions" className="text-sm font-semibold text-blue-700">一覧へ</Link>
+          </div>
+          <div className="mt-4 divide-y divide-slate-100 rounded-lg border border-white/80 bg-white/75 px-4">
+            {checkItems.length === 0 ? (
+              <div className="py-4"><EmptyState text="チェック対象はありません。" /></div>
+            ) : (
+              checkItems.slice(0, 3).map((item) => (
+                <div key={item.id} className="grid gap-3 py-4 lg:grid-cols-[1fr_auto] lg:items-center">
+                  <div>
+                    <Link href={`/subscriptions/${item.id}`} className="font-bold text-slate-950 hover:text-blue-700">{item.name}</Link>
+                    <p className="mt-1 text-sm text-slate-500">{item.dailyReason} / 利用頻度 {usageLabel(item.usageFrequency)}</p>
+                  </div>
+                  <DailyUsageCheckButtons id={item.id} compact usedToday={usedTodayIds.has(item.id)} />
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+function TodaySubscListCard({
+  dailyFixedCost,
+  currentMonthPayment,
+  nextPayment,
+  unusedCount,
+  candidateCount,
+  annualSaving,
+  healthScore,
+  premium,
+}: {
+  dailyFixedCost: number;
+  currentMonthPayment: number;
+  nextPayment: SubscriptionView | null;
+  unusedCount: number;
+  candidateCount: number;
+  annualSaving: number;
+  healthScore: ReturnType<typeof calculateSubscriptionHealth>;
+  premium: boolean;
+}) {
+  return (
+    <Card className="mb-5 border-blue-200 bg-gradient-to-br from-white/95 via-cyan-50/90 to-blue-50/80">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div><p className="text-xs font-black uppercase text-blue-700">Today</p><h2 className="mt-1 text-xl font-black text-slate-950">今日のSubscList</h2></div>
+        <p className="text-sm font-semibold text-slate-600">固定費と見直しの要点をまとめています。</p>
+      </div>
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <MiniMetric label="今日の固定費（概算）" value={`約 ${yen.format(dailyFixedCost)}`} />
+        <MiniMetric label="今月の支払い予定" value={yen.format(currentMonthPayment)} />
+        <MiniMetric label="今月未使用" value={`${unusedCount}件`} />
+        <MiniMetric label="解約候補" value={`${candidateCount}件`} />
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-3">
+        <div className="rounded-lg border border-white/80 bg-white/75 p-4"><p className="text-sm font-bold text-slate-500">次の支払い</p>{nextPayment ? <Link href={`/subscriptions/${nextPayment.id}`} className="mt-2 block"><p className="font-black text-slate-950">{nextPayment.name}</p><p className="mt-1 text-sm font-semibold text-slate-600">{isoDate(nextPayment.nextBillingDate)} / {yen.format(nextPayment.price)}</p></Link> : <p className="mt-2 text-sm font-semibold text-slate-500">予定はありません。</p>}</div>
+        <div className="rounded-lg border border-white/80 bg-white/75 p-4"><p className="text-sm font-bold text-slate-500">年間削減可能額</p><p className="mt-2 text-2xl font-black text-slate-950">{premium ? yen.format(annualSaving) : "Premium"}</p><Link href="/review" className="mt-2 inline-block text-sm font-bold text-blue-700">見直しレポートへ</Link></div>
+        <div className="rounded-lg border border-white/80 bg-white/75 p-4"><p className="text-sm font-bold text-slate-500">健康スコア</p><p className="mt-2 text-2xl font-black text-slate-950">{healthScore.score}<span className="text-sm"> / 100</span></p><p className="mt-1 text-sm font-semibold text-slate-600">{healthScore.label}</p></div>
+      </div>
+    </Card>
+  );
+}
+
+function WeeklyReviewCard({ items }: { items: SubscriptionView[] }) {
+  if (items.length === 0) return null;
+
+  return (
+    <Card className="border-violet-100 bg-white/95">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="text-sm font-black text-violet-700">今週の確認</p>
+          <h2 className="mt-1 text-xl font-black text-slate-950">使い続ける契約だけ、確認を残す</h2>
+          <p className="mt-1 text-sm leading-6 text-slate-600">過去7日に利用記録がなく、見直しから7日以上経った契約です。</p>
+        </div>
+        <Link href="/review" className="text-sm font-bold text-violet-700 hover:text-violet-900">見直し一覧を開く</Link>
+      </div>
+      <div className="mt-4 grid gap-3 lg:grid-cols-3">
+        {items.map((item) => (
+          <div key={item.id} className="rounded-lg border border-violet-100 bg-violet-50/50 p-4">
+            <p className="truncate font-black text-slate-900">{item.name}</p>
+            <p className="mt-1 text-sm text-slate-600">最終見直し {item.lastReviewedAt ? isoDate(item.lastReviewedAt) : "未記録"}</p>
+            <div className="mt-3 flex items-center justify-between gap-3">
+              <WeeklyReviewButton id={item.id} />
+              <Link href={`/subscriptions/${item.id}`} className="text-sm font-bold text-violet-700 hover:text-violet-900">詳細</Link>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 export async function DashboardView() {
   const user = await requireVerifiedUser();
-  const [allSubscriptions, preference, announcements] = (await Promise.all([
+  const usagePeriods = buildUsagePeriods();
+  const usageStart = usagePeriods.find((period) => period.key === "days365")?.start;
+  const [allSubscriptions, preference, announcements, usageRecords] = (await Promise.all([
     prisma.subscription.findMany({
       where: { userId: user.id, deletedAt: null },
       include: { category: true, paymentMethod: true },
@@ -403,8 +837,18 @@ export async function DashboardView() {
     }),
     prisma.userPreference.findUnique({ where: { userId: user.id } }),
     getPublishedAnnouncements(DASHBOARD_ANNOUNCEMENT_MAX_ITEMS),
-  ])) as unknown as [SubscriptionView[], UserPreferenceView | null, AnnouncementView[]];
+    prisma.subscriptionUsage.findMany({
+      where: { userId: user.id, ...(usageStart ? { usedDate: { gte: usageStart } } : {}) },
+      select: { subscriptionId: true, usedDate: true },
+    }),
+  ])) as unknown as [SubscriptionView[], UserPreferenceView | null, AnnouncementView[], SubscriptionUsageView[]];
   const subscriptions = limitByPlan(allSubscriptions, user.plan);
+  const usageBySubscription = usageDatesBySubscription(usageRecords);
+  const usedTodayIds = new Set(
+    Array.from(usageBySubscription.entries())
+      .filter(([, usedDates]) => countUsageByPeriod(usedDates).today > 0)
+      .map(([subscriptionId]) => subscriptionId),
+  );
   const hiddenCount = hiddenByPlan(allSubscriptions.length, user.plan);
   const active = subscriptions.filter((item) => item.status === "ACTIVE");
   const monthlyTotal = active.reduce((sum, item) => sum + monthly(item.price, item.billingCycle, item.customCycleDays), 0);
@@ -435,7 +879,69 @@ export async function DashboardView() {
     return sum + Number(Boolean(item.categoryId)) + Number(Boolean(item.paymentMethodId)) + Number(item.usageFrequency !== "UNKNOWN") + Number(Boolean(item.lastReviewedAt));
   }, 0);
   const dataQuality = active.length ? Math.round((filledFields / (active.length * 4)) * 100) : 100;
+  const todayDueItems = active.filter((item) => daysUntil(item.nextBillingDate) <= 0);
+  const weekDueItems = active.filter((item) => daysUntil(item.nextBillingDate) >= 0 && daysUntil(item.nextBillingDate) <= 7);
+  const dailyCheckItems = active
+    .map((item) => ({ ...item, dailyReason: dailyActionReason(item), dailyScore: dailyActionScore(item) }))
+    .sort((a, b) => b.dailyScore - a.dailyScore || daysUntil(a.nextBillingDate) - daysUntil(b.nextBillingDate))
+    .slice(0, 5);
   const budgetExceeded = Boolean(budget && monthlyTotal > budget);
+  const hasUsageData = usageRecords.length > 0;
+  const unusedThisMonthCount = hasUsageData
+    ? active.filter((item) => countUsageByPeriod(usageBySubscription.get(item.id) ?? []).month === 0).length
+    : 0;
+  const unusedNinetyDaysCount = hasUsageData
+    ? active.filter((item) => countUsageByPeriod(usageBySubscription.get(item.id) ?? []).days90 === 0).length
+    : 0;
+  const healthScore = calculateSubscriptionHealth({
+    hasUsageData,
+    unusedThisMonthCount,
+    unusedNinetyDaysCount,
+    duplicateCategoryCount,
+    budgetExceeded,
+    cancellationCandidateCount: lowUsageCount,
+  });
+  const unusedSubscriptions = hasUsageData
+    ? detectUnusedSubscriptions(active.map((item) => {
+      const usageCounts = countUsageByPeriod(usageBySubscription.get(item.id) ?? []);
+      return {
+        id: item.id,
+        name: item.name,
+        createdAt: item.createdAt,
+        usageDays30: usageCounts.days30,
+        usageDays60: countUsageInRecentDays(usageBySubscription.get(item.id) ?? [], UNUSED_USAGE_WINDOWS[1]),
+        usageDays90: usageCounts.days90,
+      };
+    }))
+    : [];
+  const categoryDuplicates = detectCategoryDuplicates(active.map((item) => ({
+    id: item.id,
+    name: item.name,
+    categoryName: item.category?.name ?? null,
+    monthlyCost: monthly(item.price, item.billingCycle, item.customCycleDays),
+    usageDays30: countUsageByPeriod(usageBySubscription.get(item.id) ?? []).days30,
+  })));
+  const duplicateCategoryIds = new Set(categoryDuplicates.flatMap((group) => group.subscriptions.map((subscription) => subscription.id)));
+  const highestMonthlyCost = active.reduce((highest, item) => Math.max(highest, monthly(item.price, item.billingCycle, item.customCycleDays)), 0);
+  const cancellationCandidates = detectCancellationCandidates(active.map((item) => {
+    const usageCounts = countUsageByPeriod(usageBySubscription.get(item.id) ?? []);
+    return {
+      id: item.id,
+      name: item.name,
+      monthlyCost: monthly(item.price, item.billingCycle, item.customCycleDays),
+      unusedDays: usageCounts.days90 === 0 && hasUsageData ? 90 : usageCounts.days30 === 0 && hasUsageData ? 30 : 0,
+      usageFrequency: item.usageFrequency,
+      priority: item.priority,
+      duplicateCategory: duplicateCategoryIds.has(item.id),
+      isHighCost: highestMonthlyCost > 0 && monthly(item.price, item.billingCycle, item.customCycleDays) === highestMonthlyCost,
+    };
+  }), MONTHS_PER_YEAR);
+  const now = new Date();
+  const currentMonthPayment = active.filter((item) => item.nextBillingDate.getFullYear() === now.getFullYear() && item.nextBillingDate.getMonth() === now.getMonth()).reduce((total, item) => total + item.price, 0);
+  const nextPayment = active.find((item) => daysUntil(item.nextBillingDate) >= 0) ?? null;
+  const dailyFixedCost = monthlyTotal / AVERAGE_DAYS_PER_MONTH;
+  const candidateAnnualSaving = cancellationCandidates.reduce((total, candidate) => total + candidate.annualSaving, 0);
+  const weeklyReviewItems = active.filter((item) => needsWeeklyReview({ lastReviewedAt: item.lastReviewedAt, usedDates: usageBySubscription.get(item.id) ?? [] })).slice(0, 3);
   const budgetPenalty = budgetExceeded ? Math.min(20, Math.round(((monthlyTotal - (budget ?? 0)) / monthlyTotal) * 30)) : 0;
   const operationScore = Math.max(0, 100 - Math.min(30, urgentItems.length * 10) - Math.min(25, reviewPriorityCount * 5) - Math.min(15, lowUsageCount * 5) - Math.max(0, 80 - dataQuality) - budgetPenalty);
   const categoryTotals = active.reduce<Record<string, number>>((acc, item) => {
@@ -449,6 +955,12 @@ export async function DashboardView() {
       <PageHeader title="ダッシュボード" description="登録済みサブスクリプションの月額、更新予定、期限リスク、見直し候補を確認します。" action={<Link href="/subscriptions/new" className="btn-primary">サブスク追加</Link>} />
       <SetupChecklistCard subscriptionCount={allSubscriptions.length} hasCategory={active.some((item) => Boolean(item.categoryId))} hasPaymentMethod={active.some((item) => Boolean(item.paymentMethodId))} hasBudget={Boolean(budget)} hasReviewData={active.some((item) => item.usageFrequency !== "UNKNOWN" && Boolean(item.lastReviewedAt))} />
       <PlanLimitBanner hiddenCount={hiddenCount} />
+      <TodaySubscListCard dailyFixedCost={dailyFixedCost} currentMonthPayment={currentMonthPayment} nextPayment={nextPayment} unusedCount={unusedThisMonthCount} candidateCount={cancellationCandidates.length} annualSaving={candidateAnnualSaving} healthScore={healthScore} premium={isPremiumPlan(user.plan)} />
+      <WeeklyReviewCard items={weeklyReviewItems} />
+      <DailyCommandCenter todayDue={todayDueItems} weekDue={weekDueItems} checkItems={dailyCheckItems} monthlyTotal={monthlyTotal} budget={budget} usedTodayIds={usedTodayIds} />
+      <HealthScoreCard result={healthScore} />
+      <UnusedSubscriptionsCard items={unusedSubscriptions} />
+      <CategoryDuplicatesCard groups={categoryDuplicates} />
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,24rem)]">
         <div className="grid gap-4 sm:grid-cols-2">
           {[
@@ -466,17 +978,23 @@ export async function DashboardView() {
         </div>
         <DashboardAnnouncements announcements={announcements} />
       </div>
-      <PremiumValueCard monthlyTotal={monthlyTotal} saving={saving} reviewCount={reviewItems.length} urgentCount={urgentItems.length} />
-      <OperationalCommandCard score={operationScore} dataQuality={dataQuality} urgentCount={urgentItems.length} reviewCount={reviewPriorityCount} lowUsageCount={lowUsageCount} budgetRate={budget ? budgetRate : 0} budgetExceeded={budgetExceeded} />
-      <PremiumForecastCard
-        series={forecastSeries}
-        forecastTotal={forecastTotal}
-        peakMonth={peakForecastMonth}
-        cancellationCoverage={cancellationCoverage}
-        missingCancellationCount={active.length - cancelableCount}
-        duplicateCategoryCount={duplicateCategoryCount}
-        duplicateCategoryGroups={duplicateCategoryGroups}
-      />
+      {isPremiumPlan(user.plan) ? (
+        <>
+          <PremiumValueCard monthlyTotal={monthlyTotal} saving={saving} reviewCount={reviewItems.length} urgentCount={urgentItems.length} />
+          <OperationalCommandCard score={operationScore} dataQuality={dataQuality} urgentCount={urgentItems.length} reviewCount={reviewPriorityCount} lowUsageCount={lowUsageCount} budgetRate={budget ? budgetRate : 0} budgetExceeded={budgetExceeded} />
+          <PremiumForecastCard
+            series={forecastSeries}
+            forecastTotal={forecastTotal}
+            peakMonth={peakForecastMonth}
+            cancellationCoverage={cancellationCoverage}
+            missingCancellationCount={active.length - cancelableCount}
+            duplicateCategoryCount={duplicateCategoryCount}
+            duplicateCategoryGroups={duplicateCategoryGroups}
+          />
+        </>
+      ) : (
+        <div className="mt-6"><PremiumOnlyNotice title="見直し・予測・運用分析" description="Premiumでは削減見込み、優先アクション、12ヶ月の支払い予測、解約導線の不足を実データから確認できます。" /></div>
+      )}
       {budget && (
         <Card className="mt-6">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -548,12 +1066,20 @@ export async function DashboardView() {
 
 export async function SubscriptionsView() {
   const user = await requireVerifiedUser();
-  const allSubscriptions = (await prisma.subscription.findMany({
-    where: { userId: user.id, deletedAt: null },
-    include: { category: true, paymentMethod: true },
-    orderBy: { nextBillingDate: "asc" },
-  })) as unknown as SubscriptionView[];
+  const usageStart = buildUsagePeriods().find((period) => period.key === "days365")?.start;
+  const [allSubscriptions, usageRecords] = (await Promise.all([
+    prisma.subscription.findMany({
+      where: { userId: user.id, deletedAt: null },
+      include: { category: true, paymentMethod: true },
+      orderBy: { nextBillingDate: "asc" },
+    }),
+    prisma.subscriptionUsage.findMany({
+      where: { userId: user.id, ...(usageStart ? { usedDate: { gte: usageStart } } : {}) },
+      select: { subscriptionId: true, usedDate: true },
+    }),
+  ])) as unknown as [SubscriptionView[], SubscriptionUsageView[]];
   const subscriptions = limitByPlan(allSubscriptions, user.plan);
+  const usageBySubscription = usageDatesBySubscription(usageRecords);
   const hiddenCount = hiddenByPlan(allSubscriptions.length, user.plan);
   return (
     <AppShell>
@@ -562,7 +1088,7 @@ export async function SubscriptionsView() {
       {subscriptions.length === 0 ? <Card><EmptyState text="まだサブスクリプションが登録されていません。" /></Card> : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {subscriptions.map((item) => (
-            <Link key={item.id} href={`/subscriptions/${item.id}`} className="group rounded-lg border border-white/75 bg-white/92 p-5 shadow-[0_14px_35px_rgba(15,23,42,0.07)] backdrop-blur-xl transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-[0_22px_48px_rgba(37,99,235,0.14)]">
+            <div key={item.id} className="group rounded-lg border border-white/75 bg-white/92 p-5 shadow-[0_14px_35px_rgba(15,23,42,0.07)] backdrop-blur-xl transition hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-[0_22px_48px_rgba(37,99,235,0.14)]">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex min-w-0 items-center gap-3">
                   {serviceIcon(item) ? (
@@ -579,7 +1105,18 @@ export async function SubscriptionsView() {
               <div className="mt-4 rounded-lg bg-slate-50/80 p-3 text-sm font-semibold text-slate-600">
                 次回更新 {isoDate(item.nextBillingDate)} / {item.paymentMethod?.name ?? "未設定"}
               </div>
-            </Link>
+              <div className="mt-3">
+                <DailyUsageCheckButtons id={item.id} compact usedToday={countUsageByPeriod(usageBySubscription.get(item.id) ?? []).today > 0} />
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-2">
+                <Link href={`/subscriptions/${item.id}`} className="btn-secondary min-h-0 justify-center px-3 py-2 text-sm">
+                  詳細
+                </Link>
+                <Link href={`/subscriptions/${item.id}/edit`} className="btn-primary min-h-0 justify-center px-3 py-2 text-sm">
+                  編集
+                </Link>
+              </div>
+            </div>
           ))}
         </div>
       )}
@@ -589,10 +1126,12 @@ export async function SubscriptionsView() {
 
 export async function SubscriptionFormView({ id }: { id?: string }) {
   const user = await requireVerifiedUser();
-  const [subscription, categories, paymentMethods] = await Promise.all([
+  const [subscription, categories, paymentMethods, preference, activeSubscriptions] = await Promise.all([
     id ? prisma.subscription.findFirst({ where: { id, userId: user.id, deletedAt: null } }) : Promise.resolve(null),
     prisma.category.findMany({ where: { userId: user.id }, orderBy: { name: "asc" } }),
     prisma.paymentMethod.findMany({ where: { userId: user.id, type: { in: [...stripePaymentMethodTypes] } }, orderBy: { name: "asc" } }),
+    prisma.userPreference.findUnique({ where: { userId: user.id } }),
+    prisma.subscription.findMany({ where: { userId: user.id, deletedAt: null, status: "ACTIVE", ...(id ? { id: { not: id } } : {}) }, select: { price: true, billingCycle: true, customCycleDays: true } }),
   ]);
   if (id && !subscription) notFound();
   if (!id && !isPremiumPlan(user.plan)) {
@@ -601,10 +1140,11 @@ export async function SubscriptionFormView({ id }: { id?: string }) {
       return <AppShell><PageHeader title="サブスク登録" description="Freeプランの登録上限に達しています。" /><PremiumOnlyNotice title="Freeプランの登録上限に達しています" description={`Freeプランではサブスク登録は${FREE_SUBSCRIPTION_LIMIT}件までです。Premiumに変更すると無制限に登録できます。`} /></AppShell>;
     }
   }
+  const currentMonthlyTotal = activeSubscriptions.reduce((total, item) => total + monthly(item.price, item.billingCycle, item.customCycleDays), 0);
   return (
     <AppShell>
       <PageHeader title={subscription ? "サブスク編集" : "サブスク登録"} description="サブスクリプション情報をDBへ保存します。" />
-      <Card><SubscriptionForm subscription={subscription} categories={categories} paymentMethods={paymentMethods} /></Card>
+      <Card><SubscriptionForm subscription={subscription} categories={categories} paymentMethods={paymentMethods} monthlyBudget={preference?.monthlyBudget ?? null} currentMonthlyTotal={currentMonthlyTotal} defaultNotifyDaysBefore={preference?.defaultNotifyDaysBefore ?? DEFAULT_NOTIFY_DAYS_BEFORE} /></Card>
     </AppShell>
   );
 }
@@ -616,6 +1156,17 @@ export async function SubscriptionDetailView({ id }: { id: string }) {
     include: { category: true, paymentMethod: true, paymentHistories: { orderBy: { paidAt: "desc" } } },
   })) as unknown as SubscriptionView | null;
   if (!item) notFound();
+  const usageStart = buildUsagePeriods().find((period) => period.key === "days365")?.start;
+  const usageRecords = (await prisma.subscriptionUsage.findMany({
+    where: { userId: user.id, subscriptionId: item.id, ...(usageStart ? { usedDate: { gte: usageStart } } : {}) },
+    select: { usedDate: true },
+  })) as Array<{ usedDate: Date }>;
+  const usedDates = usageRecords.map((record) => record.usedDate);
+  const priceHistories = (await prisma.subscriptionPriceHistory.findMany({
+    where: { userId: user.id, subscriptionId: item.id },
+    select: { id: true, price: true, billingCycle: true, customCycleDays: true, effectiveFrom: true },
+    orderBy: { effectiveFrom: "asc" },
+  })) as PriceHistoryView[];
   const sameCategoryCount = item.categoryId
     ? await prisma.subscription.count({ where: { userId: user.id, deletedAt: null, status: "ACTIVE", categoryId: item.categoryId } })
     : 1;
@@ -681,9 +1232,13 @@ export async function SubscriptionDetailView({ id }: { id: string }) {
         </Card>
         <Card>
           <h2 className="mb-4 font-bold">操作</h2>
+          <DailyUsageCheckButtons id={item.id} usedToday={countUsageByPeriod(usedDates).today > 0} />
+          <div className="my-4 border-t border-slate-100" />
           <SubscriptionActions id={item.id} />
         </Card>
       </div>
+      <UsageSummary usedDates={usedDates} price={item.price} billingCycle={item.billingCycle} customCycleDays={item.customCycleDays} />
+      {isPremiumPlan(user.plan) && <PriceHistoryCard histories={priceHistories} currentPrice={item.price} currentBillingCycle={item.billingCycle} currentCustomCycleDays={item.customCycleDays} />}
       {isPremiumPlan(user.plan) ? (
         <>
           <Card className="mt-5">
@@ -1483,14 +2038,42 @@ function StatusBar({ label, value, total }: { label: string; value: number; tota
   );
 }
 
+export async function SubscriptionSimulationView() {
+  const user = await requireVerifiedUser();
+  if (!isPremiumPlan(user.plan)) {
+    return <AppShell><PageHeader title="入替シミュレーター" description="契約を残す・外す場合の費用を、実データを変えずに比較します。" /><PremiumOnlyNotice title="入替シミュレーターはPremium限定です" description="複数の契約を比較し、月額・年間の削減見込みを確認できます。" /></AppShell>;
+  }
+
+  const subscriptions = (await prisma.subscription.findMany({
+    where: { userId: user.id, deletedAt: null, status: "ACTIVE" },
+    include: { category: true },
+    orderBy: [{ category: { name: "asc" } }, { name: "asc" }],
+  })) as unknown as SubscriptionView[];
+
+  return (
+    <AppShell>
+      <PageHeader title="入替シミュレーター" description="残す契約にチェックを入れて、外す場合の費用を比較します。実データは変更されません。" />
+      {subscriptions.length === 0 ? <Card><EmptyState text="比較できる有効なサブスクリプションがありません。" /></Card> : <Card><SubscriptionSimulator subscriptions={subscriptions.map((subscription) => ({ id: subscription.id, name: subscription.name, monthlyCost: monthly(subscription.price, subscription.billingCycle, subscription.customCycleDays), categoryName: subscription.category?.name ?? null }))} /></Card>}
+    </AppShell>
+  );
+}
+
 export async function ReviewView() {
   const user = await requireVerifiedUser();
   if (!isPremiumPlan(user.plan)) return <AppShell><PageHeader title="見直しレポート" description="削減見込み、見直しスコア、期限リスクをまとめて判断します。" /><PremiumOnlyNotice title="見直しレポートはPremium限定です" description="削減見込み、見直しスコア、期限リスク、優先順位つきの改善リストはPremiumで利用できます。" /></AppShell>;
-  const subscriptions = (await prisma.subscription.findMany({
+  const usageStart = buildUsagePeriods().find((period) => period.key === "days365")?.start;
+  const [subscriptions, usageRecords] = (await Promise.all([
+    prisma.subscription.findMany({
     where: { userId: user.id, deletedAt: null, status: "ACTIVE" },
     include: { category: true, paymentMethod: true },
     orderBy: { nextBillingDate: "asc" },
-  })) as unknown as SubscriptionView[];
+    }),
+    prisma.subscriptionUsage.findMany({
+      where: { userId: user.id, ...(usageStart ? { usedDate: { gte: usageStart } } : {}) },
+      select: { subscriptionId: true, usedDate: true },
+    }),
+  ])) as unknown as [SubscriptionView[], SubscriptionUsageView[]];
+  const usageBySubscription = usageDatesBySubscription(usageRecords);
   const categoryCounts = subscriptions.reduce<Record<string, number>>((acc, item) => {
     const key = item.categoryId ?? "none";
     acc[key] = (acc[key] ?? 0) + 1;
@@ -1508,16 +2091,53 @@ export async function ReviewView() {
   const expensive = [...subscriptions].sort((a, b) => monthly(b.price, b.billingCycle, b.customCycleDays) - monthly(a.price, a.billingCycle, a.customCycleDays)).slice(0, 5);
   const urgent = subscriptions.filter((item) => daysUntil(item.nextBillingDate) <= UPCOMING_DEADLINE_DAYS || (item.trialEndsAt && daysUntil(item.trialEndsAt) <= UPCOMING_DEADLINE_DAYS) || (item.cancellationDeadline && daysUntil(item.cancellationDeadline) <= UPCOMING_DEADLINE_DAYS));
   const stale = subscriptions.filter((item) => needsReview(item.lastReviewedAt));
+  const duplicateCategoryIds = new Set(
+    Object.entries(categoryCounts)
+      .filter(([categoryId, count]) => categoryId !== "none" && count > 1)
+      .map(([categoryId]) => categoryId),
+  );
+  const unusedDaysBySubscription = new Map(subscriptions.map((item) => {
+    const counts = countUsageByPeriod(usageBySubscription.get(item.id) ?? []);
+    const unusedDays = counts.days90 === 0 ? 90 : counts.days30 === 0 ? 30 : 0;
+    return [item.id, unusedDays] as const;
+  }));
+  const highCostThreshold = expensive[0] ? monthly(expensive[0].price, expensive[0].billingCycle, expensive[0].customCycleDays) : 0;
+  const candidates = detectCancellationCandidates(subscriptions.map((item) => ({
+    id: item.id,
+    name: item.name,
+    monthlyCost: monthly(item.price, item.billingCycle, item.customCycleDays),
+    unusedDays: unusedDaysBySubscription.get(item.id) ?? 0,
+    usageFrequency: item.usageFrequency,
+    priority: item.priority,
+    duplicateCategory: duplicateCategoryIds.has(item.categoryId ?? "none"),
+    isHighCost: highCostThreshold > 0 && monthly(item.price, item.billingCycle, item.customCycleDays) === highCostThreshold,
+  })), MONTHS_PER_YEAR);
+  const candidateMonthlySaving = candidates.reduce((total, candidate) => total + candidate.monthlyCost, 0);
+  const candidateAnnualSaving = candidates.reduce((total, candidate) => total + candidate.annualSaving, 0);
 
   return (
     <AppShell>
       <PageHeader title="見直しレポート" description="削減見込み、見直しスコア、期限リスクをまとめて判断します。" />
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <Card><p className="text-sm font-semibold text-slate-500">削減見込み</p><p className="mt-2 text-3xl font-black">{yen.format(totalSaving)}</p><p className="mt-2 text-sm text-slate-500">年間 {yen.format(totalSaving * MONTHS_PER_YEAR)}</p></Card>
+        <Card><p className="text-sm font-semibold text-slate-500">解約候補の削減可能額</p><p className="mt-2 text-3xl font-black">{yen.format(candidateMonthlySaving)}</p><p className="mt-2 text-sm text-slate-500">年間 {yen.format(candidateAnnualSaving)}</p></Card>
         <Card><p className="text-sm font-semibold text-slate-500">要対応スコア</p><p className="mt-2 text-3xl font-black">{urgentCount}件</p><p className="mt-2 text-sm text-slate-500">70点以上</p></Card>
         <Card><p className="text-sm font-semibold text-slate-500">14日以内の対応</p><p className="mt-2 text-3xl font-black">{urgent.length}件</p></Card>
         <Card><p className="text-sm font-semibold text-slate-500">未見直し</p><p className="mt-2 text-3xl font-black">{stale.length}件</p></Card>
       </div>
+      <Card className="mt-6">
+        <h2 className="text-lg font-bold">解約候補</h2>
+        <p className="mt-2 text-sm leading-6 text-slate-600">自動解約は行いません。理由を確認して、詳細画面の解約支援でご自身で判断してください。</p>
+        <div className="mt-4 space-y-3">
+          {candidates.length === 0 ? <EmptyState text="現在、解約候補はありません。" /> : candidates.map((candidate) => (
+            <Link key={candidate.id} href={`/subscriptions/${candidate.id}`} className="grid gap-3 rounded-lg border border-slate-100 bg-white/70 p-4 shadow-sm transition hover:border-blue-200 hover:bg-blue-50 lg:grid-cols-[1fr_auto] lg:items-center">
+              <div><p className="font-bold">{candidate.name}</p><p className="mt-1 text-sm leading-6 text-slate-500">{candidate.reasons.join(" / ")}</p></div>
+              <div className="text-left lg:text-right"><p className="font-black">{yen.format(candidate.monthlyCost)}/月</p><p className="mt-1 text-sm font-semibold text-emerald-700">年間 {yen.format(candidate.annualSaving)} の見直し余地</p></div>
+            </Link>
+          ))}
+        </div>
+      </Card>
+      {candidates[0] && <Card className="mt-6"><h2 className="text-lg font-bold">今月の削減チャレンジ</h2><p className="mt-2 text-sm text-slate-600">{candidates[0].name} を見直すと、年間 {yen.format(candidates[0].annualSaving)} の削減余地があります。</p><div className="mt-4"><SavingChallengeButtons subscriptionId={candidates[0].id} potentialMonthlySaving={Math.round(candidates[0].monthlyCost)} /></div></Card>}
       <Card className="mt-6">
         <h2 className="text-lg font-bold">見直しスコアランキング</h2>
         <div className="mt-4 space-y-3">
@@ -1645,8 +2265,14 @@ export async function NotificationsView() {
     orderBy: { sentAt: "desc" },
     take: 200,
   });
+  const userDeliveries = await prisma.userNotificationDelivery.findMany({
+    where: { userId: user.id },
+    orderBy: { sentAt: "desc" },
+    take: 50,
+  });
   const subscriptions = limitByPlan(allSubscriptions, user.plan);
   const hiddenCount = hiddenByPlan(allSubscriptions.length, user.plan);
+  const subscriptionNames = new Map(allSubscriptions.map((item) => [item.id, item.name]));
   const lastSentBySubscription = new Map<string, Date>();
   for (const delivery of deliveries) {
     if (!lastSentBySubscription.has(delivery.subscriptionId)) {
@@ -1665,13 +2291,13 @@ export async function NotificationsView() {
 
   return (
     <AppShell>
-      <PageHeader title="通知" description="更新日、無料トライアル終了、解約期限の通知予定と送信履歴を確認します。" />
+      <PageHeader title="通知" description="更新日、無料期間、解約期限、未使用期間、値上げ、予算の通知予定と送信履歴を確認します。" />
       <PlanLimitBanner hiddenCount={hiddenCount} />
       <Card className="mb-5">
         <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
           <div>
             <h2 className="font-bold">期限通知</h2>
-            <p className="mt-2 text-sm leading-6 text-slate-600">設定した通知日数と、更新日・トライアル終了日・解約期限が一致したときにメールを送信します。同じ期限への重複送信は自動でスキップします。</p>
+            <p className="mt-2 text-sm leading-6 text-slate-600">更新日・トライアル終了日・解約期限に加え、Premiumでは30・60・90日間の未使用と値上げ登録も通知します。利用記録と見直しが7日間ない契約には、週に1回だけ確認メールを送ります。同じ対象日の通知は再送しません。</p>
           </div>
           <NotificationSendButton />
         </div>
@@ -1716,13 +2342,59 @@ export async function NotificationsView() {
           )}
         </Card>
       </div>
+      {userDeliveries.length > 0 && (
+        <Card className="mt-5 border-amber-200 bg-amber-50/70">
+          <h2 className="text-lg font-bold text-amber-950">アカウント通知の履歴</h2>
+          <p className="mt-1 text-sm leading-6 text-amber-900">予算超過と、回答前の月次削減チャレンジの送信履歴です。同じ対象への重複送信は行いません。</p>
+          <div className="mt-4 divide-y divide-amber-100">
+            {userDeliveries.map((delivery) => (
+              <div key={delivery.id} className="flex items-center justify-between gap-3 py-3">
+                <div>
+                  <p className="font-semibold text-amber-950">{userNotificationTypeLabel(delivery.type)}</p>
+                  <p className="mt-1 text-sm text-amber-900">対象日 {dateText(delivery.scheduledFor)} / 送信 {notificationSentAt(delivery.sentAt)}</p>
+                </div>
+                <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-800">{delivery.type === "budget_overrun" ? "予算" : "見直し"}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+      <Card className="mt-5">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h2 className="text-lg font-bold">最近の送信履歴</h2>
+            <p className="mt-1 text-sm leading-6 text-slate-600">送信済みの通知を確認できます。メール本文や宛先は画面に表示しません。</p>
+          </div>
+          <p className="text-sm font-semibold text-slate-500">直近{Math.min(deliveries.length, 20)}件</p>
+        </div>
+        <div className="mt-4 divide-y divide-slate-100">
+          {deliveries.length === 0 ? <EmptyState text="送信済みの通知はありません。" /> : deliveries.slice(0, 20).map((delivery) => (
+            <div key={delivery.id} className="grid gap-2 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+              <div className="min-w-0">
+                <p className="truncate font-semibold text-slate-900">{subscriptionNames.get(delivery.subscriptionId) ?? "削除済みのサブスクリプション"}</p>
+                <p className="mt-1 text-sm text-slate-500">対象日 {dateText(delivery.scheduledFor)} / 送信 {notificationSentAt(delivery.sentAt)}</p>
+              </div>
+              <span className="w-fit rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">{notificationTypeLabel(delivery.type)}</span>
+            </div>
+          ))}
+        </div>
+      </Card>
     </AppShell>
   );
 }
 
-export async function SettingsView({ checkoutStatus, checkoutSessionId }: { checkoutStatus?: string; checkoutSessionId?: string } = {}) {
+export async function SettingsView({ checkoutStatus, checkoutSessionId, emailChangeStatus }: { checkoutStatus?: string; checkoutSessionId?: string; emailChangeStatus?: string } = {}) {
   const currentUser = await requireVerifiedUser();
   let checkoutNotice: { type: "success" | "error"; message: string } | null = null;
+  const emailChangeNotice = emailChangeStatus === "success"
+    ? { type: "success" as const, message: "メールアドレスを変更しました。" }
+    : emailChangeStatus === "conflict"
+      ? { type: "error" as const, message: "このメールアドレスはすでに利用されているため、変更できませんでした。" }
+      : emailChangeStatus === "invalid"
+        ? { type: "error" as const, message: "メールアドレス変更のリンクが無効または期限切れです。もう一度確認メールを送信してください。" }
+        : emailChangeStatus === "error"
+          ? { type: "error" as const, message: "メールアドレスを変更できませんでした。時間をおいて、もう一度お試しください。" }
+          : null;
 
   if (checkoutStatus === "success") {
     if (!checkoutSessionId) {
@@ -1739,8 +2411,8 @@ export async function SettingsView({ checkoutStatus, checkoutSessionId }: { chec
         } else {
           checkoutNotice = { type: "error", message: "Stripeの決済情報を確認できませんでした。" };
         }
-      } catch (error) {
-        console.error("Stripe checkout session sync failed.", error);
+      } catch {
+        console.error("Stripe checkout session sync failed.");
         checkoutNotice = { type: "error", message: "Stripe決済の確認に失敗しました。Webhook設定またはStripe設定を確認してください。" };
       }
     }
@@ -1750,10 +2422,13 @@ export async function SettingsView({ checkoutStatus, checkoutSessionId }: { chec
 
   const user = await prisma.user.findUnique({
     where: { id: currentUser.id },
-    select: { id: true, name: true, email: true, emailVerified: true, plan: true, createdAt: true },
+    select: { id: true, name: true, email: true, emailVerified: true, plan: true, stripeCustomerId: true, createdAt: true },
   });
   if (!user) return null;
-  const preference = await prisma.userPreference.findUnique({ where: { userId: user.id } });
+  const [preference, stripeInvoicesResult] = await Promise.all([
+    prisma.userPreference.findUnique({ where: { userId: user.id } }),
+    getStripeInvoicesForSettings(user.stripeCustomerId),
+  ]);
   return (
     <AppShell>
       <PageHeader title="設定" description="プロフィール、月額Premium、パスワード、予算、通知の標準値を変更できます。" action={<LogoutButton />} />
@@ -1762,17 +2437,30 @@ export async function SettingsView({ checkoutStatus, checkoutSessionId }: { chec
           {checkoutNotice.message}
         </div>
       )}
+      {emailChangeNotice && (
+        <div className={emailChangeNotice.type === "success" ? "mb-5 rounded-lg bg-emerald-50 p-4 text-sm font-semibold text-emerald-700" : "mb-5 rounded-lg bg-red-50 p-4 text-sm font-semibold text-red-700"}>
+          {emailChangeNotice.message}
+        </div>
+      )}
       <div className="grid gap-5 xl:grid-cols-2">
         <Card>
           <h2 className="text-lg font-bold">プロフィール</h2>
-          <p className="mt-2 text-sm text-slate-600">表示名を変更できます。メールアドレス変更は認証処理が必要なため現在は固定です。</p>
+          <p className="mt-2 text-sm text-slate-600">表示名を変更できます。</p>
           <div className="mt-5"><ProfileSettingsForm name={user.name ?? ""} email={user.email} /></div>
         </Card>
+        {!isProtectedAccountEmail(user.email) && (
+          <Card>
+            <h2 className="text-lg font-bold">メールアドレス</h2>
+            <p className="mt-2 text-sm text-slate-600">新しいメールアドレスを認証してから変更します。</p>
+            <div className="mt-5"><EmailSettingsForm email={user.email} /></div>
+          </Card>
+        )}
         <Card>
           <h2 className="text-lg font-bold">プラン</h2>
           <p className="mt-2 text-sm text-slate-600">Freeと月額Premiumの利用状態を確認・変更します。</p>
           <div className="mt-5"><PlanSettingsForm plan={user.plan} stripeTestMode={env.stripeTestMode} /></div>
         </Card>
+        <StripeInvoicesCard result={stripeInvoicesResult} />
         <Card>
           <h2 className="text-lg font-bold">パスワード</h2>
           <p className="mt-2 text-sm text-slate-600">現在のパスワードを確認してから、新しいパスワードへ変更します。</p>
@@ -1780,7 +2468,7 @@ export async function SettingsView({ checkoutStatus, checkoutSessionId }: { chec
         </Card>
         <Card>
           <h2 className="text-lg font-bold">予算・通知</h2>
-          <p className="mt-2 text-sm text-slate-600">月額予算と新規登録時の標準通知設定を管理します。</p>
+          <p className="mt-2 text-sm text-slate-600">月額予算、新規登録時の標準通知日数、自動メールの通知時刻を管理します。</p>
           <div className="mt-5"><BudgetSettingsForm monthlyBudget={preference?.monthlyBudget} defaultNotifyDaysBefore={preference?.defaultNotifyDaysBefore ?? DEFAULT_NOTIFY_DAYS_BEFORE} notificationHour={preference?.notificationHour ?? DEFAULT_NOTIFICATION_HOUR} /></div>
         </Card>
         <Card>

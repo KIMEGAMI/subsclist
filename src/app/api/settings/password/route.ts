@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { requireVerifiedUser } from "@/lib/auth";
+import { requireVerifiedUser, setSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 
 const schema = z.object({
@@ -36,10 +36,15 @@ export async function PUT(request: Request) {
     return NextResponse.json({ message: "現在とは異なるパスワードを設定してください。" }, { status: 400 });
   }
 
-  await prisma.user.update({
+  const updatedUser = await prisma.user.update({
     where: { id: user.id },
-    data: { passwordHash: await bcrypt.hash(parsed.data.newPassword, 12) },
+    data: {
+      passwordHash: await bcrypt.hash(parsed.data.newPassword, 12),
+      sessionVersion: { increment: 1 },
+    },
+    select: { id: true, emailVerified: true },
   });
+  await setSession(updatedUser.id, Boolean(updatedUser.emailVerified));
 
   return NextResponse.json({ ok: true });
 }

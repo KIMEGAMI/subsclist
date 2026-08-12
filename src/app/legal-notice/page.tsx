@@ -1,9 +1,10 @@
-﻿import type { Metadata } from "next";
+import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
   title: "特定商取引法に基づく表記 | SubscList",
   description: "SubscListの有料プラン提供に関する販売条件、支払い方法、解約方法などを表示します。",
+  alternates: { canonical: "/legal-notice" },
 };
 
 const rows = [
@@ -11,7 +12,7 @@ const rows = [
   ["運営責任者", "Shinji"],
   ["所在地", "請求があった場合、法令に基づき遅滞なく開示します。"],
   ["電話番号", "請求があった場合、法令に基づき遅滞なく開示します。"],
-  ["メールアドレス", "admin@shinji.work"],
+  ["メールアドレス", "saas.system.shinji@gmail.com"],
   ["販売URL", "https://subsclist.shinji.work"],
   ["販売価格", "Premiumプラン 月額480円（税込）"],
   ["商品代金以外の必要料金", "インターネット接続料金、通信料金、振込手数料その他の利用環境に応じた費用はお客様の負担となります。"],
@@ -53,3 +54,4 @@ export default function LegalNoticePage() {
     </main>
   );
 }
+

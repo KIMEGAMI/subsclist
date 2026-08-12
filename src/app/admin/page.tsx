@@ -1,8 +1,9 @@
+import { createAnnouncement, deleteAnnouncement, updateAnnouncementStatus, updateMaintenanceMode } from "@/app/admin/actions";
 import { AppShell, Card, PageHeader } from "@/components/app-shell";
+import { AdminBulkEmailForm } from "@/components/contact-form";
 import { getAllAnnouncements, getMaintenanceMode } from "@/lib/admin";
 import { requireAdminUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { createAnnouncement, deleteAnnouncement, updateAnnouncementStatus, updateMaintenanceMode } from "@/app/admin/actions";
 
 const dateFormatter = new Intl.DateTimeFormat("ja-JP", { dateStyle: "medium" });
 
@@ -24,7 +25,7 @@ export default async function AdminPage() {
 
   return (
     <AppShell>
-      <PageHeader title="管理者メニュー" description="お知らせ、ユーザー、メンテナンス状態を管理します。" />
+      <PageHeader title="管理者メニュー" description="お知らせ、一斉メール、ユーザー、メンテナンス状態を管理します。" />
       <div className="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
         <div className="space-y-5">
           <Card className="scroll-mt-6" id="maintenance">
@@ -52,6 +53,14 @@ export default async function AdminPage() {
                 </button>
               </form>
             </div>
+          </Card>
+
+          <Card className="scroll-mt-6" id="bulk-email">
+            <h2 className="text-lg font-black">一斉メール送信</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+              ユーザーへ個別送信します。送信元は SubscList &lt;saas.system.shinji@gmail.com&gt; です。
+            </p>
+            <AdminBulkEmailForm />
           </Card>
 
           <Card className="scroll-mt-6" id="announcements">

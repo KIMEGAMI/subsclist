@@ -15,16 +15,6 @@ export type AnnouncementRecord = {
   updatedAt: Date;
 };
 
-export const defaultAnnouncement = {
-  id: "default-admin-announcement",
-  title: "管理者からのお知らせ",
-  body: "メンテナンス情報や重要なお知らせは、このダッシュボード上部に表示されます。",
-  pinned: true,
-  published: true,
-  createdAt: new Date("2026-07-26T00:00:00.000Z"),
-  updatedAt: new Date("2026-07-26T00:00:00.000Z"),
-};
-
 function normalizeLimit(limit: number) {
   return Math.min(maxAnnouncementLimit, Math.max(minAnnouncementLimit, Math.trunc(limit)));
 }
@@ -82,5 +72,5 @@ export async function getPublishedAnnouncements(limit = DASHBOARD_ANNOUNCEMENT_M
     LIMIT ${take}
   `;
 
-  return announcements.length > 0 ? announcements : [defaultAnnouncement].slice(0, take);
+  return announcements;
 }

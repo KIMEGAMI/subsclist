@@ -1,0 +1,123 @@
+rules:
+  - id: subsclist.react.dangerously-set-inner-html
+    languages:
+      - typescript
+      - javascript
+    paths:
+      include:
+        - src/**/*.tsx
+        - src/**/*.jsx
+    pattern: <$ELEMENT dangerouslySetInnerHTML={...} />
+    message: 'dangerouslySetInnerHTML can introduce XSS. Render text normally or sanitize trusted HTML on the server before rendering.'
+    severity: ERROR
+    metadata:
+      category: security
+      cwe:
+        - 'CWE-79: Improper Neutralization of Input During Web Page Generation'
+      owasp:
+        - A03:2021 - Injection
+
+  - id: subsclist.javascript.dangerous-html-sink
+    languages:
+      - generic
+    paths:
+      include:
+        - src/**/*.js
+        - src/**/*.jsx
+        - src/**/*.ts
+        - src/**/*.tsx
+    pattern-regex: "(innerHTML|outerHTML)\\s*=\\s*(?!['\"`]\\s*['\"`])|insertAdjacentHTML\\s*\\("
+    message: 'Writing HTML strings directly to the DOM can introduce XSS. Use textContent, React rendering, or a reviewed sanitizer for trusted HTML only.'
+    severity: ERROR
+    metadata:
+      category: security
+      cwe:
+        - 'CWE-79: Improper Neutralization of Input During Web Page Generation'
+      owasp:
+        - A03:2021 - Injection
+
+  - id: subsclist.javascript.dynamic-code-execution
+    languages:
+      - typescript
+      - javascript
+    paths:
+      include:
+        - src/**/*.js
+        - src/**/*.jsx
+        - src/**/*.ts
+        - src/**/*.tsx
+        - scripts/**/*.js
+        - scripts/**/*.cjs
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: Function(...)
+      - pattern: new Function(...)
+      - pattern: setTimeout($CODE, ...)
+      - pattern: setInterval($CODE, ...)
+    message: 'Dynamic code execution is prohibited. Replace it with explicit control flow and validated inputs.'
+    severity: ERROR
+    metadata:
+      category: security
+      cwe:
+        - 'CWE-94: Improper Control of Generation of Code'
+      owasp:
+        - A03:2021 - Injection
+
+  - id: subsclist.prisma.unsafe-raw-query
+    languages:
+      - typescript
+      - javascript
+    paths:
+      include:
+        - src/**/*.ts
+        - src/**/*.tsx
+        - scripts/**/*.js
+        - scripts/**/*.cjs
+    pattern-either:
+      - pattern: $CLIENT.$queryRawUnsafe(...)
+      - pattern: $CLIENT.$executeRawUnsafe(...)
+    message: 'Unsafe raw Prisma SQL can lead to SQL injection. Use Prisma model APIs, tagged queryRaw with parameters, or validated query builders.'
+    severity: ERROR
+    metadata:
+      category: security
+      cwe:
+        - 'CWE-89: Improper Neutralization of Special Elements used in an SQL Command'
+      owasp:
+        - A03:2021 - Injection
+
+  - id: subsclist.javascript.secret-env-logging
+    languages:
+      - generic
+    paths:
+      include:
+        - src/**/*.js
+        - src/**/*.jsx
+        - src/**/*.ts
+        - src/**/*.tsx
+        - scripts/**/*.js
+        - scripts/**/*.cjs
+    pattern-regex: "console\\.(log|info|warn|error|debug)\\s*\\([^\\n;]*process\\.env"
+    message: 'Do not print process.env or secret-bearing environment values to logs.'
+    severity: ERROR
+    metadata:
+      category: security
+      cwe:
+        - 'CWE-532: Insertion of Sensitive Information into Log File'
+
+  - id: subsclist.stripe.live-key-in-source
+    languages:
+      - generic
+    paths:
+      include:
+        - '**/*'
+      exclude:
+        - package-lock.json
+        - .next/**
+        - node_modules/**
+    pattern-regex: '\\b[rs]k_live_[A-Za-z0-9_]+\\b'
+    message: 'A live Stripe API key appears to be hardcoded. Remove it, rotate the key, and use environment secrets or a restricted API key.'
+    severity: ERROR
+    metadata:
+      category: security
+      cwe:
+        - 'CWE-798: Use of Hard-coded Credentials'

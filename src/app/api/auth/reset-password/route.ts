@@ -45,7 +45,10 @@ export async function POST(request: Request) {
   await prisma.$transaction([
     prisma.user.update({
       where: { id: record.user.id },
-      data: { passwordHash: await bcrypt.hash(parsed.data.newPassword, 12) },
+      data: {
+        passwordHash: await bcrypt.hash(parsed.data.newPassword, 12),
+        sessionVersion: { increment: 1 },
+      },
     }),
     prisma.passwordResetToken.updateMany({
       where: { userId: record.user.id, usedAt: null },

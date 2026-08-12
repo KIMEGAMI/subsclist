@@ -1,4 +1,11 @@
+import type { Metadata } from "next";
 import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: "セキュリティ | SubscList",
+  description: "SubscListのデータ保護とセキュリティに関する取り組みを説明します。",
+  alternates: { canonical: "/security" },
+};
 
 export default function SecurityPage() {
   return (

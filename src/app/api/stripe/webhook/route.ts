@@ -15,8 +15,8 @@ export async function POST(request: Request) {
   let event: Stripe.Event;
   try {
     event = stripeForWebhook().webhooks.constructEvent(body, signature, env.stripeWebhookSecret);
-  } catch (error) {
-    console.error("Stripe webhook signature verification failed.", error);
+  } catch {
+    console.error("Stripe webhook signature verification failed.");
     return NextResponse.json({ message: "Stripe署名の検証に失敗しました。" }, { status: 400 });
   }
 
@@ -28,8 +28,8 @@ export async function POST(request: Request) {
       await syncStripeSubscription(event.data.object as Stripe.Subscription);
     }
     return NextResponse.json({ received: true });
-  } catch (error) {
-    console.error("Stripe webhook handling failed.", error);
+  } catch {
+    console.error("Stripe webhook handling failed.");
     return NextResponse.json({ message: "Stripe Webhookの処理に失敗しました。" }, { status: 500 });
   }
 }

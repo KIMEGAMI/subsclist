@@ -1,0 +1,2 @@
+ALTER TABLE `User`
+  ADD COLUMN `trialUsedAt` DATETIME(3) NULL;

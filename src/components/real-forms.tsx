@@ -1,19 +1,22 @@
-﻿"use client";
+"use client";
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import {
-  DEFAULT_NOTIFY_DAYS_BEFORE,
   MAX_CATEGORY_NAME_LENGTH,
+  MAX_CUSTOM_CYCLE_DAYS,
+  MAX_EMAIL_LENGTH,
   MAX_MEMO_LENGTH,
   MAX_PAYMENT_HISTORY_MEMO_LENGTH,
   MAX_PAYMENT_METHOD_NAME_LENGTH,
   MAX_SUBSCRIPTION_NAME_LENGTH,
+  MAX_SUBSCRIPTION_PRICE,
   MAX_USER_NAME_LENGTH,
   MIN_PASSWORD_LENGTH,
+  MIN_CUSTOM_CYCLE_DAYS,
 } from "@/lib/app-constants";
-import { isoDate } from "@/lib/billing";
+import { isoDate, monthlyAmount } from "@/lib/billing";
 import { userErrorMessage, userMessage } from "@/lib/error-messages";
 import { stripePaymentMethodOptions } from "@/lib/stripe-payment-methods";
 
@@ -110,7 +113,7 @@ async function request(url: string, method: string, body?: unknown) {
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
-  const data = (await response.json().catch(() => ({}))) as { message?: string; id?: string };
+  const data = (await response.json().catch(() => ({}))) as { message?: string; id?: string; usedToday?: boolean };
   if (!response.ok) throw new Error(userMessage(data.message, "処理に失敗しました。"));
   return data;
 }
@@ -121,14 +124,32 @@ export function SubscriptionForm({
   subscription,
   categories,
   paymentMethods,
+  monthlyBudget,
+  currentMonthlyTotal,
+  defaultNotifyDaysBefore,
 }: {
   subscription?: SubscriptionFormValue | null;
   categories: Option[];
   paymentMethods: Option[];
+  monthlyBudget: number | null;
+  currentMonthlyTotal: number;
+  defaultNotifyDaysBefore: number;
 }) {
   const router = useRouter();
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [billingCycle, setBillingCycle] = useState(subscription?.billingCycle ?? "MONTHLY");
+  const initialMonthlyCost = subscription ? monthlyAmount(subscription.price, subscription.billingCycle, subscription.customCycleDays) : 0;
+  const [projectedMonthlyTotal, setProjectedMonthlyTotal] = useState(currentMonthlyTotal + initialMonthlyCost);
+
+  function updateBudgetPreview(form: HTMLFormElement) {
+    const values = new FormData(form);
+    const price = Number(values.get("price") ?? 0);
+    const selectedBillingCycle = String(values.get("billingCycle") ?? "MONTHLY");
+    const customCycleDays = Number(values.get("customCycleDays") ?? 0);
+    const monthlyCost = Number.isFinite(price) && price >= 0 ? monthlyAmount(price, selectedBillingCycle, Number.isFinite(customCycleDays) && customCycleDays > 0 ? customCycleDays : null) : 0;
+    setProjectedMonthlyTotal(currentMonthlyTotal + monthlyCost);
+  }
 
   function applyPreset(event: React.ChangeEvent<HTMLSelectElement>) {
     const preset = servicePresets.find((item) => item.name === event.target.value);
@@ -137,8 +158,16 @@ export function SubscriptionForm({
     setInputValue(form, "name", preset.name);
     setInputValue(form, "price", String(preset.price));
     setInputValue(form, "billingCycle", preset.billingCycle);
+    setBillingCycle(preset.billingCycle);
     setInputValue(form, "serviceUrl", preset.serviceUrl);
     setInputValue(form, "cancellationUrl", preset.cancellationUrl);
+    setProjectedMonthlyTotal(currentMonthlyTotal + monthlyAmount(preset.price, preset.billingCycle));
+  }
+
+  function changeBillingCycle(event: React.ChangeEvent<HTMLSelectElement>) {
+    setBillingCycle(event.target.value);
+    const form = event.currentTarget.form;
+    if (form) queueMicrotask(() => updateBudgetPreview(form));
   }
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
@@ -161,7 +190,7 @@ export function SubscriptionForm({
   }
 
   return (
-    <form onSubmit={submit} noValidate className="grid gap-4 md:grid-cols-2">
+    <form onSubmit={submit} onInput={(event) => updateBudgetPreview(event.currentTarget)} noValidate className="grid gap-4 md:grid-cols-2">
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700 md:col-span-2">{error}</p>}
       <Field label="サービスプリセット">
         <select onChange={applyPreset} className="input" defaultValue="">
@@ -172,13 +201,15 @@ export function SubscriptionForm({
       <Field label="サービス名"><input name="name" defaultValue={subscription?.name ?? ""} className="input" maxLength={MAX_SUBSCRIPTION_NAME_LENGTH} required /></Field>
       <Field label="料金"><input name="price" type="number" defaultValue={subscription?.price ?? 0} className="input" min={0} required /></Field>
       <Field label="請求周期">
-        <select name="billingCycle" defaultValue={subscription?.billingCycle ?? "MONTHLY"} className="input" required>
+        <select name="billingCycle" value={billingCycle} onChange={changeBillingCycle} className="input" required>
           <option value="MONTHLY">月額</option>
           <option value="YEARLY">年額</option>
           <option value="WEEKLY">週額</option>
           <option value="CUSTOM">カスタム</option>
         </select>
       </Field>
+      {billingCycle === "CUSTOM" && <Field label="カスタム周期（日数）"><input name="customCycleDays" type="number" defaultValue={subscription?.customCycleDays ?? ""} className="input" min={MIN_CUSTOM_CYCLE_DAYS} max={MAX_CUSTOM_CYCLE_DAYS} required /><span className="text-xs font-medium text-slate-500">例: 45日ごとの請求なら45</span></Field>}
+      {monthlyBudget !== null && <BudgetPreview monthlyBudget={monthlyBudget} projectedMonthlyTotal={projectedMonthlyTotal} />}
       <Field label="次回更新日">
         <input name="nextBillingDate" type="date" defaultValue={dateValue(subscription?.nextBillingDate)} className="input" required />
       </Field>
@@ -201,7 +232,7 @@ export function SubscriptionForm({
           <option value="CANCELLED">解約済み</option>
         </select>
       </Field>
-      <Field label="通知日数"><input name="notifyDaysBefore" type="number" defaultValue={subscription?.notifyDaysBefore ?? DEFAULT_NOTIFY_DAYS_BEFORE} className="input" min={0} /></Field>
+      <Field label="通知日数"><input name="notifyDaysBefore" type="number" defaultValue={subscription?.notifyDaysBefore ?? defaultNotifyDaysBefore} className="input" min={0} /></Field>
       <Field label="利用頻度">
         <select name="usageFrequency" defaultValue={subscription?.usageFrequency ?? "UNKNOWN"} className="input">
           <option value="UNKNOWN">未設定</option>
@@ -313,6 +344,117 @@ function CsvHelpPopover({
 }
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return <label className="grid gap-2 text-sm font-semibold text-slate-700">{label}{children}</label>;
+}
+
+function BudgetPreview({ monthlyBudget, projectedMonthlyTotal }: { monthlyBudget: number; projectedMonthlyTotal: number }) {
+  const formatter = new Intl.NumberFormat("ja-JP", { style: "currency", currency: "JPY", maximumFractionDigits: 0 });
+  const difference = projectedMonthlyTotal - monthlyBudget;
+  const exceeded = difference > 0;
+  return <div className={`rounded-lg border p-4 text-sm font-semibold md:col-span-2 ${exceeded ? "border-amber-200 bg-amber-50 text-amber-900" : "border-emerald-100 bg-emerald-50 text-emerald-900"}`}><p>登録後の月額換算合計: {formatter.format(projectedMonthlyTotal)}</p><p className="mt-1">予算 {formatter.format(monthlyBudget)} / {exceeded ? `超過 ${formatter.format(difference)}` : `残り ${formatter.format(Math.abs(difference))}`}</p><p className="mt-2 text-xs">予算を超えていても、登録はできます。</p></div>;
+}
+
+export function SavingChallengeButtons({ subscriptionId, potentialMonthlySaving }: { subscriptionId: string; potentialMonthlySaving: number }) {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  async function save(status: "CONTINUE" | "CANCEL_PLANNED" | "HOLD") {
+    setLoading(true);
+    setMessage("");
+    setError("");
+    try {
+      await request("/api/saving-challenges", "PUT", { subscriptionId, status, potentialMonthlySaving });
+      setMessage("今月の回答を保存しました。");
+      router.refresh();
+    } catch (err) {
+      setError(userErrorMessage(err, "回答の保存に失敗しました。"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return <div className="space-y-3"><div className="grid gap-2 sm:grid-cols-3"><button type="button" disabled={loading} onClick={() => save("CONTINUE")} className="btn-secondary min-h-11 justify-center">継続する</button><button type="button" disabled={loading} onClick={() => save("CANCEL_PLANNED")} className="btn-primary min-h-11 justify-center">解約予定</button><button type="button" disabled={loading} onClick={() => save("HOLD")} className="btn-secondary min-h-11 justify-center">今月は保留</button></div>{message && <p className="text-sm font-semibold text-emerald-700">{message}</p>}{error && <p className="text-sm font-semibold text-red-700">{error}</p>}</div>;
+}
+
+export function DailyUsageCheckButtons({ id, compact = false, usedToday = false }: { id: string; compact?: boolean; usedToday?: boolean }) {
+  const router = useRouter();
+  const [loading, setLoading] = useState<"used" | "rarely" | "">("");
+  const [hasUsedToday, setHasUsedToday] = useState(usedToday);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  async function checkUsageToday() {
+    setMessage("");
+    setError("");
+    if (hasUsedToday && !window.confirm("今日の利用記録を取り消しますか？")) return;
+    setLoading("used");
+    try {
+      const result = await request(`/api/subscriptions/${id}/usage/today`, hasUsedToday ? "DELETE" : "PUT");
+      const nextUsedToday = result.usedToday ?? !hasUsedToday;
+      setHasUsedToday(nextUsedToday);
+      setMessage(nextUsedToday ? "今日の利用を記録しました。" : "今日の利用記録を取り消しました。");
+      router.refresh();
+    } catch (err) {
+      setError(userErrorMessage(err, "使用状況の記録に失敗しました。"));
+    } finally {
+      setLoading("");
+    }
+  }
+
+  async function checkRarelyUsed() {
+    setMessage("");
+    setError("");
+    setLoading("rarely");
+    try {
+      await request(`/api/subscriptions/${id}`, "PATCH", { reviewed: true, usageFrequency: "RARELY" });
+      setMessage("最近使っていない候補にしました。");
+      router.refresh();
+    } catch (err) {
+      setError(userErrorMessage(err, "使用状況の記録に失敗しました。"));
+    } finally {
+      setLoading("");
+    }
+  }
+
+  return (
+    <div className={compact ? "space-y-2" : "space-y-3"}>
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <button type="button" disabled={Boolean(loading)} onClick={checkUsageToday} className="btn-primary min-h-11 px-3 py-2 text-sm">
+          {loading === "used" ? "記録中..." : hasUsedToday ? "使用済み ✓" : "今日使った"}
+        </button>
+        <button type="button" disabled={Boolean(loading)} onClick={checkRarelyUsed} className="btn-secondary min-h-11 px-3 py-2 text-sm">
+          {loading === "rarely" ? "記録中..." : "最近使ってない"}
+        </button>
+      </div>
+      {message && <p className="text-xs font-semibold text-emerald-700">{message}</p>}
+      {error && <p className="text-xs font-semibold text-red-700">{error}</p>}
+    </div>
+  );
+}
+
+export function WeeklyReviewButton({ id }: { id: string }) {
+  const router = useRouter();
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  async function completeReview() {
+    setLoading(true);
+    setMessage("");
+    setError("");
+    try {
+      await request(`/api/subscriptions/${id}`, "PATCH", { reviewed: true });
+      setMessage("今週の確認を完了しました。");
+      router.refresh();
+    } catch (err) {
+      setError(userErrorMessage(err, "確認の保存に失敗しました。"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return <div className="space-y-2"><button type="button" disabled={loading} onClick={completeReview} className="btn-secondary min-h-10 px-3 py-2 text-sm">{loading ? "保存中..." : "今週も継続"}</button>{message && <p className="text-xs font-semibold text-emerald-700">{message}</p>}{error && <p className="text-xs font-semibold text-red-700">{error}</p>}</div>;
 }
 
 export function SubscriptionActions({ id }: { id: string }) {
@@ -485,6 +627,41 @@ export function ProfileSettingsForm({ name, email }: { name: string; email: stri
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
       <button disabled={loading} className="btn-primary">
         {loading ? "保存中..." : "プロフィールを保存"}
+      </button>
+    </form>
+  );
+}
+
+export function EmailSettingsForm({ email }: { email: string }) {
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setMessage("");
+    setError("");
+    setLoading(true);
+    const form = new FormData(event.currentTarget);
+    try {
+      const data = await request("/api/settings/email", "POST", Object.fromEntries(form.entries())) as { message?: string };
+      setMessage(data.message ?? "確認メールを送りました。");
+    } catch (err) {
+      setError(userErrorMessage(err, "確認メールを送信できませんでした。"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <form onSubmit={submit} noValidate className="space-y-4">
+      <p className="text-sm leading-6 text-slate-600">現在のメールアドレス: <span className="font-semibold text-slate-800">{email}</span></p>
+      <Field label="新しいメールアドレス"><input name="email" className="input" type="email" autoComplete="email" maxLength={MAX_EMAIL_LENGTH} required /></Field>
+      <p className="text-xs leading-5 text-slate-500">新しいメールアドレスに届く確認リンクを開くまで、変更は反映されません。</p>
+      {message && <p className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p>}
+      {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
+      <button disabled={loading} className="btn-secondary">
+        {loading ? "確認メールを送信中..." : "確認メールを送信"}
       </button>
     </form>
   );
@@ -682,7 +859,7 @@ export function AccountDeleteForm({ email }: { email: string }) {
       <Field label="確認入力"><input name="confirmText" className="input" type="text" placeholder="削除する" required /></Field>
       <div className="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm leading-6 text-rose-900">
         <p className="font-black">完全削除</p>
-        <p className="mt-1">この操作で、アカウントに紐づくデータをDBから完全に削除します。取り消しはできません。</p>
+        <p className="mt-1">この操作で、アカウントに紐づくデータをDBから完全に削除します。取り消しはできません。継続中のPremium契約がある場合は、先に契約管理で解約を完了してください。</p>
       </div>
       {message && <p className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p>}
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
@@ -741,7 +918,7 @@ export function PaymentHistoryForm({
           </select>
         </Field>
       )}
-      <Field label="支払い金額"><input name="amount" type="number" defaultValue={defaultAmount ?? ""} className="input" min={0} required /></Field>
+      <Field label="支払い金額"><input name="amount" type="number" defaultValue={defaultAmount ?? ""} className="input" min={0} max={MAX_SUBSCRIPTION_PRICE} required /></Field>
       <Field label="支払い日"><input name="paidAt" type="date" defaultValue={isoDate(new Date())} className="input" required /></Field>
       <label className="grid gap-2 text-sm font-semibold text-slate-700 md:col-span-2">
         メモ
@@ -914,21 +1091,22 @@ export function CsvImportForm({ disabled }: { disabled: boolean }) {
       <Field label="CSVファイル"><input name="file" type="file" accept=".csv,text/csv" className="input" disabled={disabled} required /></Field>
       <div className="flex flex-wrap items-start gap-3">
         <p className="text-sm leading-6 text-slate-600">
-          対応列: サービス名、料金、請求周期、次回更新日、カテゴリ、支払い方法、サービスURL、解約URL、メモをこの順番で入力してください。
+          対応列: サービス名、料金、請求周期、次回更新日、カテゴリ、支払い方法、サービスURL、解約URL、メモ、カスタム周期日数です。CSVは1MB・200行まで取り込めます。
         </p>
         <CsvHelpPopover
           title="CSVインポートの見方"
-          note="CSVの1行目をヘッダにする場合は、下の列名をこの順で入れてください。ヘッダがないCSVでも取り込めますが、列の順番は合わせてください。"
+          note="CSVの1行目をヘッダにする場合は、下の列名をこの順で入れてください。ヘッダがないCSVでも取り込めます。次回更新日は必須です。"
           rows={[
             { label: "サービス名", description: "登録するサービスの名前です。" },
             { label: "料金", description: "1回分の請求金額です。" },
-            { label: "請求周期", description: "MONTHLY / YEARLY / WEEKLY / CUSTOM を入れます。" },
+            { label: "請求周期", description: "MONTHLY / YEARLY / WEEKLY / CUSTOM を入れます。CUSTOMの場合はカスタム周期日数も入力します。" },
             { label: "次回更新日", description: "YYYY-MM-DD 形式の日付です。" },
-            { label: "カテゴリ", description: "既存カテゴリ名を入れます。未設定なら空欄でも大丈夫です。" },
-            { label: "支払い方法", description: "既存の支払い方法名を入れます。未設定なら空欄でも大丈夫です。" },
+            { label: "カテゴリ", description: "カテゴリ名を入れます。未登録なら新しいカテゴリとして追加されます。" },
+            { label: "支払い方法", description: "Stripe対応の登録済み支払い方法名を入れます。未設定なら空欄でも大丈夫です。" },
             { label: "サービスURL", description: "サービスの公式ページや管理ページです。" },
             { label: "解約URL", description: "解約ページや退会ページのURLです。" },
             { label: "メモ", description: "補足情報を自由に書けます。" },
+            { label: "カスタム周期日数", description: "CUSTOMの場合だけ、請求間隔の日数を1から366で入力します。" },
           ]}
         />
       </div>
@@ -1122,3 +1300,4 @@ export function CsvCandidateDetectorForm({ disabled }: { disabled: boolean }) {
     </div>
   );
 }
+

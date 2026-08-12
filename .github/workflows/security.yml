@@ -1,0 +1,77 @@
+name: Security
+
+on:
+  pull_request:
+    branches:
+      - master
+  push:
+    branches:
+      - 'codex/**'
+      - 'codex-*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  dependency-review:
+    name: Dependency review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Review dependency changes
+        uses: actions/dependency-review-action@v5
+        with:
+          fail-on-severity: high
+
+  semgrep:
+    name: Semgrep SAST
+    runs-on: ubuntu-latest
+    if: github.actor != 'dependabot[bot]'
+    container:
+      image: semgrep/semgrep:1.172.0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Scan TypeScript, React, and JavaScript
+        env:
+          SEMGREP_SEND_METRICS: off
+        run: >
+          semgrep scan
+          --error
+          --severity ERROR
+          --config p/default
+          --config p/owasp-top-ten
+          --config p/javascript
+          --config p/typescript
+          --config p/react
+          --config .semgrep.yml
+          .
+
+  secret-scan:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

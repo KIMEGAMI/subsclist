@@ -7,6 +7,6 @@ export async function GET() {
 
   return NextResponse.json({
     maintenance,
-    isAdmin: isAdminEmail(user?.email),
+    isAdmin: Boolean(user?.emailVerified) && isAdminEmail(user?.email),
   });
 }

@@ -31,7 +31,7 @@ export function NotificationSendButton() {
   return (
     <div className="grid gap-2">
       <button disabled={loading} onClick={send} className="btn-primary">
-        {loading ? "送信中..." : "期限通知を今すぐ送信"}
+        {loading ? "送信中..." : "通知を今すぐ送信"}
       </button>
       {message && <p className="text-sm font-semibold text-slate-600">{message}</p>}
     </div>

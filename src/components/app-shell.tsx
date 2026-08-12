@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 
-const brand = "サブスクリスト";
+const brand = "SubscList";
 const nav = [
   { label: "ダッシュボード", href: "/dashboard", icon: "D" },
   { label: "サブスク", href: "/subscriptions", icon: "S" },
@@ -12,6 +12,7 @@ const nav = [
   { label: "分析", href: "/analytics", icon: "A" },
   { label: "月次レポート", href: "/monthly-report", icon: "M" },
   { label: "見直し", href: "/review", icon: "R" },
+  { label: "入替比較", href: "/simulation", icon: "X" },
   { label: "カテゴリ", href: "/categories", icon: "K" },
   { label: "支払い方法", href: "/payment-methods", icon: "P" },
   { label: "支払い履歴", href: "/payments", icon: "Y" },
@@ -22,15 +23,17 @@ const nav = [
 ];
 
 const adminNav = [
-  { label: "管理者ホーム", href: "/admin", icon: "A" },
+  { label: "管理者メニュー", href: "/admin", icon: "A" },
+  { label: "メンテナンス", href: "/admin#maintenance", icon: "M" },
+  { label: "一斉メール", href: "/admin#bulk-email", icon: "E" },
   { label: "お知らせ", href: "/admin#announcements", icon: "I" },
   { label: "ユーザー一覧", href: "/admin#users", icon: "U" },
-  { label: "メンテナンス", href: "/admin#maintenance", icon: "M" },
 ];
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -106,27 +109,24 @@ export function AppShell({ children }: { children: ReactNode }) {
       </aside>
       <header className="sticky top-0 z-20 border-b border-white/65 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-xl lg:hidden">
         <div className="flex items-center justify-between">
-          <Link href="/dashboard" className="font-black">{brand}</Link>
+          <Link href="/dashboard" onClick={() => setIsMobileMenuOpen(false)} className="font-black">{brand}</Link>
           <div className="flex items-center gap-2">
-            <Link href="/subscriptions/new" className="btn-primary min-h-0 px-3 py-2 text-sm">{"追加"}</Link>
+            <Link href="/subscriptions/new" onClick={() => setIsMobileMenuOpen(false)} className="btn-primary min-h-0 px-3 py-2 text-sm">追加</Link>
+            <button type="button" onClick={() => setIsMobileMenuOpen((open) => !open)} aria-expanded={isMobileMenuOpen} aria-controls="mobile-navigation" aria-label="メニューを開く" className="grid size-10 place-items-center rounded-lg border border-slate-200 bg-white text-lg font-black text-slate-700 shadow-sm" title="メニュー">
+              &#8801;
+            </button>
           </div>
         </div>
-        <div className="subtle-scrollbar mt-3 flex gap-2 overflow-x-auto pb-1">
-          {nav.map(({ label, href }) => (
-            <Link key={href} href={href} className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-bold ${
-              pathname === href ? "border-blue-600 bg-blue-600 text-white" : "border-slate-200 bg-white/80 text-slate-700"
-            }`}>
-              {label}
-            </Link>
-          ))}
-          {isAdmin && adminNav.map(({ label, href }) => (
-            <Link key={href} href={href} className={`shrink-0 rounded-full border px-3 py-1.5 text-xs font-bold ${
-              pathname === "/admin" ? "border-slate-900 bg-slate-900 text-white" : "border-slate-200 bg-white/80 text-slate-700"
-            }`}>
-              {label}
-            </Link>
-          ))}
-        </div>
+        {isMobileMenuOpen && <nav id="mobile-navigation" className="mt-3 grid gap-1 border-t border-slate-100 pt-3" aria-label="モバイルメニュー">
+          {nav.map(({ label, href, icon }) => {
+            const active = pathname === href || (href === "/subscriptions" && pathname.startsWith("/subscriptions"));
+            return <Link key={href} href={href} onClick={() => setIsMobileMenuOpen(false)} className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-bold ${active ? "bg-blue-600 text-white" : "text-slate-700 hover:bg-slate-100"}`}><span className={`grid size-7 place-items-center rounded-md text-[11px] font-black ${active ? "bg-white/18 text-white" : "bg-slate-100 text-slate-500"}`}>{icon}</span>{label}</Link>;
+          })}
+          {isAdmin && <div className="mt-2 border-t border-slate-200 pt-2">
+            <p className="px-3 py-2 text-xs font-black text-slate-500">管理者メニュー</p>
+            {adminNav.map(({ label, href, icon }) => <Link key={href} href={href} onClick={() => setIsMobileMenuOpen(false)} className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-bold ${pathname === "/admin" ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100"}`}><span className={`grid size-7 place-items-center rounded-md text-[11px] font-black ${pathname === "/admin" ? "bg-white/18 text-white" : "bg-slate-100 text-slate-500"}`}>{icon}</span>{label}</Link>)}
+          </div>}
+        </nav>}
       </header>
       <main className="relative z-10 lg:pl-[17.5rem]">
         <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8 lg:py-6">

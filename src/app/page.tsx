@@ -1,7 +1,19 @@
-﻿import Image from "next/image";
+import Image from "next/image";
 import Link from "next/link";
+import type { Metadata } from "next";
 import { Card } from "@/components/app-shell";
 import { DemoLoginButton } from "@/components/demo-login-button";
+
+export const metadata: Metadata = {
+  title: { absolute: "SubscList | サブスクリプション管理システム" },
+  description: "契約、更新日、支払い履歴、見直し候補を一元管理。SubscListで毎月の固定費を見える化し、無駄のないサブスク運用を始められます。",
+  alternates: { canonical: "/" },
+  openGraph: {
+    title: "SubscList | サブスクリプション管理システム",
+    description: "毎月の固定費を見える化し、サブスクの更新・見直しを続けられる管理サービスです。",
+    url: "/",
+  },
+};
 
 const features = [
   ["固定費を一覧化", "契約名、料金、更新日、解約期限、支払い履歴をまとめて確認できます。"],
@@ -11,8 +23,21 @@ const features = [
 ] as const;
 
 export default function Home() {
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    name: "SubscList",
+    applicationCategory: "FinanceApplication",
+    operatingSystem: "Web",
+    description: "契約、更新日、支払い履歴、見直し候補をまとめて管理するサブスクリプション管理サービスです。",
+    offers: [
+      { "@type": "Offer", name: "Free", price: "0", priceCurrency: "JPY" },
+      { "@type": "Offer", name: "Premium", price: "480", priceCurrency: "JPY", billingDuration: "P1M" },
+    ],
+  };
   return (
     <main className="bg-white text-slate-950">
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-[linear-gradient(180deg,#ffffff_0%,#f5f8ff_100%)]" />
         <div className="relative mx-auto grid min-h-[92vh] max-w-7xl items-center gap-10 px-4 py-8 sm:px-6 lg:grid-cols-[0.92fr_1.08fr] lg:px-8">
@@ -99,9 +124,12 @@ export default function Home() {
           <Link href="/legal-notice" className="hover:text-white">特定商取引法に基づく表記</Link>
           <Link href="/privacy" className="hover:text-white">プライバシーポリシー</Link>
           <Link href="/terms" className="hover:text-white">利用規約</Link>
+          <Link href="/faq" className="hover:text-white">よくある質問</Link>
           <Link href="/security" className="hover:text-white">セキュリティ</Link>
+          <Link href="/contact" className="hover:text-white">お問い合わせ</Link>
         </div>
       </section>
     </main>
   );
 }
+

@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { requireVerifiedUser } from "@/lib/auth";
 import { env } from "@/lib/env";
+import { STRIPE_SUBSCRIPTION_STATUS_ALL, STRIPE_TRIAL_LOOKBACK_SUBSCRIPTION_LIMIT } from "@/lib/app-constants";
 import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
+import { hasStripeTrial, stripeTrialCheckoutData } from "@/lib/stripe-trial";
 
 class StripeConfigError extends Error {
   constructor(message: string) {
@@ -23,6 +25,14 @@ const messages = {
   invalidCustomer: "DB\u306b\u4fdd\u5b58\u3055\u308c\u305fStripe\u9867\u5ba2ID\u304c\u73fe\u5728\u306eStripe\u30ad\u30fc\u3067\u898b\u3064\u304b\u3089\u306a\u304b\u3063\u305f\u305f\u3081\u3001\u9867\u5ba2\u60c5\u5831\u3092\u518d\u4f5c\u6210\u3057\u307e\u3057\u305f\u3002\u3082\u3046\u4e00\u5ea6Premium\u306b\u30a2\u30c3\u30d7\u30b0\u30ec\u30fc\u30c9\u3092\u62bc\u3057\u3066\u304f\u3060\u3055\u3044\u3002",
   invalidRequest: "Stripe Checkout\u306e\u4f5c\u6210\u6761\u4ef6\u304c\u6b63\u3057\u304f\u3042\u308a\u307e\u305b\u3093\u3002Price\u304c\u6708\u984d\u30b5\u30d6\u30b9\u30af\u30ea\u30d7\u30b7\u30e7\u30f3\u3068\u3057\u3066\u6709\u52b9\u306b\u306a\u3063\u3066\u3044\u308b\u304b\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\u3002",
   failed: "Stripe Checkout\u306e\u4f5c\u6210\u306b\u5931\u6557\u3057\u307e\u3057\u305f\u3002Stripe\u8a2d\u5b9a\u3092\u78ba\u8a8d\u3057\u3066\u304f\u3060\u3055\u3044\u3002",
+};
+
+type CheckoutUser = {
+  id: string;
+  email: string;
+  name: string | null;
+  stripeCustomerId: string | null;
+  trialUsedAt: Date | null;
 };
 
 function checkoutErrorMessage(error: unknown) {
@@ -50,7 +60,7 @@ async function assertCheckoutPrice(client: Stripe) {
   return price;
 }
 
-async function createCustomer(client: Stripe, user: { id: string; email: string; name: string | null }) {
+async function createCustomer(client: Stripe, user: Pick<CheckoutUser, "id" | "email" | "name">) {
   const customer = await client.customers.create({
     email: user.email,
     name: user.name ?? undefined,
@@ -60,7 +70,7 @@ async function createCustomer(client: Stripe, user: { id: string; email: string;
   return customer.id;
 }
 
-async function ensureCustomer(client: Stripe, user: { id: string; email: string; name: string | null; stripeCustomerId: string | null }) {
+async function ensureCustomer(client: Stripe, user: CheckoutUser) {
   if (!user.stripeCustomerId) return createCustomer(client, user);
 
   try {
@@ -73,8 +83,26 @@ async function ensureCustomer(client: Stripe, user: { id: string; email: string;
     }
   }
 
-  console.warn("Stored Stripe customer was not found. Recreating customer.", { userId: user.id, stripeCustomerId: user.stripeCustomerId });
+  console.warn("Stored Stripe customer was not found. Recreating customer.");
   return createCustomer(client, user);
+}
+
+async function refreshTrialUsageFromStripe(client: Stripe, user: CheckoutUser) {
+  if (user.trialUsedAt || !user.stripeCustomerId) return user.trialUsedAt;
+
+  const subscriptions = await client.subscriptions.list({
+    customer: user.stripeCustomerId,
+    status: STRIPE_SUBSCRIPTION_STATUS_ALL,
+    limit: STRIPE_TRIAL_LOOKBACK_SUBSCRIPTION_LIMIT,
+  });
+  if (!subscriptions.data.some(hasStripeTrial)) return null;
+
+  const trialUsedAt = new Date();
+  await prisma.user.updateMany({
+    where: { id: user.id, trialUsedAt: null },
+    data: { trialUsedAt },
+  });
+  return trialUsedAt;
 }
 
 export async function POST() {
@@ -86,6 +114,11 @@ export async function POST() {
     const client = stripe();
     const price = await assertCheckoutPrice(client);
     const customerId = await ensureCustomer(client, dbUser);
+    const trialUsedAt = await refreshTrialUsageFromStripe(client, { ...dbUser, stripeCustomerId: customerId });
+    const subscriptionData: Stripe.Checkout.SessionCreateParams.SubscriptionData = {
+      metadata: { userId: dbUser.id, plan: "PREMIUM" },
+      ...stripeTrialCheckoutData(trialUsedAt),
+    };
 
     const session = await client.checkout.sessions.create({
       mode: "subscription",
@@ -95,12 +128,12 @@ export async function POST() {
       cancel_url: `${env.appUrl}/settings?checkout=cancelled`,
       allow_promotion_codes: true,
       metadata: { userId: dbUser.id, plan: "PREMIUM" },
-      subscription_data: { metadata: { userId: dbUser.id, plan: "PREMIUM" } },
+      subscription_data: subscriptionData,
     });
 
     return NextResponse.json({ url: session.url });
   } catch (error) {
-    console.error("Stripe checkout creation failed.", error);
+    console.error("Stripe checkout creation failed.");
     return NextResponse.json({ message: checkoutErrorMessage(error) }, { status: 500 });
   }
 }

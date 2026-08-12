@@ -1,3 +1,5 @@
+import { DEFAULT_ADMIN_USER_EMAIL, DEFAULT_DEMO_USER_EMAIL } from "@/lib/app-constants";
+
 function required(name: string) {
   const value = process.env[name];
   if (!value) {
@@ -27,7 +29,7 @@ export const env = {
   smtpSecure: process.env.SMTP_SECURE === "true",
   smtpUser: process.env.SMTP_USER ?? "",
   smtpPass: process.env.SMTP_PASS ?? "",
-  demoUserEmail: process.env.DEMO_USER_EMAIL ?? "",
+  demoUserEmail: process.env.DEMO_USER_EMAIL ?? DEFAULT_DEMO_USER_EMAIL,
   adminUserEmail: process.env.ADMIN_USER_EMAIL ?? "",
   notificationJobSecret: process.env.NOTIFICATION_JOB_SECRET ?? "",
   stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? "",
@@ -78,5 +80,9 @@ export function assertGoogleEnv() {
 }
 
 export function isProtectedAccountEmail(email: string) {
-  return email === env.demoUserEmail || email === env.adminUserEmail;
+  const normalizedEmail = email.trim().toLowerCase();
+  const protectedEmails = [env.demoUserEmail, env.adminUserEmail || DEFAULT_ADMIN_USER_EMAIL]
+    .filter(Boolean)
+    .map((value) => value.trim().toLowerCase());
+  return protectedEmails.includes(normalizedEmail);
 }

@@ -81,7 +81,7 @@ export function reviewScore(item: InsightSubscription, sameCategoryCount = 1) {
   const normalized = Math.min(100, score);
   return {
     score: normalized,
-    grade: normalized >= REVIEW_URGENT_SCORE_THRESHOLD ? "要対応" : normalized >= REVIEW_CAUTION_SCORE_THRESHOLD ? "要確認" : "維持候補",
+    grade: normalized >= REVIEW_URGENT_SCORE_THRESHOLD ? "要対応" : normalized >= REVIEW_CAUTION_SCORE_THRESHOLD ? "要確認" : "継続候補",
     reasons: reasons.length ? reasons : ["大きな懸念はありません"],
   };
 }
