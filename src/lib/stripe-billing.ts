@@ -6,12 +6,27 @@ import {
 } from "@/lib/app-constants";
 import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
-import { hasStripeTrial } from "@/lib/stripe-trial";
+import { hasStripeTrial, stripeTimestampToDate } from "@/lib/stripe-trial";
 
 export type StripeCheckoutSyncStatus = "synced" | "not_complete" | "invalid_user" | "missing_subscription";
 
 export function activePlan(status: string | null | undefined) {
   return STRIPE_ACTIVE_SUBSCRIPTION_STATUSES.some((activeStatus) => activeStatus === status) ? "PREMIUM" : "FREE";
+}
+
+export function hasPremiumStripeStatus(status: string | null | undefined) {
+  return activePlan(status) === "PREMIUM";
+}
+
+function stripeSubscriptionSyncData(subscription: Stripe.Subscription, customerId: string) {
+  return {
+    plan: activePlan(subscription.status) as "FREE" | "PREMIUM",
+    stripeCustomerId: customerId,
+    stripeSubscriptionId: subscription.id,
+    stripeSubscriptionStatus: subscription.status,
+    stripeTrialStartAt: stripeTimestampToDate(subscription.trial_start),
+    stripeTrialEndAt: stripeTimestampToDate(subscription.trial_end),
+  };
 }
 
 async function markTrialUsedByUserId(userId: string) {
@@ -31,11 +46,7 @@ async function markTrialUsedByCustomerId(customerId: string) {
 export async function syncStripeSubscription(subscription: Stripe.Subscription) {
   const customerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id;
   const userId = subscription.metadata?.userId;
-  const data = {
-    plan: activePlan(subscription.status) as "FREE" | "PREMIUM",
-    stripeCustomerId: customerId,
-    stripeSubscriptionId: subscription.id,
-  };
+  const data = stripeSubscriptionSyncData(subscription, customerId);
 
   if (userId) {
     await prisma.user.updateMany({ where: { id: userId }, data });
@@ -45,6 +56,21 @@ export async function syncStripeSubscription(subscription: Stripe.Subscription) 
 
   await prisma.user.updateMany({ where: { stripeCustomerId: customerId }, data });
   if (hasStripeTrial(subscription)) await markTrialUsedByCustomerId(customerId);
+}
+
+type StripeInvoiceWithSubscription = Stripe.Invoice & {
+  subscription?: string | Stripe.Subscription | null;
+};
+
+export async function syncStripeInvoiceSubscription(invoice: Stripe.Invoice) {
+  const subscriptionValue = (invoice as StripeInvoiceWithSubscription).subscription;
+  if (!subscriptionValue) return false;
+
+  const subscription = typeof subscriptionValue === "string"
+    ? await stripe().subscriptions.retrieve(subscriptionValue)
+    : subscriptionValue;
+  await syncStripeSubscription(subscription);
+  return true;
 }
 
 export async function syncStripeCheckoutSession(session: Stripe.Checkout.Session) {
@@ -58,6 +84,9 @@ export async function syncStripeCheckoutSession(session: Stripe.Checkout.Session
         plan: "PREMIUM",
         stripeCustomerId: customerId,
         stripeSubscriptionId: null,
+        stripeSubscriptionStatus: null,
+        stripeTrialStartAt: null,
+        stripeTrialEndAt: null,
       },
     });
     return true;
@@ -65,17 +94,23 @@ export async function syncStripeCheckoutSession(session: Stripe.Checkout.Session
 
   const subscriptionId = typeof session.subscription === "string" ? session.subscription : session.subscription?.id;
   if (!userId || !customerId || !subscriptionId) return false;
-  const subscription = typeof session.subscription === "string" ? null : session.subscription;
+  const subscription = typeof session.subscription === "string"
+    ? await stripe().subscriptions.retrieve(subscriptionId)
+    : session.subscription;
+  if (!subscription) return false;
 
   await prisma.user.update({
     where: { id: userId },
     data: {
-      plan: "PREMIUM",
+      plan: activePlan(subscription.status) as "FREE" | "PREMIUM",
       stripeCustomerId: customerId,
       stripeSubscriptionId: subscriptionId,
+      stripeSubscriptionStatus: subscription.status,
+      stripeTrialStartAt: stripeTimestampToDate(subscription.trial_start),
+      stripeTrialEndAt: stripeTimestampToDate(subscription.trial_end),
     },
   });
-  if (subscription && hasStripeTrial(subscription)) await markTrialUsedByUserId(userId);
+  if (hasStripeTrial(subscription)) await markTrialUsedByUserId(userId);
   return true;
 }
 
@@ -115,7 +150,7 @@ export async function syncLatestStripeSubscriptionForUser(userId: string) {
       if (stripeError.code !== "resource_missing") throw error;
       await prisma.user.update({
         where: { id: userId },
-        data: { stripeSubscriptionId: null },
+        data: { stripeSubscriptionId: null, stripeSubscriptionStatus: null, stripeTrialStartAt: null, stripeTrialEndAt: null },
       });
       return null;
     });
@@ -133,7 +168,7 @@ export async function syncLatestStripeSubscriptionForUser(userId: string) {
     if (stripeError.code !== "resource_missing" && stripeError.param !== "customer" && stripeError.raw?.param !== "customer") throw error;
     await prisma.user.update({
       where: { id: userId },
-      data: { stripeCustomerId: null, stripeSubscriptionId: null },
+      data: { stripeCustomerId: null, stripeSubscriptionId: null, stripeSubscriptionStatus: null, stripeTrialStartAt: null, stripeTrialEndAt: null },
     });
     return null;
   });

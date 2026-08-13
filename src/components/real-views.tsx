@@ -10,10 +10,14 @@ import {
   DASHBOARD_ANNOUNCEMENT_MAX_ITEMS,
   DEFAULT_NOTIFICATION_HOUR,
   DEFAULT_NOTIFY_DAYS_BEFORE,
+  MIN_TRIAL_REMAINING_DAYS,
   PLACEHOLDER_HOSTS,
+  PREMIUM_MONTHLY_PRICE_YEN,
   REVIEW_CAUTION_SCORE_THRESHOLD,
   REVIEW_STALE_DAYS,
   REVIEW_URGENT_SCORE_THRESHOLD,
+  STRIPE_TRIALING_STATUS,
+  STRIPE_TRIAL_PERIOD_DAYS,
   UPCOMING_DEADLINE_DAYS,
 } from "@/lib/app-constants";
 import { annualAmount, AVERAGE_DAYS_PER_MONTH, daysUntil, isoDate, MONTHS_PER_YEAR, monthlyAmount as monthly } from "@/lib/billing";
@@ -568,6 +572,44 @@ function PremiumOnlyNotice({ title, description }: { title: string; description:
 
 function dateText(value?: Date | null) {
   return value ? isoDate(value) : "未設定";
+}
+
+function StripeTrialStatusCard({
+  stripeSubscriptionStatus,
+  stripeTrialEndAt,
+  trialUsedAt,
+}: {
+  stripeSubscriptionStatus: string | null;
+  stripeTrialEndAt: Date | null;
+  trialUsedAt: Date | null;
+}) {
+  const trialing = stripeSubscriptionStatus === STRIPE_TRIALING_STATUS && stripeTrialEndAt;
+  if (trialing) {
+    const remainingDays = Math.max(MIN_TRIAL_REMAINING_DAYS, daysUntil(stripeTrialEndAt));
+    return (
+      <div className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-900">
+        <p className="font-black">Premium無料トライアル中</p>
+        <p>残り{remainingDays}日です。無料期間終了日: {dateText(stripeTrialEndAt)}</p>
+        <p>無料期間中に解約すると料金はかかりません。継続した場合は月額{yen.format(PREMIUM_MONTHLY_PRICE_YEN)}で更新されます。</p>
+      </div>
+    );
+  }
+
+  if (!trialUsedAt) {
+    return (
+      <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm leading-6 text-blue-900">
+        <p className="font-black">初回のみ{STRIPE_TRIAL_PERIOD_DAYS}日間無料</p>
+        <p>本日の請求は0円です。無料期間中に解約すると料金はかかりません。無料期間終了後は月額{yen.format(PREMIUM_MONTHLY_PRICE_YEN)}で自動更新されます。</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm leading-6 text-slate-700">
+      <p className="font-black">無料トライアルは利用済みです</p>
+      <p>再加入時は無料期間なしで、通常の月額{yen.format(PREMIUM_MONTHLY_PRICE_YEN)}のPremium契約になります。</p>
+    </div>
+  );
 }
 
 function notificationTypeLabel(type: string) {
@@ -2422,7 +2464,18 @@ export async function SettingsView({ checkoutStatus, checkoutSessionId, emailCha
 
   const user = await prisma.user.findUnique({
     where: { id: currentUser.id },
-    select: { id: true, name: true, email: true, emailVerified: true, plan: true, stripeCustomerId: true, createdAt: true },
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      emailVerified: true,
+      plan: true,
+      stripeCustomerId: true,
+      stripeSubscriptionStatus: true,
+      stripeTrialEndAt: true,
+      trialUsedAt: true,
+      createdAt: true,
+    },
   });
   if (!user) return null;
   const [preference, stripeInvoicesResult] = await Promise.all([
@@ -2458,6 +2511,7 @@ export async function SettingsView({ checkoutStatus, checkoutSessionId, emailCha
         <Card>
           <h2 className="text-lg font-bold">プラン</h2>
           <p className="mt-2 text-sm text-slate-600">Freeと月額Premiumの利用状態を確認・変更します。</p>
+          <StripeTrialStatusCard stripeSubscriptionStatus={user.stripeSubscriptionStatus} stripeTrialEndAt={user.stripeTrialEndAt} trialUsedAt={user.trialUsedAt} />
           <div className="mt-5"><PlanSettingsForm plan={user.plan} stripeTestMode={env.stripeTestMode} /></div>
         </Card>
         <StripeInvoicesCard result={stripeInvoicesResult} />

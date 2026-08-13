@@ -1,7 +1,9 @@
 export const FREE_SUBSCRIPTION_LIMIT = 10;
 export const FREE_CATEGORY_LIMIT = 5;
+export const PREMIUM_MONTHLY_PRICE_YEN = 480;
 export const STRIPE_TRIAL_PERIOD_DAYS = 7;
 export const MIN_STRIPE_TRIAL_PERIOD_DAYS = 1;
+export const MIN_TRIAL_REMAINING_DAYS = 0;
 export const STRIPE_TRIAL_LOOKBACK_SUBSCRIPTION_LIMIT = 10;
 export const STRIPE_SUBSCRIPTION_STATUS_ALL = "all";
 export const STRIPE_TRIALING_STATUS = "trialing";

@@ -1,6 +1,7 @@
 export const MONTHS_PER_YEAR = 12;
 export const AVERAGE_WEEKS_PER_MONTH = 4.345;
 export const AVERAGE_DAYS_PER_MONTH = 30.437;
+export const MILLISECONDS_PER_SECOND = 1_000;
 export const MILLISECONDS_PER_DAY = 86_400_000;
 export const ISO_DATE_LENGTH = 10;
 

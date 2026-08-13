@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import type Stripe from "stripe";
 import { env } from "@/lib/env";
 import { stripeForWebhook } from "@/lib/stripe";
-import { syncStripeCheckoutSession, syncStripeSubscription } from "@/lib/stripe-billing";
+import { syncStripeCheckoutSession, syncStripeInvoiceSubscription, syncStripeSubscription } from "@/lib/stripe-billing";
 
 export const runtime = "nodejs";
 
@@ -26,6 +26,9 @@ export async function POST(request: Request) {
     }
     if (event.type === "customer.subscription.created" || event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted") {
       await syncStripeSubscription(event.data.object as Stripe.Subscription);
+    }
+    if (event.type === "invoice.paid" || event.type === "invoice.payment_failed") {
+      await syncStripeInvoiceSubscription(event.data.object as Stripe.Invoice);
     }
     return NextResponse.json({ received: true });
   } catch {

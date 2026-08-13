@@ -2,7 +2,8 @@ import {
   MIN_STRIPE_TRIAL_PERIOD_DAYS,
   STRIPE_TRIAL_PERIOD_DAYS,
   STRIPE_TRIALING_STATUS,
-} from "@/lib/app-constants";
+} from "./app-constants.ts";
+import { MILLISECONDS_PER_SECOND } from "./billing.ts";
 
 type StripeTrialState = {
   status?: string | null;
@@ -12,6 +13,10 @@ type StripeTrialState = {
 
 export function hasStripeTrial(subscription: StripeTrialState) {
   return subscription.status === STRIPE_TRIALING_STATUS || Boolean(subscription.trial_start) || Boolean(subscription.trial_end);
+}
+
+export function stripeTimestampToDate(timestamp: number | null | undefined) {
+  return timestamp ? new Date(timestamp * MILLISECONDS_PER_SECOND) : null;
 }
 
 export function canUseStripeTrial(trialUsedAt: Date | string | null | undefined) {
