@@ -18,28 +18,43 @@
     "seed:admin": "node scripts/seed-admin.cjs"
   },
   "dependencies": {
-    "@prisma/adapter-mariadb": "^7.8.0",
-    "@prisma/client": "^7.8.0",
+    "@prisma/adapter-mariadb": "^7.10.0",
+    "@prisma/client": "^7.10.0",
     "@types/nodemailer": "^8.0.1",
     "bcryptjs": "^3.0.3",
-    "mariadb": "^3.5.3",
-    "next": "16.2.9",
-    "nodemailer": "^7.0.13",
+    "mariadb": "^3.5.4",
+    "next": "^16.3.4",
+    "nodemailer": "^9.1.1",
     "prettier": "^3.9.0",
-    "prisma": "^7.8.0",
+    "prisma": "^7.10.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "stripe": "^22.3.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.9",
+    "eslint-config-next": "^16.3.4",
     "tailwindcss": "^4",
     "typescript": "^5"
+  },
+  "overrides": {
+    "browserslist": "4.28.7",
+    "mysql2": "3.22.0",
+    "mariadb": "$mariadb",
+    "@prisma/config": {
+      "deepmerge-ts": "8.0.2"
+    },
+    "js-yaml": "4.3.1",
+    "minimatch@3.1.5": {
+      "brace-expansion": "1.1.18"
+    },
+    "minimatch@10.2.5": {
+      "brace-expansion": "5.0.9"
+    }
   }
 }
