@@ -4,10 +4,13 @@ on:
   pull_request:
     branches:
       - master
+      - main
   push:
     branches:
-      - 'codex/**'
-      - 'codex-*'
+      - master
+      - main
+      - "codex/**"
+      - "codex-*"
   workflow_dispatch:
 
 permissions:
@@ -18,9 +21,10 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  NODE_VERSION: '24'
-  NODE_ENV: test
+  NODE_VERSION: "24"
+  CI: "true"
   DATABASE_URL: mysql://ci:ci@127.0.0.1:3306/subsclist_ci
+  TEST_DATABASE_URL: mysql://ci:ci@127.0.0.1:3306/subsclist_ci
   APP_URL: http://localhost:3000
   NEXTAUTH_URL: http://localhost:3000
   AUTH_SECRET: ci-auth-secret-at-least-32-characters-long
@@ -30,8 +34,8 @@ env:
   STRIPE_PREMIUM_PRICE_ID: price_ci_placeholder
   MAIL_FROM: SubscList CI <ci@example.com>
   SMTP_HOST: localhost
-  SMTP_PORT: '1025'
-  SMTP_SECURE: 'false'
+  SMTP_PORT: "1025"
+  SMTP_SECURE: "false"
   SMTP_USER: ci@example.com
   SMTP_PASS: ci-placeholder
   ADMIN_USER_EMAIL: admin@example.com
@@ -40,9 +44,24 @@ env:
 
 jobs:
   test:
-    name: Test and build
+    name: Test, audit, and build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 45
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: subsclist_ci
+          MYSQL_USER: ci
+          MYSQL_PASSWORD: ci
+          MYSQL_ROOT_PASSWORD: ci-root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --host=127.0.0.1 --user=ci --password=ci --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
 
     steps:
       - name: Checkout
@@ -57,17 +76,55 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chrome
+
       - name: Generate Prisma Client
         run: npm run prisma:generate
+
+      - name: Apply database migrations
+        run: npm run prisma:deploy
 
       - name: Run lint
         run: npm run lint
 
-      - name: Run tests
+      - name: Run unit and security tests
         run: npm test
+
+      - name: Run API route security tests with coverage
+        run: npm run test:routes:coverage
+
+      - name: Verify multi-user data isolation
+        run: npm run test:db-isolation
+
+      - name: Audit Stripe identifiers
+        run: npm run audit:stripe
 
       - name: Build application
         run: npm run build
 
+      - name: Run end-to-end browser tests
+        run: npm run test:e2e
+
       - name: Audit Node dependencies
         run: npm audit --audit-level=high
+
+      - name: Upload route coverage summary
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: route-coverage
+          path: coverage/routes
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: |
+            test-results/playwright
+            playwright-report
+          if-no-files-found: ignore
+          retention-days: 7

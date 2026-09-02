@@ -7,7 +7,9 @@ rules:
       include:
         - src/**/*.tsx
         - src/**/*.jsx
-    pattern: <$ELEMENT dangerouslySetInnerHTML={...} />
+    patterns:
+      - pattern: <$ELEMENT dangerouslySetInnerHTML={...} />
+      - pattern-not: <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify($DATA) }} />
     message: 'dangerouslySetInnerHTML can introduce XSS. Render text normally or sanitize trusted HTML on the server before rendering.'
     severity: ERROR
     metadata:

@@ -1,0 +1,187 @@
+name: Deploy production
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "Branch to deploy"
+        required: true
+        default: "master"
+        type: choice
+        options:
+          - master
+          - main
+      run_database_migrations:
+        description: "Run prisma migrate deploy on the server"
+        required: true
+        default: true
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+env:
+  NODE_VERSION: "24"
+  CI: "true"
+  DATABASE_URL: mysql://ci:ci@127.0.0.1:3306/subsclist_ci
+  TEST_DATABASE_URL: mysql://ci:ci@127.0.0.1:3306/subsclist_ci
+  APP_URL: http://localhost:3000
+  NEXTAUTH_URL: http://localhost:3000
+  AUTH_SECRET: ci-auth-secret-at-least-32-characters-long
+  NEXTAUTH_SECRET: ci-auth-secret-at-least-32-characters-long
+  STRIPE_SECRET_KEY: sk_test_ci_placeholder
+  STRIPE_WEBHOOK_SECRET: whsec_ci_placeholder
+  STRIPE_PREMIUM_PRICE_ID: price_ci_placeholder
+  MAIL_FROM: SubscList CI <ci@example.com>
+  SMTP_HOST: localhost
+  SMTP_PORT: "1025"
+  SMTP_SECURE: "false"
+  SMTP_USER: ci@example.com
+  SMTP_PASS: ci-placeholder
+  ADMIN_USER_EMAIL: admin@example.com
+  DEMO_USER_EMAIL: user@example.com
+  NOTIFICATION_JOB_SECRET: ci-notification-secret
+
+jobs:
+  verify:
+    name: Verify before deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: subsclist_ci
+          MYSQL_USER: ci
+          MYSQL_PASSWORD: ci
+          MYSQL_ROOT_PASSWORD: ci-root
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --host=127.0.0.1 --user=ci --password=ci --silent"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Generate Prisma Client
+        run: npm run prisma:generate
+
+      - name: Apply database migrations to CI database
+        run: npm run prisma:deploy
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Run unit and security tests
+        run: npm test
+
+      - name: Run API route security tests with coverage
+        run: npm run test:routes:coverage
+
+      - name: Verify multi-user data isolation
+        run: npm run test:db-isolation
+
+      - name: Audit Stripe identifiers
+        run: npm run audit:stripe
+
+      - name: Build application
+        run: npm run build
+
+      - name: Audit Node dependencies
+        run: npm audit --audit-level=high
+
+  deploy:
+    name: Deploy over SSH
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    env:
+      DEPLOY_REF: ${{ inputs.ref }}
+      RUN_DATABASE_MIGRATIONS: ${{ inputs.run_database_migrations }}
+      PRODUCTION_SSH_HOST: ${{ secrets.PRODUCTION_SSH_HOST }}
+      PRODUCTION_SSH_PORT: ${{ secrets.PRODUCTION_SSH_PORT }}
+      PRODUCTION_SSH_USER: ${{ secrets.PRODUCTION_SSH_USER }}
+      PRODUCTION_APP_DIR: ${{ secrets.PRODUCTION_APP_DIR }}
+      PRODUCTION_PM2_NAME: ${{ secrets.PRODUCTION_PM2_NAME }}
+      PRODUCTION_SSH_PRIVATE_KEY: ${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}
+      PRODUCTION_SSH_KNOWN_HOSTS: ${{ secrets.PRODUCTION_SSH_KNOWN_HOSTS }}
+    steps:
+      - name: Validate deployment secrets
+        run: |
+          test -n "$PRODUCTION_SSH_HOST"
+          test -n "$PRODUCTION_SSH_USER"
+          test -n "$PRODUCTION_APP_DIR"
+          test -n "$PRODUCTION_SSH_PRIVATE_KEY"
+          test -n "$PRODUCTION_SSH_KNOWN_HOSTS"
+
+      - name: Prepare SSH
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$PRODUCTION_SSH_PRIVATE_KEY" > ~/.ssh/subsclist_deploy_key
+          chmod 600 ~/.ssh/subsclist_deploy_key
+          printf '%s\n' "$PRODUCTION_SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: Deploy application
+        run: |
+          port="${PRODUCTION_SSH_PORT:-22}"
+          pm2_name="${PRODUCTION_PM2_NAME:-subsclist}"
+          ssh -i ~/.ssh/subsclist_deploy_key -p "$port" "$PRODUCTION_SSH_USER@$PRODUCTION_SSH_HOST" bash -s -- "$DEPLOY_REF" "$RUN_DATABASE_MIGRATIONS" "$PRODUCTION_APP_DIR" "$pm2_name" <<'REMOTE'
+          set -Eeuo pipefail
+          deploy_ref="$1"
+          run_database_migrations="$2"
+          app_dir="$3"
+          pm2_name="$4"
+
+          case "$deploy_ref" in
+            master|main) ;;
+            *) echo "Deploy ref must be master or main." >&2; exit 1 ;;
+          esac
+
+          cd "$app_dir"
+          git fetch --prune origin "$deploy_ref"
+          git checkout "$deploy_ref"
+          git pull --ff-only origin "$deploy_ref"
+          npm ci --ignore-scripts
+          npm run prisma:generate
+          if [ "$run_database_migrations" = "true" ]; then
+            npm run prisma:deploy
+          fi
+          npm run build
+          if pm2 describe "$pm2_name" >/dev/null 2>&1; then
+            pm2 reload "$pm2_name" --update-env
+          else
+            pm2 start ecosystem.config.cjs --only "$pm2_name" --update-env
+          fi
+          pm2 save
+          REMOTE
+
+      - name: Verify deployed endpoint
+        run: |
+          port="${PRODUCTION_SSH_PORT:-22}"
+          ssh -i ~/.ssh/subsclist_deploy_key -p "$port" "$PRODUCTION_SSH_USER@$PRODUCTION_SSH_HOST" bash -s -- "$PRODUCTION_APP_DIR" <<'REMOTE'
+          set -Eeuo pipefail
+          app_dir="$1"
+          cd "$app_dir"
+          curl -fsS -I http://127.0.0.1:3000 >/dev/null
+          REMOTE
