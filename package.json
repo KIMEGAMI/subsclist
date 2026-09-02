@@ -18,19 +18,19 @@
     "seed:admin": "node scripts/seed-admin.cjs"
   },
   "dependencies": {
-    "@prisma/adapter-mariadb": "^7.8.0",
-    "@prisma/client": "^7.8.0",
+    "@prisma/adapter-mariadb": "^7.10.0",
+    "@prisma/client": "^7.10.0",
     "@types/nodemailer": "^8.0.1",
     "bcryptjs": "^3.0.3",
     "mariadb": "^3.5.3",
-    "next": "16.2.9",
-    "nodemailer": "^7.0.13",
-    "prettier": "^3.9.0",
-    "prisma": "^7.8.0",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "stripe": "^22.3.0",
-    "zod": "^4.4.3"
+    "next": "16.3.3",
+    "nodemailer": "^9.0.6",
+    "prettier": "^3.9.6",
+    "prisma": "^7.10.0",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "stripe": "^22.6.0",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
