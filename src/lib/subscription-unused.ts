@@ -4,6 +4,7 @@ export type UnusedSubscriptionInput = {
   id: string;
   name: string;
   createdAt: Date;
+  hasUsageEvidence: boolean;
   usageDays30: number;
   usageDays60: number;
   usageDays90: number;
@@ -22,6 +23,7 @@ function calendarDaysBetween(start: Date, end: Date): number {
 
 export function detectUnusedSubscriptions(items: UnusedSubscriptionInput[], now = new Date()): UnusedSubscriptionResult[] {
   return items.flatMap((item) => {
+    if (!item.hasUsageEvidence) return [];
     const daysSinceRegistration = calendarDaysBetween(item.createdAt, now);
     const matchingWindow = [...UNUSED_USAGE_WINDOWS].reverse().find((windowDays) => {
       const usageDays = windowDays === 90 ? item.usageDays90 : windowDays === 60 ? item.usageDays60 : item.usageDays30;

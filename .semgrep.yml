@@ -9,7 +9,8 @@ rules:
         - src/**/*.jsx
     patterns:
       - pattern: <$ELEMENT dangerouslySetInnerHTML={...} />
-      - pattern-not: <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify($DATA) }} />
+      - pattern-not: |
+          <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify($DATA) }} />
     message: 'dangerouslySetInnerHTML can introduce XSS. Render text normally or sanitize trusted HTML on the server before rendering.'
     severity: ERROR
     metadata:
@@ -54,8 +55,6 @@ rules:
       - pattern: eval(...)
       - pattern: Function(...)
       - pattern: new Function(...)
-      - pattern: setTimeout($CODE, ...)
-      - pattern: setInterval($CODE, ...)
     message: 'Dynamic code execution is prohibited. Replace it with explicit control flow and validated inputs.'
     severity: ERROR
     metadata:
@@ -65,6 +64,27 @@ rules:
       owasp:
         - A03:2021 - Injection
 
+
+  - id: subsclist.javascript.string-timer-code-execution
+    languages:
+      - generic
+    paths:
+      include:
+        - src/**/*.js
+        - src/**/*.jsx
+        - src/**/*.ts
+        - src/**/*.tsx
+        - scripts/**/*.js
+        - scripts/**/*.cjs
+    pattern-regex: "\\bset(?:Timeout|Interval)\\s*\\(\\s*['\"`]"
+    message: 'String-based timers execute dynamic code. Pass a function callback instead of a string.'
+    severity: ERROR
+    metadata:
+      category: security
+      cwe:
+        - 'CWE-94: Improper Control of Generation of Code'
+      owasp:
+        - A03:2021 - Injection
   - id: subsclist.prisma.unsafe-raw-query
     languages:
       - typescript

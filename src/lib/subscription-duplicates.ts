@@ -5,7 +5,7 @@ export type CategoryDuplicateInput = {
   name: string;
   categoryName: string | null;
   monthlyCost: number;
-  usageDays30: number;
+  usageDays30: number | null;
 };
 
 export type CategoryDuplicateGroup = {
@@ -28,7 +28,12 @@ export function detectCategoryDuplicates(items: CategoryDuplicateInput[]): Categ
     .map(([categoryName, subscriptions]) => ({
       categoryName,
       monthlyCost: subscriptions.reduce((total, subscription) => total + subscription.monthlyCost, 0),
-      subscriptions: [...subscriptions].sort((left, right) => left.usageDays30 - right.usageDays30 || right.monthlyCost - left.monthlyCost),
+      subscriptions: [...subscriptions].sort((left, right) => {
+        if (left.usageDays30 === null && right.usageDays30 !== null) return 1;
+        if (left.usageDays30 !== null && right.usageDays30 === null) return -1;
+        return (left.usageDays30 ?? 0) - (right.usageDays30 ?? 0)
+          || right.monthlyCost - left.monthlyCost;
+      }),
     }))
     .sort((left, right) => right.monthlyCost - left.monthlyCost);
 }

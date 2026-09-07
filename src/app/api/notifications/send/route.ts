@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
+import { getVerifiedApiUser } from "@/lib/api-auth";
 import { DEFAULT_NOTIFY_DAYS_BEFORE } from "@/lib/app-constants";
-import { isoDate, MONTHS_PER_YEAR, monthlyAmount } from "@/lib/billing";
+import { isoDate, MONTHS_PER_YEAR, monthlyAmount, nextBillingOccurrence } from "@/lib/billing";
 import { priceIncreaseRegisteredToday, unusedNotificationMilestone } from "@/lib/engagement-notifications";
 import { env } from "@/lib/env";
 import { sendSubscriptionReminderEmail } from "@/lib/mail";
@@ -11,9 +11,27 @@ import { detectCancellationCandidates } from "@/lib/subscription-cancellation-ca
 import { needsWeeklyReview, startOfJapanWeek } from "@/lib/subscription-weekly-review";
 import { japanCalendarDate, shiftCalendarDays } from "@/lib/subscription-usage";
 import { shouldRunNotificationAtHour } from "@/lib/notification-schedule";
+import {
+  NOTIFICATION_JOB_STATUS_KEY,
+  serializeNotificationJobStatus,
+} from "@/lib/notification-job-status";
+import { effectiveSubscriptionNotification } from "@/lib/subscription-notification";
+import {
+  isMonthlyDigestDay,
+  previousMonthlyOutcomePeriod,
+  previousMonthlyOutcomeSummaryLines,
+  summarizeMonthlyDigest,
+  summarizePreviousMonthlyOutcome,
+} from "@/lib/monthly-digest";
+import { isSubscriptionNotificationSnoozed } from "@/lib/notification-snooze";
+import { scheduledPriceNoticeDue } from "@/lib/scheduled-price";
+import {
+  formatSourceAmountMinor,
+  isSubscriptionCurrency,
+} from "@/lib/subscription-currency";
 
 type Reminder = {
-  type: "renewal" | "trial" | "cancellation" | "weekly_review" | "unused_30" | "unused_60" | "unused_90" | "price_increase";
+  type: "renewal" | "trial" | "cancellation" | "weekly_review" | "unused_30" | "unused_60" | "unused_90" | "price_increase" | "scheduled_price_change";
   title: string;
   targetDate: Date;
   lines: string[];
@@ -44,15 +62,26 @@ function hasPrismaErrorCode(error: unknown, code: string) {
   );
 }
 
+async function saveNotificationJobStatus(value: string) {
+  await prisma.appSetting.upsert({
+    where: { key: NOTIFICATION_JOB_STATUS_KEY },
+    create: { key: NOTIFICATION_JOB_STATUS_KEY, value },
+    update: { value },
+  });
+}
+
 function remindersFor(subscription: {
   name: string;
   createdAt: Date;
   plan: string;
   price: number;
+  scheduledPrice: number | null;
+  scheduledPriceAt: Date | null;
   currency: string;
+  sourceAmountMinor: number | null;
   billingCycle: string;
   customCycleDays: number | null;
-  notifyDaysBefore: number | null;
+  notificationDaysBefore: number;
   nextBillingDate: Date;
   trialEndsAt: Date | null;
   cancellationDeadline: Date | null;
@@ -67,19 +96,32 @@ function remindersFor(subscription: {
   }>;
 }) {
   const today = startOfDay(new Date());
-  const daysBefore = subscription.notifyDaysBefore ?? DEFAULT_NOTIFY_DAYS_BEFORE;
+  const daysBefore = subscription.notificationDaysBefore;
   const reminders: Reminder[] = [];
-  const price = `${subscription.currency} ${subscription.price.toLocaleString("ja-JP")}`;
+  const price = `${subscription.price.toLocaleString("ja-JP")}円`;
+  const originalPrice =
+    isSubscriptionCurrency(subscription.currency)
+    && subscription.currency !== "JPY"
+    && subscription.sourceAmountMinor !== null
+      ? `${subscription.currency} ${formatSourceAmountMinor(subscription.sourceAmountMinor, subscription.currency)}`
+      : null;
+  const renewalDate = nextBillingOccurrence(
+    subscription.nextBillingDate,
+    subscription.billingCycle,
+    subscription.customCycleDays,
+    today,
+  );
 
-  if (sameDay(addDays(today, daysBefore), subscription.nextBillingDate)) {
+  if (sameDay(addDays(today, daysBefore), renewalDate)) {
     reminders.push({
       type: "renewal",
       title: "更新日のお知らせ",
-      targetDate: subscription.nextBillingDate,
+      targetDate: renewalDate,
       lines: [
         `${subscription.name} の次回更新日が近づいています。`,
-        `更新日: ${formatDate(subscription.nextBillingDate)}`,
-        `金額: ${price}`,
+        `更新日: ${formatDate(renewalDate)}`,
+        `金額（円換算）: ${price}`,
+        ...(originalPrice ? [`原通貨の請求額: ${originalPrice}`] : []),
         "継続しない場合は、期限前に解約手続きを確認してください。",
       ],
     });
@@ -111,6 +153,27 @@ function remindersFor(subscription: {
     });
   }
 
+  if (
+    subscription.scheduledPrice !== null
+    && subscription.scheduledPriceAt
+    && scheduledPriceNoticeDue(subscription.scheduledPriceAt, daysBefore)
+  ) {
+    const difference = subscription.scheduledPrice - subscription.price;
+    reminders.push({
+      type: "scheduled_price_change",
+      title: "価格変更予定のお知らせ",
+      targetDate: subscription.scheduledPriceAt,
+      lines: [
+        `${subscription.name} に価格変更予定が登録されています。`,
+        `変更予定日: ${formatDate(subscription.scheduledPriceAt)}`,
+        `現在: ${subscription.price.toLocaleString("ja-JP")}円`,
+        `変更後: ${subscription.scheduledPrice.toLocaleString("ja-JP")}円`,
+        `差額: ${difference >= 0 ? "+" : ""}${difference.toLocaleString("ja-JP")}円`,
+        "請求条件を確認し、SubscListの契約詳細から現在価格へ反映してください。",
+      ],
+    });
+  }
+
   if (subscription.usageFrequency !== "UNKNOWN" && needsWeeklyReview({ lastReviewedAt: subscription.lastReviewedAt, usedDates: subscription.usageRecords.map((record) => record.usedDate) })) {
     reminders.push({
       type: "weekly_review",
@@ -124,10 +187,11 @@ function remindersFor(subscription: {
   }
 
   if (isPremiumPlan(subscription.plan)) {
-    const unusedMilestone = unusedNotificationMilestone({
+    const lastUsedAt = subscription.usageRecords[0]?.usedDate;
+    const unusedMilestone = lastUsedAt ? unusedNotificationMilestone({
       createdAt: subscription.createdAt,
-      lastUsedAt: subscription.usageRecords[0]?.usedDate,
-    });
+      lastUsedAt,
+    }) : null;
     if (unusedMilestone) {
       reminders.push({
         type: `unused_${unusedMilestone.days}`,
@@ -172,13 +236,19 @@ function remindersFor(subscription: {
 export async function POST(request: NextRequest) {
   const auth = request.headers.get("authorization");
   const cronAuthorized = Boolean(env.notificationJobSecret && auth === `Bearer ${env.notificationJobSecret}`);
-  const user = cronAuthorized ? null : await getCurrentUser();
-
-  if (!cronAuthorized && !user) {
-    return NextResponse.json({ message: "ログインしてください。" }, { status: 401 });
-  }
-  if (!cronAuthorized && user && !user.emailVerified) {
-    return NextResponse.json({ message: "メール認証が必要です。" }, { status: 403 });
+  const access = cronAuthorized ? null : await getVerifiedApiUser();
+  if (access && !access.ok) return access.response;
+  const user = access?.ok ? access.user : null;
+  const jobStartedAt = new Date();
+  if (cronAuthorized) {
+    await saveNotificationJobStatus(serializeNotificationJobStatus({
+      state: "RUNNING",
+      startedAt: jobStartedAt.toISOString(),
+      completedAt: null,
+      sent: 0,
+      skipped: 0,
+      failures: 0,
+    }));
   }
 
   const subscriptions = await prisma.subscription.findMany({
@@ -200,6 +270,11 @@ export async function POST(request: NextRequest) {
         take: 1,
         select: { price: true, billingCycle: true, customCycleDays: true, effectiveFrom: true },
       },
+      notificationSettings: {
+        orderBy: { updatedAt: "desc" },
+        take: 1,
+        select: { enabled: true, daysBefore: true },
+      },
     },
   });
 
@@ -215,7 +290,20 @@ export async function POST(request: NextRequest) {
     if (cronAuthorized && !shouldRunNotificationAtHour(subscription.user.preference?.notificationHour)) {
       continue;
     }
-    for (const reminder of remindersFor({ ...subscription, plan: subscription.user.plan })) {
+    const notification = effectiveSubscriptionNotification({
+      settings: subscription.notificationSettings,
+      subscriptionDaysBefore: subscription.notifyDaysBefore,
+      fallbackDaysBefore:
+        subscription.user.preference?.defaultNotifyDaysBefore
+        ?? DEFAULT_NOTIFY_DAYS_BEFORE,
+    });
+    if (!notification.enabled) continue;
+    if (isSubscriptionNotificationSnoozed(subscription.notificationSnoozedUntil)) continue;
+    for (const reminder of remindersFor({
+      ...subscription,
+      plan: subscription.user.plan,
+      notificationDaysBefore: notification.daysBefore,
+    })) {
       const scheduledFor = startOfDay(reminder.targetDate);
       const delivered = await prisma.notificationDelivery.findFirst({
         where: {
@@ -304,19 +392,141 @@ export async function POST(request: NextRequest) {
   const challengeYear = today.getUTCFullYear();
   const challengeMonth = today.getUTCMonth() + 1;
   const challengeNotificationDate = new Date(Date.UTC(challengeYear, challengeMonth - 1, 1));
+  if (isMonthlyDigestDay(today)) {
+    const digestUsers = (await prisma.user.findMany({
+      where: { id: user?.id, emailVerified: { not: null } },
+      include: { preference: true },
+    })).filter((notificationUser) =>
+      isPremiumPlan(notificationUser.plan)
+      && notificationUser.preference?.monthlyDigestEnabled !== false
+    );
+    const digestUserIds = digestUsers.map((notificationUser) => notificationUser.id);
+    const outcomePeriod = previousMonthlyOutcomePeriod(today);
+    const [outcomePayments, outcomeCloses, outcomeDecisions, outcomeCancellations] = digestUserIds.length > 0
+      ? await Promise.all([
+          prisma.paymentHistory.findMany({
+            where: { userId: { in: digestUserIds }, paidAt: { gte: outcomePeriod.start, lt: outcomePeriod.end } },
+            select: { userId: true, amount: true, businessUsePercent: true, paidAt: true },
+          }),
+          prisma.monthlyClose.findMany({
+            where: { userId: { in: digestUserIds }, year: outcomePeriod.year, month: outcomePeriod.month },
+            select: { userId: true, year: true, month: true, readinessScore: true, unresolvedCount: true },
+          }),
+          prisma.savingChallenge.findMany({
+            where: { userId: { in: digestUserIds }, decidedAt: { gte: outcomePeriod.start, lt: outcomePeriod.end } },
+            select: { userId: true, decidedAt: true },
+          }),
+          prisma.subscription.findMany({
+            where: {
+              userId: { in: digestUserIds },
+              cancellationStatus: "COMPLETED",
+              cancellationCompletedAt: { gte: outcomePeriod.start, lt: outcomePeriod.end },
+            },
+            select: { userId: true, price: true, billingCycle: true, customCycleDays: true, cancellationCompletedAt: true },
+          }),
+        ])
+      : [[], [], [], []];
+    const paymentsByUser = new Map<string, typeof outcomePayments>();
+    const decisionsByUser = new Map<string, typeof outcomeDecisions>();
+    const cancellationsByUser = new Map<string, typeof outcomeCancellations>();
+    const closeByUser = new Map(outcomeCloses.map((close) => [close.userId, close]));
+    for (const payment of outcomePayments) {
+      paymentsByUser.set(payment.userId, [...(paymentsByUser.get(payment.userId) ?? []), payment]);
+    }
+    for (const decision of outcomeDecisions) {
+      decisionsByUser.set(decision.userId, [...(decisionsByUser.get(decision.userId) ?? []), decision]);
+    }
+    for (const cancellation of outcomeCancellations) {
+      cancellationsByUser.set(cancellation.userId, [
+        ...(cancellationsByUser.get(cancellation.userId) ?? []),
+        cancellation,
+      ]);
+    }
+
+    for (const notificationUser of digestUsers) {
+      const userId = notificationUser.id;
+      const userSubscriptions = subscriptionsByUser.get(userId) ?? [];
+      if (cronAuthorized && !shouldRunNotificationAtHour(notificationUser.preference?.notificationHour)) continue;
+
+      const alreadySent = await prisma.userNotificationDelivery.findFirst({
+        where: { userId, type: "monthly_portfolio_digest", scheduledFor: challengeNotificationDate },
+      });
+      if (alreadySent) {
+        skipped += 1;
+        continue;
+      }
+
+      const digest = summarizeMonthlyDigest({
+        subscriptions: userSubscriptions,
+        monthlyBudget: notificationUser.preference?.monthlyBudget ?? null,
+        referenceDate: today,
+      });
+      const budgetLine = digest.budgetDifference === null
+        ? "月額予算: 未設定"
+        : digest.budgetDifference >= 0
+          ? `月額予算の残り: ${digest.budgetDifference.toLocaleString("ja-JP")}円`
+          : `月額予算の超過: ${Math.abs(digest.budgetDifference).toLocaleString("ja-JP")}円`;
+      const highestCostLine = digest.highestCostSubscription
+        ? `月額換算が最大の契約: ${digest.highestCostSubscription.name} ${digest.highestCostSubscription.monthlyAmount.toLocaleString("ja-JP")}円`
+        : "登録中の契約はありません。";
+      const outcome = summarizePreviousMonthlyOutcome({
+        payments: paymentsByUser.get(userId) ?? [],
+        decisions: decisionsByUser.get(userId) ?? [],
+        cancellations: cancellationsByUser.get(userId) ?? [],
+        monthlyClose: closeByUser.get(userId) ?? null,
+        referenceDate: today,
+      });
+
+      try {
+        await sendSubscriptionReminderEmail({
+          email: notificationUser.email,
+          title: `${challengeMonth}月のサブスク運用サマリー`,
+          lines: [
+            ...previousMonthlyOutcomeSummaryLines(outcome),
+            `有効な契約: ${digest.activeCount}件 / 月額見込み: ${digest.monthlyTotal.toLocaleString("ja-JP")}円`,
+            `仕事利用分の見込み: ${digest.businessMonthlyTotal.toLocaleString("ja-JP")}円`,
+            budgetLine,
+            `30日以内の更新: ${digest.upcomingRenewalCount}件 / 30日以上未見直し: ${digest.reviewNeededCount}件`,
+            highestCostLine,
+            `前月レポート: ${new URL(`/monthly-report?month=${outcome.year}-${String(outcome.month).padStart(2, "0")}`, env.appUrl).toString()}`,
+            `今月の確認: ${new URL("/monthly-report", env.appUrl).toString()}`,
+          ],
+        });
+        await prisma.userNotificationDelivery.create({
+          data: { userId, type: "monthly_portfolio_digest", scheduledFor: challengeNotificationDate },
+        });
+        sent += 1;
+      } catch (error) {
+        if (hasPrismaErrorCode(error, "P2002")) {
+          skipped += 1;
+          continue;
+        }
+        failures.push("月次運用サマリー");
+        console.error("Failed to send monthly portfolio digest.");
+      }
+    }
+  }
+
   for (const [userId, userSubscriptions] of subscriptionsByUser) {
     const notificationUser = userSubscriptions[0]?.user;
     if (!notificationUser || !isPremiumPlan(notificationUser.plan)) continue;
     if (cronAuthorized && !shouldRunNotificationAtHour(notificationUser.preference?.notificationHour)) continue;
 
+    const candidate = monthlyChallengeCandidate(userSubscriptions);
+    if (!candidate) continue;
+
     const answered = await prisma.savingChallenge.findUnique({
-      where: { userId_year_month: { userId, year: challengeYear, month: challengeMonth } },
+      where: {
+        userId_subscriptionId_year_month: {
+          userId,
+          subscriptionId: candidate.id,
+          year: challengeYear,
+          month: challengeMonth,
+        },
+      },
       select: { id: true },
     });
     if (answered) continue;
-
-    const candidate = monthlyChallengeCandidate(userSubscriptions);
-    if (!candidate) continue;
 
     const alreadySent = await prisma.userNotificationDelivery.findFirst({
       where: { userId, type: "monthly_saving_challenge", scheduledFor: challengeNotificationDate },
@@ -333,7 +543,7 @@ export async function POST(request: NextRequest) {
         lines: [
           `${candidate.name} を今月の見直し候補として確認してください。`,
           `月額換算: 約${Math.round(candidate.monthlyCost).toLocaleString("ja-JP")}円`,
-          `年間の削減余地: 約${Math.round(candidate.annualSaving).toLocaleString("ja-JP")}円`,
+          `確度補正後の年間試算: 約${Math.round(candidate.annualSaving).toLocaleString("ja-JP")}円（確度 ${candidate.confidencePercent}%）`,
           `理由: ${candidate.reasons.join(" / ")}`,
           "自動解約は行いません。SubscListで継続・解約予定・保留を選択してください。",
         ],
@@ -352,6 +562,16 @@ export async function POST(request: NextRequest) {
     }
   }
 
+  if (cronAuthorized) {
+    await saveNotificationJobStatus(serializeNotificationJobStatus({
+      state: failures.length === 0 ? "SUCCEEDED" : "PARTIAL",
+      startedAt: jobStartedAt.toISOString(),
+      completedAt: new Date().toISOString(),
+      sent,
+      skipped,
+      failures: failures.length,
+    }));
+  }
   return NextResponse.json({ ok: failures.length === 0, sent, skipped, failures });
 }
 
@@ -381,10 +601,10 @@ function monthlyChallengeCandidate(subscriptions: Array<{
     id: subscription.id,
     name: subscription.name,
     monthlyCost: monthlyAmount(subscription.price, subscription.billingCycle, subscription.customCycleDays),
-    unusedDays: unusedNotificationMilestone({
+    unusedDays: subscription.usageRecords[0]?.usedDate ? unusedNotificationMilestone({
       createdAt: subscription.createdAt,
-      lastUsedAt: subscription.usageRecords[0]?.usedDate,
-    })?.days ?? 0,
+      lastUsedAt: subscription.usageRecords[0].usedDate,
+    })?.days ?? 0 : 0,
     usageFrequency: subscription.usageFrequency,
     priority: subscription.priority,
     duplicateCategory: Boolean(subscription.categoryId && (categoryCounts.get(subscription.categoryId) ?? 0) > 1),

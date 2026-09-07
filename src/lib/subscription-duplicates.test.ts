@@ -15,3 +15,13 @@ test("同一カテゴリだけを重複候補として月額合計順に返す",
   assert.equal(result[0]?.monthlyCost, 3000);
   assert.equal(result[0]?.subscriptions[0]?.id, "video-b");
 });
+
+test("利用記録がない契約は0日利用より後ろに並べる", () => {
+  const result = detectCategoryDuplicates([
+    { id: "tracked", name: "記録あり", categoryName: "仕事", monthlyCost: 1000, usageDays30: 0 },
+    { id: "unknown", name: "記録なし", categoryName: "仕事", monthlyCost: 2000, usageDays30: null },
+  ]);
+
+  assert.equal(result[0]?.subscriptions[0]?.id, "tracked");
+  assert.equal(result[0]?.subscriptions[1]?.id, "unknown");
+});

@@ -30,21 +30,38 @@ SMTP_SECURE="false"
 SMTP_USER="your-gmail-address@gmail.com"
 SMTP_PASS="your-google-app-password"
 
-STRIPE_SECRET_KEY="sk_live_or_sk_test_..."
+STRIPE_SECRET_KEY="your-stripe-secret-key"
 STRIPE_WEBHOOK_SECRET="whsec_..."
 STRIPE_PREMIUM_PRICE_ID="price_..."
+STRIPE_PORTAL_CONFIGURATION_ID=""
 
 DEMO_USER_EMAIL="user@shinji.work"
+ADMIN_USER_EMAIL="admin@shinji.work"
 NOTIFICATION_JOB_SECRET="long-random-secret"
+
+# Googleログインを使う場合だけ設定
+GOOGLE_CLIENT_ID=""
+GOOGLE_CLIENT_SECRET=""
+
+# Gemini分析を使う場合だけ設定
+GEMINI_API_KEY=""
+GEMINI_MODEL="gemini-3.1-flash-lite"
 ```
 
 `APP_URL` and `NEXTAUTH_URL` must be the public HTTPS URL of the service.
+`AUTH_SECRET`または`NEXTAUTH_SECRET`は32文字以上の推測困難な値を設定してください。`NOTIFICATION_JOB_SECRET`は通知API専用の別シークレットにし、Stripeや認証のシークレットを流用しないでください。
+
+`DEMO_USER_PASSWORD`と`ADMIN_USER_PASSWORD`はデモ・管理者のseed実行時だけ必要です。実行環境へ設定し、ソースコードやGitへ保存しないでください。
 
 ## 3. Build Check
 
 ```bash
 npm install
 npm run lint
+npm test
+npm run test:isolation
+npm run audit:stripe
+npm audit --audit-level=high
 npm run build
 ```
 
@@ -108,6 +125,8 @@ Use any future expiry date, any 3-digit CVC, and any name/address/ZIP. No real c
 
 ## 6. Notification Job
 
+本番`.env`へ`NOTIFICATION_JOB_SECRET`を設定してから実行します。未設定のまま公開せず、crontabのコマンド行へ値を直接書かないでください。具体的な安全な設定例は`docs/notification-cron.md`を参照してください。
+
 ```bash
 curl -X POST "https://your-domain.example/api/notifications/send" \
   -H "Authorization: Bearer your-notification-job-secret"
@@ -123,6 +142,8 @@ curl -X POST "https://your-domain.example/api/notifications/send" \
 - Subscription create, edit, and delete work
 - Premium-only viewing and review flows work correctly
 - Stripe test checkout completes and the webhook updates the user to Premium
+- Notification job secret is configured and the scheduled job records a successful run
+- Browser console and server error log remain empty during the main user flow
 
 ## 8. Production Database Safety
 

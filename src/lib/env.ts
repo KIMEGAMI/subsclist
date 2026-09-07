@@ -1,4 +1,8 @@
-import { DEFAULT_ADMIN_USER_EMAIL, DEFAULT_DEMO_USER_EMAIL } from "@/lib/app-constants";
+import {
+  DEFAULT_ADMIN_USER_EMAIL,
+  DEFAULT_DEMO_USER_EMAIL,
+  DEFAULT_GEMINI_MODEL,
+} from "@/lib/app-constants";
 
 function required(name: string) {
   const value = process.env[name];
@@ -19,6 +23,8 @@ function validAppUrl(value?: string) {
   }
 }
 
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY ?? process.env.STRIPE_SECRET ?? "";
+
 export const env = {
   appUrl: validAppUrl(process.env.APP_URL) ?? validAppUrl(process.env.NEXTAUTH_URL) ?? "http://localhost:3000",
   authSecret: process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? "",
@@ -32,13 +38,15 @@ export const env = {
   demoUserEmail: process.env.DEMO_USER_EMAIL ?? DEFAULT_DEMO_USER_EMAIL,
   adminUserEmail: process.env.ADMIN_USER_EMAIL ?? "",
   notificationJobSecret: process.env.NOTIFICATION_JOB_SECRET ?? "",
-  stripeSecretKey: process.env.STRIPE_SECRET_KEY ?? "",
+  stripeSecretKey,
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET ?? "",
   stripePremiumPriceId: process.env.STRIPE_PREMIUM_PRICE_ID ?? "",
   stripePortalConfigurationId: process.env.STRIPE_PORTAL_CONFIGURATION_ID ?? "",
-  stripeTestMode: (process.env.STRIPE_SECRET_KEY ?? "").startsWith("sk_test_"),
+  stripeTestMode: stripeSecretKey.startsWith("sk_test_"),
   googleClientId: process.env.GOOGLE_CLIENT_ID ?? "",
   googleClientSecret: process.env.GOOGLE_CLIENT_SECRET ?? "",
+  geminiApiKey: process.env.GEMINI_API_KEY ?? "",
+  geminiModel: process.env.GEMINI_MODEL?.trim() || DEFAULT_GEMINI_MODEL,
 };
 
 export function assertAuthSecret() {
@@ -56,18 +64,15 @@ export function assertMailEnv() {
 }
 
 export function assertStripeEnv() {
-  for (const name of ["STRIPE_SECRET_KEY"] as const) {
-    if (!process.env[name]) {
-      throw new Error(`${name}が設定されていません。`);
-    }
+  if (!env.stripeSecretKey) {
+    throw new Error("STRIPE_SECRET_KEY is not set.");
   }
 }
 
 export function assertStripeWebhookEnv() {
-  for (const name of ["STRIPE_SECRET_KEY", "STRIPE_WEBHOOK_SECRET"] as const) {
-    if (!process.env[name]) {
-      throw new Error(`${name}が設定されていません。`);
-    }
+  assertStripeEnv();
+  if (!env.stripeWebhookSecret) {
+    throw new Error("STRIPE_WEBHOOK_SECRET is not set.");
   }
 }
 
@@ -85,4 +90,13 @@ export function isProtectedAccountEmail(email: string) {
     .filter(Boolean)
     .map((value) => value.trim().toLowerCase());
   return protectedEmails.includes(normalizedEmail);
+}
+
+export function assertGeminiEnv() {
+  if (!env.geminiApiKey) {
+    throw new Error("GEMINI_API_KEYが設定されていません。");
+  }
+  if (!/^gemini-[a-z0-9.-]+$/.test(env.geminiModel)) {
+    throw new Error("GEMINI_MODELの形式が正しくありません。");
+  }
 }

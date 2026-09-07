@@ -5,7 +5,6 @@ const bcrypt = require("bcryptjs");
 const mariadb = require("mariadb");
 
 const demoEmail = process.env.DEMO_USER_EMAIL || "user@shinji.work";
-const demoPassword = process.env.DEMO_USER_PASSWORD || "daiso999";
 const demoUserId = "demo_user_shinji_work";
 
 function readEnv() {
@@ -41,7 +40,7 @@ async function one(connection, sql, params) {
   return rows[0] || null;
 }
 
-async function ensureUser(connection) {
+async function ensureUser(connection, demoPassword) {
   const passwordHash = await bcrypt.hash(demoPassword, 12);
   const existing = await one(connection, "SELECT id FROM User WHERE email = ? LIMIT 1", [demoEmail]);
   if (existing) {
@@ -104,6 +103,7 @@ async function upsertSubscription(connection, userId, item) {
     item.notifyDaysBefore ?? 7,
     item.usageFrequency || "UNKNOWN",
     item.priority || "UNKNOWN",
+    item.businessUsePercent ?? 0,
     item.logoUrl || null,
     item.cancellationStatus || "NONE",
     item.plannedCancelAt || null,
@@ -112,13 +112,13 @@ async function upsertSubscription(connection, userId, item) {
   ];
   if (existing) {
     await connection.query(
-      "UPDATE Subscription SET categoryId = ?, paymentMethodId = ?, name = ?, price = ?, billingCycle = ?, nextBillingDate = ?, status = ?, memo = ?, serviceUrl = ?, cancellationUrl = ?, trialEndsAt = ?, cancellationDeadline = ?, lastReviewedAt = ?, notifyDaysBefore = ?, usageFrequency = ?, priority = ?, logoUrl = ?, cancellationStatus = ?, plannedCancelAt = ?, cancellationMemo = ?, cancellationCompletedAt = ?, deletedAt = NULL, updatedAt = NOW() WHERE id = ?",
+      "UPDATE Subscription SET categoryId = ?, paymentMethodId = ?, name = ?, price = ?, billingCycle = ?, nextBillingDate = ?, status = ?, memo = ?, serviceUrl = ?, cancellationUrl = ?, trialEndsAt = ?, cancellationDeadline = ?, lastReviewedAt = ?, notifyDaysBefore = ?, usageFrequency = ?, priority = ?, businessUsePercent = ?, logoUrl = ?, cancellationStatus = ?, plannedCancelAt = ?, cancellationMemo = ?, cancellationCompletedAt = ?, deletedAt = NULL, updatedAt = NOW() WHERE id = ?",
       [...values, item.id],
     );
     return item.id;
   }
   await connection.query(
-    "INSERT INTO Subscription (id, userId, categoryId, paymentMethodId, name, price, currency, billingCycle, nextBillingDate, status, memo, serviceUrl, cancellationUrl, trialEndsAt, cancellationDeadline, lastReviewedAt, notifyDaysBefore, usageFrequency, priority, logoUrl, cancellationStatus, plannedCancelAt, cancellationMemo, cancellationCompletedAt, createdAt, updatedAt, deletedAt) VALUES (?, ?, ?, ?, ?, ?, 'JPY', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), NULL)",
+    "INSERT INTO Subscription (id, userId, categoryId, paymentMethodId, name, price, currency, billingCycle, nextBillingDate, status, memo, serviceUrl, cancellationUrl, trialEndsAt, cancellationDeadline, lastReviewedAt, notifyDaysBefore, usageFrequency, priority, businessUsePercent, logoUrl, cancellationStatus, plannedCancelAt, cancellationMemo, cancellationCompletedAt, createdAt, updatedAt, deletedAt) VALUES (?, ?, ?, ?, ?, ?, 'JPY', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW(), NULL)",
     [item.id, userId, ...values],
   );
   return item.id;
@@ -164,8 +164,8 @@ async function seedPaymentHistories(connection, userId, subscriptions) {
         continue;
       }
       await connection.query(
-        "INSERT INTO PaymentHistory (id, subscriptionId, userId, amount, paidAt, memo, createdAt) VALUES (?, ?, ?, ?, ?, ?, NOW())",
-        [id, subscription.id, userId, subscription.price, dateAtDay(month.year, month.month, day), "demo payment history"],
+        "INSERT INTO PaymentHistory (id, subscriptionId, userId, amount, paidAt, subscriptionNameSnapshot, memo, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())",
+        [id, subscription.id, userId, subscription.price, dateAtDay(month.year, month.month, day), subscription.name, "demo payment history"],
       );
       inserted++;
     }
@@ -202,12 +202,14 @@ async function seedCancellationWorkflow(connection, userId, subscriptionId) {
 
 async function main() {
   const env = { ...readEnv(), ...process.env };
+  const demoPassword = env.DEMO_USER_PASSWORD;
+  if (!demoPassword) throw new Error("DEMO_USER_PASSWORD is not set.");
   if (!env.DATABASE_URL) throw new Error("DATABASE_URL is not set.");
   const connection = await mariadb.createConnection(databaseConfig(env.DATABASE_URL));
 
   try {
     await connection.beginTransaction();
-    const userId = await ensureUser(connection);
+    const userId = await ensureUser(connection, demoPassword);
 
     await connection.query(
       "INSERT INTO UserPreference (id, userId, monthlyBudget, defaultNotifyDaysBefore, notificationHour, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, NOW(), NOW()) ON DUPLICATE KEY UPDATE monthlyBudget = VALUES(monthlyBudget), defaultNotifyDaysBefore = VALUES(defaultNotifyDaysBefore), notificationHour = VALUES(notificationHour), updatedAt = NOW()",
@@ -247,7 +249,19 @@ async function main() {
       { id: "demo_sub_zoom", name: "Zoom Pro", price: 2125, billingCycle: "MONTHLY", nextBillingDate: "2026-07-25 10:00:00", categoryId: categoryIds.communication, paymentMethodId: paymentMethodIds.visa, serviceUrl: "https://zoom.us/pricing", cancellationUrl: "https://support.zoom.com/", usageFrequency: "MONTHLY", priority: "OPTIONAL" },
     ];
 
+    const businessUseBySubscriptionId = new Map([
+      ["demo_sub_chatgpt", 100],
+      ["demo_sub_copilot", 100],
+      ["demo_sub_m365", 80],
+      ["demo_sub_adobe", 100],
+      ["demo_sub_notion", 100],
+      ["demo_sub_canva", 70],
+      ["demo_sub_dropbox", 60],
+      ["demo_sub_zoom", 100],
+    ]);
+
     for (const subscription of subscriptions) {
+      subscription.businessUsePercent = businessUseBySubscriptionId.get(subscription.id) ?? 0;
       await upsertSubscription(connection, userId, subscription);
       const noticeId = `demo_notice_${subscription.id}`;
       const existingNotice = await one(connection, "SELECT id FROM NotificationSetting WHERE id = ? LIMIT 1", [noticeId]);
@@ -265,7 +279,7 @@ async function main() {
     await seedCancellationWorkflow(connection, userId, "demo_sub_adobe");
     await connection.commit();
 
-    console.log(JSON.stringify({ user: demoEmail, password: demoPassword, subscriptions: subscriptions.length, paymentHistories: historyResult }, null, 2));
+    console.log(JSON.stringify({ user: demoEmail, subscriptions: subscriptions.length, paymentHistories: historyResult }, null, 2));
   } catch (error) {
     await connection.rollback();
     throw error;

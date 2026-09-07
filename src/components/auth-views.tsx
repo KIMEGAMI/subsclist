@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Card } from "@/components/app-shell";
-import { MAX_USER_NAME_LENGTH, MIN_PASSWORD_LENGTH } from "@/lib/app-constants";
+import { FREE_CATEGORY_LIMIT, FREE_SUBSCRIPTION_LIMIT, MAX_USER_NAME_LENGTH, MIN_PASSWORD_LENGTH, PREMIUM_MONTHLY_PRICE_YEN, STRIPE_TRIAL_PERIOD_DAYS } from "@/lib/app-constants";
 import { userErrorMessage, userMessage } from "@/lib/error-messages";
 
 const t = {
@@ -51,8 +51,8 @@ const t = {
   resetPasswordSuccess: "パスワードを再設定しました。新しいパスワードでログインしてください。",
   missingResetToken: "再設定URLが無効です。もう一度パスワード再設定を行ってください。",
   termsRequired: "利用規約とプライバシーポリシーへの同意が必要です。",
-  pricingTitle: "料金プラン",
-  pricingLead: "Freeで始めて、必要になったらPremiumへ。Premiumは月額480円で、本格運用に必要な分析、CSV、解約支援をまとめて利用できます。",
+  pricingTitle: "\u6599\u91d1\u30d7\u30e9\u30f3",
+  pricingLead: `Free\u3067\u59cb\u3081\u3066\u3001\u5fc5\u8981\u306b\u306a\u3063\u305f\u3089Premium\u3078\u3002Premium\u306f\u521d\u56de\u306e\u307f${STRIPE_TRIAL_PERIOD_DAYS}\u65e5\u9593\u304a\u8a66\u3057\u7121\u6599\u3002\u7121\u6599\u671f\u9593\u4e2d\u306b\u89e3\u7d04\u3059\u308c\u3070\u6599\u91d1\u306f\u304b\u304b\u3089\u305a\u3001\u305d\u306e\u5f8c\u306f\u6708\u984d${PREMIUM_MONTHLY_PRICE_YEN}\u5186\u3067\u5206\u6790\u3001CSV\u3001\u89e3\u7d04\u652f\u63f4\u3092\u307e\u3068\u3081\u3066\u5229\u7528\u3067\u304d\u307e\u3059\u3002`,
 };
 
 type ApiResponse = {
@@ -381,35 +381,73 @@ export function ResendVerificationButton() {
 }
 
 export function PricingView() {
+  const comparisonRows = [
+    ["契約台帳", `${FREE_SUBSCRIPTION_LIMIT}件まで`, "登録・表示無制限"],
+    ["更新カレンダー・基本通知", "利用可能", "利用可能"],
+    ["支払い履歴", "今月の記録・修正", "過去年検索・科目一括整理"],
+    ["CSV", "利用不可", "契約入出力・明細照合・名義ルール・支払い一括登録・支払実績出力"],
+    ["支払い管理", "基本集計", "請求突合・差異検知・月次締め"],
+    ["分析・レポート", "利用不可", "前年差・年間仕事利用分・支払い累計・PDF"],
+    ["見直し・解約", "基本利用記録", "優先行動・更新判断・削減成果・解約証跡"],
+    ["高度な通知", "更新などの基本通知", "未使用・値上げ・予算・月次サマリー"],
+  ] as const;
+  const workflow = [
+    ["1. 集める", "直接登録またはCSV取込で、更新日と支払い条件を一つの台帳へ。"],
+    ["2. 判断する", "利用頻度、重要度、期限、前年差から、今月見る契約を優先表示。"],
+    ["3. 締める", "請求予定と支払いを突合し、科目・証憑の不足を解消して月次締め。"],
+    ["4. 残す", "支払い時点の記録から年間レポートとCSVを作り、実績を維持。"],
+  ] as const;
+
   return (
-    <main className="min-h-screen bg-[linear-gradient(135deg,#f8fafc_0%,#eef6ff_52%,#fdf2f8_100%)] px-4 py-10">
-      <div className="mx-auto max-w-5xl">
+    <main className="min-h-screen bg-slate-50 px-4 py-10 text-slate-950 sm:px-6">
+      <div className="mx-auto max-w-6xl">
         <Link href="/" className="font-bold text-blue-700">{t.backTop}</Link>
-        <h1 className="mt-8 text-4xl font-black">{t.pricingTitle}</h1>
-        <p className="mt-3 text-slate-600">{t.pricingLead}</p>
+        <div className="mt-8 max-w-3xl">
+          <p className="text-sm font-black text-blue-700">料金プラン</p>
+          <h1 className="mt-2 text-4xl font-black leading-tight">継続課金を、毎月判断できる状態に。</h1>
+          <p className="mt-4 leading-7 text-slate-600">Freeで台帳を始め、Premiumで取り込み、突合、見直し、解約、年間整理までを一つの運用にできます。</p>
+        </div>
         <div className="mt-8 grid gap-5 md:grid-cols-2">
           <Card>
             <h2 className="text-2xl font-bold">Free</h2>
-            <p className="mt-2 text-4xl font-black">お試し</p>
-            <ul className="mt-5 space-y-2 text-sm text-slate-600">
-              <li>サブスク10件まで表示・管理</li>
-              <li>カテゴリ5件まで</li>
-              <li>基本ダッシュボード、一覧、カレンダー、通知確認</li>
-              <li>CSV、高度分析、解約支援は利用不可</li>
-            </ul>
+            <p className="mt-2 text-4xl font-black">無料</p>
+            <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">まず契約台帳と更新確認を始めたい方向け。</p>
+            <ul className="mt-5 space-y-2 text-sm text-slate-600"><li>サブスク{FREE_SUBSCRIPTION_LIMIT}件まで</li><li>カテゴリ{FREE_CATEGORY_LIMIT}件まで</li><li>ダッシュボード、一覧、カレンダー、基本通知</li><li>今月の支払い記録と修正</li></ul>
+            <Link href="/register" className="btn-secondary mt-6 w-full justify-center">無料で始める</Link>
           </Card>
           <Card className="border-blue-400">
-            <h2 className="text-2xl font-bold">Premium</h2>
-            <p className="mt-2 text-4xl font-black">月額480円</p>
-            <p className="mt-2 text-sm font-semibold text-blue-700">毎月の固定費としてPremium機能を利用できます。</p>
-            <ul className="mt-5 space-y-2 text-sm text-slate-600">
-              <li>サブスク登録・表示無制限</li>
-              <li>CSV入出力、CSV明細候補検出</li>
-              <li>高度分析、支払い累計、見直しレポート</li>
-              <li>乗り換え診断、解約チェックリスト、証跡管理</li>
-            </ul>
+            <div className="flex items-center justify-between gap-3"><h2 className="text-2xl font-bold">Premium</h2><span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">初回無料体験</span></div>
+            <p className="mt-2 text-4xl font-black">月額{PREMIUM_MONTHLY_PRICE_YEN}円</p>
+            <p className="mt-2 text-sm font-black text-blue-700">初回のみ{STRIPE_TRIAL_PERIOD_DAYS}日間お試し無料</p>
+            <p className="mt-3 text-sm font-semibold leading-6 text-slate-600">複数のSaaSを仕事で使い、毎月の支払い確認と見直しを短時間で終えたい方向け。</p>
+            <ul className="mt-5 space-y-2 text-sm text-slate-600"><li>登録・表示無制限</li><li>請求突合、月次締め、科目一括整理</li><li>前年差、年間仕事利用分、支払い累計</li><li>更新判断、削減成果、解約チェックリスト・証跡</li></ul>
+            <Link href="/register" className="btn-primary mt-6 w-full justify-center">登録して{STRIPE_TRIAL_PERIOD_DAYS}日間試す</Link>
           </Card>
         </div>
+
+        <section className="mt-12 border-y border-slate-200 bg-white px-4 py-8 sm:px-6">
+          <h2 className="text-2xl font-black">プラン比較</h2>
+          <p className="mt-2 text-sm font-semibold text-slate-600">Premium限定機能は画面だけでなくAPI側でもプランを確認します。</p>
+          <div className="mt-6 overflow-x-auto">
+            <table className="min-w-[720px] w-full divide-y divide-slate-200 text-sm">
+              <thead><tr><th className="px-3 py-3 text-left">機能</th><th className="px-3 py-3 text-left">Free</th><th className="px-3 py-3 text-left text-blue-700">Premium</th></tr></thead>
+              <tbody className="divide-y divide-slate-100">{comparisonRows.map(([feature, free, premium]) => <tr key={feature}><th className="px-3 py-4 text-left font-black text-slate-800">{feature}</th><td className="px-3 py-4 text-slate-600">{free}</td><td className="px-3 py-4 font-bold text-slate-900">{premium}</td></tr>)}</tbody>
+            </table>
+          </div>
+        </section>
+
+        <section className="py-12">
+          <p className="text-sm font-black text-cyan-800">毎月の運用</p>
+          <h2 className="mt-2 text-3xl font-black">登録で終わらず、整理した結果を残す</h2>
+          <div className="mt-7 grid gap-6 md:grid-cols-4">{workflow.map(([title, body]) => <div key={title} className="border-t-4 border-cyan-600 pt-4"><h3 className="font-black">{title}</h3><p className="mt-2 text-sm font-semibold leading-6 text-slate-600">{body}</p></div>)}</div>
+        </section>
+
+        <section className="border-t border-slate-200 py-10 text-center">
+          <h2 className="text-2xl font-black">まず実データを入れずに確認できます</h2>
+          <p className="mt-3 text-sm font-semibold text-slate-600">デモで操作を確認するか、Freeアカウントから始めてください。</p>
+          <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row"><Link href="/" className="btn-secondary justify-center">トップでデモを開く</Link><Link href="/register" className="btn-primary justify-center">無料アカウントを作る</Link><Link href="/login" className="btn-secondary justify-center">登録済みの方</Link></div>
+          <p className="mt-5 text-xs font-semibold leading-5 text-slate-500">Premiumはカード登録後に開始します。無料期間中にStripeの契約管理から解約すればPremium料金は請求されません。</p>
+        </section>
       </div>
     </main>
   );

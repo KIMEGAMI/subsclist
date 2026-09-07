@@ -4,24 +4,58 @@ import { AdminBulkEmailForm } from "@/components/contact-form";
 import { getAllAnnouncements, getMaintenanceMode } from "@/lib/admin";
 import { requireAdminUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import {
+  NOTIFICATION_JOB_STATUS_KEY,
+  notificationJobHealth,
+  parseNotificationJobStatus,
+  type NotificationJobHealth,
+} from "@/lib/notification-job-status";
 
 const dateFormatter = new Intl.DateTimeFormat("ja-JP", { dateStyle: "medium" });
+const dateTimeFormatter = new Intl.DateTimeFormat("ja-JP", {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
 
 function planLabel(plan: string) {
   return plan === "FREE" ? "Free" : "Premium";
 }
 
+function notificationHealthLabel(health: NotificationJobHealth) {
+  if (health === "HEALTHY") return "正常";
+  if (health === "RUNNING") return "実行中";
+  if (health === "DEGRADED") return "一部失敗";
+  if (health === "STALE") return "停止の可能性";
+  return "実行履歴なし";
+}
+
+function notificationHealthClass(health: NotificationJobHealth) {
+  if (health === "HEALTHY") return "bg-emerald-100 text-emerald-900";
+  if (health === "RUNNING") return "bg-blue-100 text-blue-900";
+  if (health === "DEGRADED") return "bg-amber-100 text-amber-900";
+  return "bg-red-100 text-red-900";
+}
+
 export default async function AdminPage() {
   await requireAdminUser();
 
-  const [users, announcements, maintenanceMode] = await Promise.all([
+  const [users, announcements, maintenanceMode, notificationJobSetting] = await Promise.all([
     prisma.user.findMany({
       orderBy: { createdAt: "desc" },
       select: { id: true, name: true, email: true, plan: true, emailVerified: true, createdAt: true },
     }),
     getAllAnnouncements(),
     getMaintenanceMode(),
+    prisma.appSetting.findUnique({
+      where: { key: NOTIFICATION_JOB_STATUS_KEY },
+      select: { value: true, updatedAt: true },
+    }),
   ]);
+  const notificationJobStatus = parseNotificationJobStatus(notificationJobSetting?.value);
+  const notificationHealth = notificationJobHealth(notificationJobStatus);
+  const notificationReferenceAt = notificationJobStatus
+    ? new Date(notificationJobStatus.completedAt ?? notificationJobStatus.startedAt)
+    : null;
 
   return (
     <AppShell>
@@ -53,6 +87,37 @@ export default async function AdminPage() {
                 </button>
               </form>
             </div>
+          </Card>
+
+          <Card className="scroll-mt-6" id="notification-job">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-lg font-black">自動通知ジョブ</h2>
+                <p className="mt-2 text-sm leading-6 text-slate-600">
+                  毎時実行する通知処理の最終状態です。3時間以上完了記録がない場合は停止の可能性として表示します。
+                </p>
+              </div>
+              <span className={`rounded-full px-3 py-1 text-xs font-black ${notificationHealthClass(notificationHealth)}`}>
+                {notificationHealthLabel(notificationHealth)}
+              </span>
+            </div>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                <p className="text-xs font-bold text-slate-500">最終実行</p>
+                <p className="mt-1 font-black text-slate-950">{notificationReferenceAt ? dateTimeFormatter.format(notificationReferenceAt) : "未実行"}</p>
+              </div>
+              <div className="rounded-lg border border-slate-100 bg-slate-50 p-3">
+                <p className="text-xs font-bold text-slate-500">直近の結果</p>
+                <p className="mt-1 font-black text-slate-950">
+                  送信 {notificationJobStatus?.sent ?? 0}件 / スキップ {notificationJobStatus?.skipped ?? 0}件 / 失敗 {notificationJobStatus?.failures ?? 0}件
+                </p>
+              </div>
+            </div>
+            {(notificationHealth === "STALE" || notificationHealth === "UNKNOWN") && (
+              <p className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-bold leading-6 text-red-800">
+                本番サーバーのcron、<code className="font-black">NOTIFICATION_JOB_SECRET</code>、アプリの稼働状態を確認してください。
+              </p>
+            )}
           </Card>
 
           <Card className="scroll-mt-6" id="bulk-email">

@@ -1,4 +1,4 @@
-import { MILLISECONDS_PER_DAY } from "@/lib/billing";
+import { nextBillingOccurrence } from "@/lib/billing";
 
 export type ForecastSubscription = {
   price: number;
@@ -22,10 +22,6 @@ function yearMonthKey(value: Date) {
   return `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, "0")}`;
 }
 
-function addDays(value: Date, days: number) {
-  return new Date(value.getTime() + days * MILLISECONDS_PER_DAY);
-}
-
 function addMonthsClamped(value: Date, amount: number) {
   const result = new Date(value);
   const day = result.getDate();
@@ -34,15 +30,6 @@ function addMonthsClamped(value: Date, amount: number) {
   const lastDay = new Date(result.getFullYear(), result.getMonth() + 1, 0).getDate();
   result.setDate(Math.min(day, lastDay));
   return result;
-}
-
-function nextOccurrence(value: Date, subscription: ForecastSubscription) {
-  if (subscription.billingCycle === "YEARLY") return addMonthsClamped(value, 12);
-  if (subscription.billingCycle === "WEEKLY") return addDays(value, 7);
-  if (subscription.billingCycle === "CUSTOM") {
-    return addDays(value, Math.max(1, subscription.customCycleDays ?? 30));
-  }
-  return addMonthsClamped(value, 1);
 }
 
 export function buildForecastSeries(subscriptions: ForecastSubscription[], months = 12) {
@@ -60,12 +47,13 @@ export function buildForecastSeries(subscriptions: ForecastSubscription[], month
   const buckets = new Map(series.map((item) => [item.key, item]));
 
   for (const subscription of subscriptions) {
-    let occurrence = new Date(subscription.nextBillingDate);
+    let occurrence = nextBillingOccurrence(
+      subscription.nextBillingDate,
+      subscription.billingCycle,
+      subscription.customCycleDays,
+      start,
+    );
     if (Number.isNaN(occurrence.getTime())) continue;
-
-    while (occurrence < start) {
-      occurrence = nextOccurrence(occurrence, subscription);
-    }
 
     while (occurrence < endExclusive) {
       const bucket = buckets.get(yearMonthKey(occurrence));
@@ -73,7 +61,14 @@ export function buildForecastSeries(subscriptions: ForecastSubscription[], month
         bucket.total += subscription.price;
         bucket.payments += 1;
       }
-      occurrence = nextOccurrence(occurrence, subscription);
+      const nextReference = new Date(occurrence);
+      nextReference.setDate(nextReference.getDate() + 1);
+      occurrence = nextBillingOccurrence(
+        subscription.nextBillingDate,
+        subscription.billingCycle,
+        subscription.customCycleDays,
+        nextReference,
+      );
     }
   }
 

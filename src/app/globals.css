@@ -52,6 +52,17 @@ textarea {
   box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.1);
 }
 
+.input[aria-invalid="true"] {
+  border-color: #dc2626;
+  background: #fff7f7;
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
+.input[aria-invalid="true"]:focus {
+  border-color: #b91c1c;
+  box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.14);
+}
+
 .input:disabled {
   background: rgba(241, 245, 249, 0.85);
   color: #64748b;
@@ -115,4 +126,39 @@ textarea {
 .subtle-scrollbar {
   scrollbar-width: thin;
   scrollbar-color: rgba(37, 99, 235, 0.35) transparent;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 12mm;
+  }
+
+  body,
+  .app-shell {
+    background: #ffffff !important;
+  }
+
+  .app-shell-overlay,
+  .app-shell-sidebar,
+  .app-shell-mobile-header,
+  .print-hidden {
+    display: none !important;
+  }
+
+  .app-shell-main {
+    padding-left: 0 !important;
+  }
+
+  .app-shell-content {
+    max-width: none !important;
+    padding: 0 !important;
+  }
+
+  section {
+    break-inside: avoid;
+    border-color: #cbd5e1 !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+  }
 }
