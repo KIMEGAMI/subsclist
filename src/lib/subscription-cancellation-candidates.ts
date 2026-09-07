@@ -1,4 +1,4 @@
-export const CANCELLATION_CANDIDATE_MINIMUM_SCORE = 1;
+export const CANCELLATION_CANDIDATE_MINIMUM_SCORE = 5;
 export const CANCELLATION_CANDIDATE_WEIGHTS = {
   unused30Days: 3,
   unused60Days: 5,
@@ -8,6 +8,11 @@ export const CANCELLATION_CANDIDATE_WEIGHTS = {
   duplicateCategory: 2,
   highCost: 2,
 } as const;
+export const CANCELLATION_CANDIDATE_MAXIMUM_SCORE = CANCELLATION_CANDIDATE_WEIGHTS.unused90Days
+  + CANCELLATION_CANDIDATE_WEIGHTS.rareUsage
+  + CANCELLATION_CANDIDATE_WEIGHTS.optionalPriority
+  + CANCELLATION_CANDIDATE_WEIGHTS.duplicateCategory
+  + CANCELLATION_CANDIDATE_WEIGHTS.highCost;
 
 export type CancellationCandidateInput = {
   id: string;
@@ -24,8 +29,10 @@ export type CancellationCandidate = {
   id: string;
   name: string;
   monthlyCost: number;
+  estimatedMonthlySaving: number;
   annualSaving: number;
   score: number;
+  confidencePercent: number;
   reasons: string[];
 };
 
@@ -63,6 +70,17 @@ export function detectCancellationCandidates(items: CancellationCandidateInput[]
     }
     if (score < CANCELLATION_CANDIDATE_MINIMUM_SCORE) return [];
 
-    return [{ id: item.id, name: item.name, monthlyCost: item.monthlyCost, annualSaving: item.monthlyCost * monthsPerYear, score, reasons }];
+    const confidencePercent = Math.round((score / CANCELLATION_CANDIDATE_MAXIMUM_SCORE) * 100);
+    const estimatedMonthlySaving = Math.round(item.monthlyCost * confidencePercent / 100);
+    return [{
+      id: item.id,
+      name: item.name,
+      monthlyCost: item.monthlyCost,
+      estimatedMonthlySaving,
+      annualSaving: estimatedMonthlySaving * monthsPerYear,
+      score,
+      confidencePercent,
+      reasons,
+    }];
   }).sort((left, right) => right.score - left.score || right.monthlyCost - left.monthlyCost);
 }

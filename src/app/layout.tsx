@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { MaintenanceModeGate } from "@/components/maintenance-mode-gate";
+import { PwaServiceWorker } from "@/components/pwa-service-worker";
 import { publicSiteUrl } from "@/lib/site-url";
 import "./globals.css";
 
@@ -29,6 +30,7 @@ export default function RootLayout({
   return (
     <html lang="ja" className="h-full antialiased">
       <body className="min-h-full">
+        <PwaServiceWorker />
         <MaintenanceModeGate>{children}</MaintenanceModeGate>
       </body>
     </html>

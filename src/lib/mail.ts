@@ -99,6 +99,70 @@ export async function sendPasswordResetEmail(email: string, token: string) {
   });
 }
 
+const securityDateTimeFormatter = new Intl.DateTimeFormat("ja-JP", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "Asia/Tokyo",
+});
+
+export async function sendNewDeviceLoginEmail({
+  email,
+  clientLabel,
+  occurredAt,
+}: {
+  email: string;
+  clientLabel: string;
+  occurredAt: Date;
+}) {
+  const resetUrl = new URL("/forgot-password", env.appUrl).toString();
+  const occurredAtText = securityDateTimeFormatter.format(occurredAt);
+  await sendSystemEmail({
+    to: email,
+    subject: "新しい端末からのログインを確認しました",
+    text: [
+      "SubscListで新しい端末からのログインを確認しました。",
+      `日時: ${occurredAtText}`,
+      `端末: ${clientLabel}`,
+      "心当たりがない場合は、すぐにパスワードを再設定してください。",
+      resetUrl,
+    ].join("\n"),
+    html: [
+      "<p>SubscListで新しい端末からのログインを確認しました。</p>",
+      `<p><strong>日時:</strong> ${escapeHtml(occurredAtText)}</p>`,
+      `<p><strong>端末:</strong> ${escapeHtml(clientLabel)}</p>`,
+      "<p>心当たりがない場合は、すぐにパスワードを再設定してください。</p>",
+      `<p><a href="${escapeHtml(resetUrl)}">パスワードを再設定する</a></p>`,
+    ].join(""),
+  });
+}
+
+export async function sendAccountLockedEmail({
+  email,
+  lockedUntil,
+}: {
+  email: string;
+  lockedUntil: Date;
+}) {
+  const resetUrl = new URL("/forgot-password", env.appUrl).toString();
+  const lockedUntilText = securityDateTimeFormatter.format(lockedUntil);
+  await sendSystemEmail({
+    to: email,
+    subject: "ログイン試行を一時的に制限しました",
+    text: [
+      "SubscListでパスワードの連続入力失敗を検知したため、アカウントを一時的に保護しました。",
+      `制限終了予定: ${lockedUntilText}`,
+      "心当たりがない場合は、パスワードを再設定してください。",
+      resetUrl,
+    ].join("\n"),
+    html: [
+      "<p>SubscListでパスワードの連続入力失敗を検知したため、アカウントを一時的に保護しました。</p>",
+      `<p><strong>制限終了予定:</strong> ${escapeHtml(lockedUntilText)}</p>`,
+      "<p>心当たりがない場合は、パスワードを再設定してください。</p>",
+      `<p><a href="${escapeHtml(resetUrl)}">パスワードを再設定する</a></p>`,
+    ].join(""),
+  });
+}
+
 export async function sendSubscriptionReminderEmail({
   email,
   title,

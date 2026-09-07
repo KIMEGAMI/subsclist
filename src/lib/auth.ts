@@ -1,24 +1,16 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import crypto from "node:crypto";
-import { DEFAULT_ADMIN_USER_EMAIL, SESSION_MAX_AGE_SECONDS } from "@/lib/app-constants";
+import {
+  DEFAULT_ADMIN_USER_EMAIL,
+  SESSION_MAX_AGE_SECONDS,
+} from "@/lib/app-constants";
 import { getMaintenanceMode } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
 import { assertAuthSecret, env } from "@/lib/env";
+import { decodeSignedSession, encodeSignedSession } from "@/lib/signed-session";
 
 const sessionCookie = "subsclist_session";
-
-type SessionPayload = {
-  userId: string;
-  emailVerified: boolean;
-  sessionVersion: number;
-  exp: number;
-};
-
-function sign(value: string) {
-  assertAuthSecret();
-  return crypto.createHmac("sha256", env.authSecret).update(value).digest("base64url");
-}
 
 export function hashToken(token: string) {
   return crypto.createHash("sha256").update(token).digest("hex");
@@ -28,36 +20,25 @@ export function createVerificationToken() {
   return crypto.randomBytes(32).toString("base64url");
 }
 
-function encodeSession(payload: SessionPayload) {
-  const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
-  return `${body}.${sign(body)}`;
-}
-
-function decodeSession(value?: string): SessionPayload | null {
-  if (!value) return null;
-  const [body, signature] = value.split(".");
-  if (!body || !signature || sign(body) !== signature) return null;
-  try {
-    const payload = JSON.parse(Buffer.from(body, "base64url").toString("utf8")) as SessionPayload;
-    if (payload.exp < Math.floor(Date.now() / 1000)) return null;
-    return payload;
-  } catch {
-    return null;
-  }
-}
-
 export async function setSession(userId: string, emailVerified: boolean) {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { sessionVersion: true } });
+  assertAuthSecret();
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { sessionVersion: true },
+  });
   if (!user) throw new Error("Session user was not found.");
   const cookieStore = await cookies();
   cookieStore.set(
     sessionCookie,
-    encodeSession({
-      userId,
-      emailVerified,
-      sessionVersion: user.sessionVersion,
-      exp: Math.floor(Date.now() / 1000) + SESSION_MAX_AGE_SECONDS,
-    }),
+    encodeSignedSession(
+      {
+        userId,
+        emailVerified,
+        sessionVersion: user.sessionVersion,
+        exp: Math.floor(Date.now() / 1000) + SESSION_MAX_AGE_SECONDS,
+      },
+      env.authSecret,
+    ),
     {
       httpOnly: true,
       sameSite: "lax",
@@ -74,8 +55,12 @@ export async function clearSession() {
 }
 
 export async function getSession() {
+  assertAuthSecret();
   const cookieStore = await cookies();
-  return decodeSession(cookieStore.get(sessionCookie)?.value);
+  return decodeSignedSession(
+    cookieStore.get(sessionCookie)?.value,
+    env.authSecret,
+  );
 }
 
 export async function getCurrentUser() {
@@ -120,16 +105,21 @@ export async function requireUser() {
 export async function requireVerifiedUser() {
   const user = await requireUser();
   if (!user.emailVerified) redirect("/verify-email");
-  if (!isAdminEmail(user.email) && await getMaintenanceMode()) redirect("/maintenance");
+  if (!isAdminEmail(user.email) && (await getMaintenanceMode()))
+    redirect("/maintenance");
   return user;
 }
 
 export function readSessionFromCookieHeader(cookieHeader: string | null) {
+  assertAuthSecret();
   if (!cookieHeader) return null;
   const cookie = cookieHeader
     .split(";")
     .map((item) => item.trim())
     .find((item) => item.startsWith(`${sessionCookie}=`));
   if (!cookie) return null;
-  return decodeSession(decodeURIComponent(cookie.slice(sessionCookie.length + 1)));
+  return decodeSignedSession(
+    decodeURIComponent(cookie.slice(sessionCookie.length + 1)),
+    env.authSecret,
+  );
 }

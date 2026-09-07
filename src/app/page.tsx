@@ -3,23 +3,26 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { Card } from "@/components/app-shell";
 import { DemoLoginButton } from "@/components/demo-login-button";
+import { FREE_SUBSCRIPTION_LIMIT, PREMIUM_MONTHLY_PRICE_YEN, STRIPE_TRIAL_PERIOD_DAYS } from "@/lib/app-constants";
 
 export const metadata: Metadata = {
   title: { absolute: "SubscList | サブスクリプション管理システム" },
-  description: "契約、更新日、支払い履歴、見直し候補を一元管理。SubscListで毎月の固定費を見える化し、無駄のないサブスク運用を始められます。",
+  description:
+    "フリーランス・副業者・個人事業主の継続課金を一元管理。更新日、仕事利用分、見直し候補を整理し、毎月の判断を早くします。",
   alternates: { canonical: "/" },
   openGraph: {
     title: "SubscList | サブスクリプション管理システム",
-    description: "毎月の固定費を見える化し、サブスクの更新・見直しを続けられる管理サービスです。",
+    description:
+      "仕事と個人の継続課金を分け、更新・見直し・経費整理を続けられる管理サービスです。",
     url: "/",
   },
 };
 
 const features = [
-  ["固定費を一覧化", "契約名、料金、更新日、解約期限、支払い履歴をまとめて確認できます。"],
-  ["見直しを支援", "金額、利用頻度、更新時期をもとに、今月確認したい契約を見つけやすくします。"],
-  ["CSVで取り込み", "カード明細や管理表から取り込み、手入力の負担を減らせます。"],
-  ["通知と記録", "更新日や無料トライアル終了、解約期限の確認漏れを防ぎます。"],
+  ["仕事利用分を整理", "契約ごとの仕事利用割合から、毎月・年間の仕事利用分を見積もれます。"],
+  ["更新判断を支援", "金額、利用頻度、重要度、更新時期から、今月見るべき契約を整理します。"],
+  ["台帳をCSVで共有", "既存の管理表を取り込み、仕事利用分を含む契約台帳を出力できます。"],
+  ["期限と解約を管理", "無料期間、更新日、解約期限、手順、証跡を一つの流れで管理できます。"],
 ] as const;
 
 export default function Home() {
@@ -29,12 +32,21 @@ export default function Home() {
     name: "SubscList",
     applicationCategory: "FinanceApplication",
     operatingSystem: "Web",
-    description: "契約、更新日、支払い履歴、見直し候補をまとめて管理するサブスクリプション管理サービスです。",
+    description:
+      "フリーランス・副業者・個人事業主の契約、更新日、仕事利用分、見直し候補をまとめて管理するサービスです。",
     offers: [
       { "@type": "Offer", name: "Free", price: "0", priceCurrency: "JPY" },
-      { "@type": "Offer", name: "Premium", price: "480", priceCurrency: "JPY", billingDuration: "P1M" },
+      {
+        "@type": "Offer",
+        name: "Premium",
+        price: String(PREMIUM_MONTHLY_PRICE_YEN),
+        priceCurrency: "JPY",
+        billingDuration: "P1M",
+        description: `初回のみ${STRIPE_TRIAL_PERIOD_DAYS}日間お試し無料`,
+      },
     ],
   };
+
   return (
     <main className="bg-white text-slate-950">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />
@@ -47,10 +59,10 @@ export default function Home() {
               サブスクリプション管理システム
             </div>
             <h1 className="text-4xl font-black leading-tight tracking-tight sm:text-6xl">
-              SubscListで固定費をわかりやすく管理
+              仕事のサブスクを、判断できる台帳へ。
             </h1>
             <p className="mt-6 text-lg leading-8 text-slate-600">
-              契約、課金、更新日、解約期限、支払い履歴を一元管理。毎月の固定費を把握し、不要な支出の見直しを支援します。
+              SaaSやAI、クラウドが増えたフリーランス・副業者・個人事業主へ。仕事利用分、更新日、利用実績、解約期限を一元化し、月末の整理と継続判断を早くします。
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link href="/login" className="rounded-full bg-gradient-to-r from-blue-600 via-cyan-500 to-fuchsia-500 px-7 py-4 text-center font-black text-white shadow-lg shadow-blue-200 transition hover:-translate-y-0.5 hover:shadow-xl">
@@ -58,9 +70,12 @@ export default function Home() {
               </Link>
               <DemoLoginButton />
               <Link href="/pricing" className="rounded-full border border-slate-200 bg-white/85 px-7 py-4 text-center font-black text-slate-800 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:text-blue-700">
-                プランを見る
+                料金を見る
               </Link>
             </div>
+            <p className="mt-5 text-sm font-bold text-blue-700">
+              Premiumは初回のみ{STRIPE_TRIAL_PERIOD_DAYS}日間お試し無料。無料期間中に解約すれば料金はかかりません。
+            </p>
           </div>
           <div className="relative min-h-[430px] lg:min-h-[620px]">
             <Image src="/hero-subsclist.png" alt="SubscListの画面イメージ" fill unoptimized priority className="object-contain object-center" sizes="(min-width: 1024px) 58vw, 100vw" />
@@ -72,10 +87,10 @@ export default function Home() {
       <section className="bg-[#f5f8ff] px-4 py-16 sm:px-6 lg:px-8">
         <div className="mx-auto max-w-7xl">
           <div className="max-w-3xl">
-            <p className="text-sm font-bold text-blue-700">管理の課題</p>
-            <h2 className="mt-2 text-3xl font-bold tracking-tight">増え続ける固定費を、判断できる情報へ</h2>
+            <p className="text-sm font-bold text-blue-700">継続課金の仕事台帳</p>
+            <h2 className="mt-2 text-3xl font-bold tracking-tight">確定申告前に探すのではなく、毎月整える</h2>
             <p className="mt-4 leading-7 text-slate-600">
-              サービス名、料金、更新日、支払い方法が分散すると、使っていない契約に気づきにくくなります。SubscListは更新予定と支出状況を同じ画面で確認できる体験を提供します。
+              仕事用と個人用が混ざったカード明細、更新日が違うSaaS、残すか迷うAIサービス。SubscListは、契約ごとの仕事利用割合と利用状況を記録し、更新前に判断できる状態をつくります。
             </p>
           </div>
           <div className="mt-8 grid gap-4 md:grid-cols-4">
@@ -93,14 +108,16 @@ export default function Home() {
         <div className="mx-auto grid max-w-7xl gap-8 lg:grid-cols-[0.9fr_1.1fr]">
           <div>
             <p className="text-sm font-bold text-fuchsia-600">主な機能</p>
-            <h2 className="mt-2 text-3xl font-bold">管理、分析、支払い履歴まで対応</h2>
+            <h2 className="mt-2 text-3xl font-bold">登録して終わらない、毎月の見直しまで</h2>
             <p className="mt-4 leading-7 text-slate-600">
-              サブスクCRUD、カテゴリ・支払い方法管理、CSV入出力、通知、支払い集計、見直しレポート、解約支援に対応します。
+              契約台帳、支払い累計、仕事利用分、更新カレンダー、利用実績、見直しレポート、解約支援を一つの流れで使えます。
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            {["契約管理", "見直しスコア", "解約支援", "CSVインポート"].map((item) => (
-              <div key={item} className="rounded-lg border border-slate-100 bg-white p-5 font-bold shadow-[0_12px_30px_rgba(15,23,42,0.07)]">{item}</div>
+            {["仕事利用分の集計", "更新・見直しスコア", "解約支援と証跡", "CSV入出力"].map((item) => (
+              <div key={item} className="rounded-lg border border-slate-100 bg-white p-5 font-bold shadow-[0_12px_30px_rgba(15,23,42,0.07)]">
+                {item}
+              </div>
             ))}
           </div>
         </div>
@@ -111,12 +128,13 @@ export default function Home() {
           <Card className="border-slate-200 bg-white text-slate-950">
             <h3 className="text-2xl font-bold">Free</h3>
             <p className="mt-2 text-4xl font-black">お試し</p>
-            <p className="mt-3 text-sm text-slate-950">10件まで登録、基本通知、基本集計。</p>
+            <p className="mt-3 text-sm text-slate-950">{FREE_SUBSCRIPTION_LIMIT}件まで登録、基本通知、基本集計を利用できます。</p>
           </Card>
           <Card className="border-fuchsia-300/40 bg-white text-slate-950">
             <h3 className="text-2xl font-bold">Premium</h3>
-            <p className="mt-2 text-4xl font-black">月額480円</p>
-            <p className="mt-2 text-sm font-bold text-blue-700">毎月の固定費としてPremium機能を利用できます。</p>
+            <p className="mt-2 text-4xl font-black">月額{PREMIUM_MONTHLY_PRICE_YEN}円</p>
+            <p className="mt-2 text-sm font-black text-blue-700">初回のみ{STRIPE_TRIAL_PERIOD_DAYS}日間お試し無料</p>
+            <p className="mt-2 text-sm font-bold text-blue-700">まずは無料で、CSV・分析・解約支援までPremium機能を試せます。</p>
             <p className="mt-3 text-sm text-slate-600">登録無制限、CSV入出力、CSV明細候補検出、高度分析、支払い累計、見直しレポート、解約支援。</p>
           </Card>
         </div>
@@ -132,4 +150,3 @@ export default function Home() {
     </main>
   );
 }
-

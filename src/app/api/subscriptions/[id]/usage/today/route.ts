@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
-import { getCurrentUser } from "@/lib/auth";
+import { getVerifiedApiUser } from "@/lib/api-auth";
 import { prisma } from "@/lib/prisma";
 import { japanCalendarDate } from "@/lib/subscription-usage";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
 async function verifiedOwnerSubscription(id: string) {
-  const user = await getCurrentUser();
-  if (!user) return { error: NextResponse.json({ message: "ログインしてください。" }, { status: 401 }) };
-  if (!user.emailVerified) return { error: NextResponse.json({ message: "メール認証が必要です。" }, { status: 403 }) };
+  const access = await getVerifiedApiUser();
+  if (!access.ok) return { error: access.response };
+  const { user } = access;
 
   const subscription = await prisma.subscription.findFirst({
     where: { id, userId: user.id, deletedAt: null },

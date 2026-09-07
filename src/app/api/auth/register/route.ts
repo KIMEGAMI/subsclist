@@ -3,10 +3,12 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { clearSession, createVerificationToken, hashToken, setSession } from "@/lib/auth";
 import { EMAIL_VERIFICATION_TOKEN_TTL_MS, MAX_EMAIL_LENGTH, MAX_PASSWORD_LENGTH, MAX_USER_NAME_LENGTH, MIN_PASSWORD_LENGTH } from "@/lib/app-constants";
-import { assertMailEnv, isProtectedAccountEmail } from "@/lib/env";
+import { authMailKeys, authMailRateLimit, recordAuthMailAttempt, releaseAuthMailAttempt } from "@/lib/auth-mail-rate-limit";
+import { assertAuthSecret, assertMailEnv, env, isProtectedAccountEmail } from "@/lib/env";
 import { userErrorMessage } from "@/lib/error-messages";
 import { sendVerificationEmail } from "@/lib/mail";
 import { prisma } from "@/lib/prisma";
+import { requestClientIdentifier } from "@/lib/request-client";
 
 const schema = z.object({
   name: z.string().trim().min(1).max(MAX_USER_NAME_LENGTH),
@@ -26,29 +28,61 @@ const initialCategories = [
 
 async function createTokenAndSend(userId: string, email: string) {
   const token = createVerificationToken();
-  await prisma.emailVerificationToken.create({
-    data: {
-      userId,
-      tokenHash: hashToken(token),
-      expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TOKEN_TTL_MS),
-    },
-  });
-  await sendVerificationEmail(email, token);
+  const tokenHash = hashToken(token);
+  const now = new Date();
+  await prisma.$transaction([
+    prisma.emailVerificationToken.updateMany({
+      where: { userId, usedAt: null },
+      data: { usedAt: now },
+    }),
+    prisma.emailVerificationToken.create({
+      data: {
+        userId,
+        tokenHash,
+        expiresAt: new Date(Date.now() + EMAIL_VERIFICATION_TOKEN_TTL_MS),
+      },
+    }),
+  ]);
+  try {
+    await sendVerificationEmail(email, token);
+  } catch (error) {
+    await prisma.emailVerificationToken.updateMany({
+      where: { userId, tokenHash, usedAt: null },
+      data: { usedAt: new Date() },
+    });
+    throw error;
+  }
+}
+
+function rateLimitedResponse(retryAfterSeconds: number) {
+  return NextResponse.json(
+    { message: `認証メールの送信回数が多すぎます。約${Math.ceil(retryAfterSeconds / 60)}分後に、もう一度お試しください。` },
+    { status: 429, headers: { "Retry-After": String(retryAfterSeconds) } },
+  );
 }
 
 export async function POST(request: Request) {
   try {
+    assertAuthSecret();
     assertMailEnv();
   } catch (error) {
     return NextResponse.json({ message: userErrorMessage(error, "メール送信設定を確認してください。") }, { status: 500 });
   }
 
-  const parsed = schema.safeParse(await request.json());
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ message: "入力内容を確認してください。" }, { status: 400 });
+  }
+
+  const parsed = schema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ message: "入力内容、利用規約、プライバシーポリシーへの同意を確認してください。" }, { status: 400 });
   }
 
-  const { name, email, password } = parsed.data;
+  const { name, password } = parsed.data;
+  const email = parsed.data.email.toLowerCase();
   if (isProtectedAccountEmail(email)) {
     return NextResponse.json({ message: "このメールアドレスは新規登録に使用できません。" }, { status: 403 });
   }
@@ -59,6 +93,12 @@ export async function POST(request: Request) {
   }
 
   if (exists && !exists.emailVerified) {
+    const keys = authMailKeys(exists.email, requestClientIdentifier(request), env.authSecret);
+    const rateLimit = authMailRateLimit(keys);
+    if (rateLimit.limited) return rateLimitedResponse(rateLimit.retryAfterSeconds);
+
+    const attemptedAt = Date.now();
+    recordAuthMailAttempt(keys, attemptedAt);
     try {
       await createTokenAndSend(exists.id, exists.email);
       await clearSession();
@@ -68,6 +108,7 @@ export async function POST(request: Request) {
         message: "このメールアドレスは登録済みですが、メール認証が未完了です。認証メールを再送しました。",
       });
     } catch {
+      releaseAuthMailAttempt(keys, attemptedAt);
       console.error("Failed to resend verification email during registration.");
       await clearSession();
       return NextResponse.json(
@@ -80,6 +121,10 @@ export async function POST(request: Request) {
       );
     }
   }
+
+  const keys = authMailKeys(email, requestClientIdentifier(request), env.authSecret);
+  const rateLimit = authMailRateLimit(keys);
+  if (rateLimit.limited) return rateLimitedResponse(rateLimit.retryAfterSeconds);
 
   const passwordHash = await bcrypt.hash(password, 12);
   const token = createVerificationToken();
@@ -105,9 +150,12 @@ export async function POST(request: Request) {
     },
   });
 
+  const attemptedAt = Date.now();
+  recordAuthMailAttempt(keys, attemptedAt);
   try {
     await sendVerificationEmail(email, token);
   } catch {
+    releaseAuthMailAttempt(keys, attemptedAt);
     console.error("Failed to send verification email after registration.");
     await setSession(user.id, false);
     return NextResponse.json(

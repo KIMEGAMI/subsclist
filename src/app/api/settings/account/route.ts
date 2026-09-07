@@ -1,46 +1,80 @@
 ﻿import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { clearSession, requireVerifiedUser } from "@/lib/auth";
+import { getVerifiedApiUser } from "@/lib/api-auth";
+import {
+  MAX_EMAIL_LENGTH,
+  MAX_PASSWORD_LENGTH,
+  STRIPE_ACCOUNT_DELETION_SUBSCRIPTION_PAGE_LIMIT,
+} from "@/lib/app-constants";
+import { clearSession } from "@/lib/auth";
 import { isProtectedAccountEmail } from "@/lib/env";
 import { prisma } from "@/lib/prisma";
+import { readJsonBody } from "@/lib/request-body";
 import { stripe } from "@/lib/stripe";
+import { stripeSubscriptionCanStillCharge } from "@/lib/stripe-account-deletion";
 
 const schema = z.object({
-  currentPassword: z.string().min(1),
+  currentPassword: z.string().min(1).max(MAX_PASSWORD_LENGTH),
   confirmText: z.literal("削除する"),
-  email: z.string().email(),
+  email: z.string().email().max(MAX_EMAIL_LENGTH),
 });
 
 function isMissingStripeResource(error: unknown) {
-  const stripeError = error as { code?: string; param?: string; raw?: { param?: string } };
-  return stripeError.code === "resource_missing"
-    || stripeError.param === "customer"
-    || stripeError.raw?.param === "customer";
+  const stripeError = error as {
+    code?: string;
+    param?: string;
+    raw?: { param?: string };
+  };
+  return (
+    stripeError.code === "resource_missing" ||
+    stripeError.param === "customer" ||
+    stripeError.raw?.param === "customer"
+  );
 }
 
-function canStillBeCharged(status: string) {
-  return status !== "canceled" && status !== "incomplete_expired";
-}
-
-async function hasChargeableStripeSubscription(customerId: string | null, subscriptionId: string | null) {
+async function hasChargeableStripeSubscription(
+  customerId: string | null,
+  subscriptionId: string | null,
+) {
   if (!customerId && !subscriptionId) return false;
 
   const client = stripe();
   if (customerId) {
     try {
-      const subscriptions = await client.subscriptions.list({ customer: customerId, status: "all", limit: 100 });
-      return subscriptions.data.some((subscription) => canStillBeCharged(subscription.status));
+      let startingAfter: string | undefined;
+      const seenCursors = new Set<string>();
+      while (true) {
+        const subscriptions = await client.subscriptions.list({
+          customer: customerId,
+          status: "all",
+          limit: STRIPE_ACCOUNT_DELETION_SUBSCRIPTION_PAGE_LIMIT,
+          ...(startingAfter ? { starting_after: startingAfter } : {}),
+        });
+        if (
+          subscriptions.data.some((subscription) =>
+            stripeSubscriptionCanStillCharge(subscription.status),
+          )
+        ) {
+          return true;
+        }
+        if (!subscriptions.has_more) break;
+        const nextCursor = subscriptions.data.at(-1)?.id;
+        if (!nextCursor || seenCursors.has(nextCursor)) {
+          throw new Error("Stripe subscription pagination was inconsistent.");
+        }
+        seenCursors.add(nextCursor);
+        startingAfter = nextCursor;
+      }
     } catch (error) {
       if (!isMissingStripeResource(error)) throw error;
-      return false;
     }
   }
 
   if (!subscriptionId) return false;
   try {
     const subscription = await client.subscriptions.retrieve(subscriptionId);
-    return canStillBeCharged(subscription.status);
+    return stripeSubscriptionCanStillCharge(subscription.status);
   } catch (error) {
     if (!isMissingStripeResource(error)) throw error;
     return false;
@@ -48,10 +82,15 @@ async function hasChargeableStripeSubscription(customerId: string | null, subscr
 }
 
 export async function DELETE(request: Request) {
-  const sessionUser = await requireVerifiedUser();
-  const parsed = schema.safeParse(await request.json());
+  const access = await getVerifiedApiUser();
+  if (!access.ok) return access.response;
+  const sessionUser = access.user;
+  const parsed = schema.safeParse(await readJsonBody(request));
   if (!parsed.success) {
-    return NextResponse.json({ message: "アカウント削除の確認情報が正しくありません。" }, { status: 400 });
+    return NextResponse.json(
+      { message: "アカウント削除の確認情報が正しくありません。" },
+      { status: 400 },
+    );
   }
 
   const user = await prisma.user.findUnique({
@@ -65,34 +104,60 @@ export async function DELETE(request: Request) {
     },
   });
   if (!user) {
-    return NextResponse.json({ message: "ユーザーが見つかりませんでした。" }, { status: 404 });
+    return NextResponse.json(
+      { message: "ユーザーが見つかりませんでした。" },
+      { status: 404 },
+    );
   }
 
   if (user.email !== parsed.data.email) {
-    return NextResponse.json({ message: "削除対象のアカウントが一致しません。" }, { status: 400 });
+    return NextResponse.json(
+      { message: "削除対象のアカウントが一致しません。" },
+      { status: 400 },
+    );
   }
 
   if (isProtectedAccountEmail(user.email)) {
-    return NextResponse.json({ message: "このアカウントは削除できません。" }, { status: 403 });
+    return NextResponse.json(
+      { message: "このアカウントは削除できません。" },
+      { status: 403 },
+    );
   }
 
-  const valid = await bcrypt.compare(parsed.data.currentPassword, user.passwordHash);
+  const valid = await bcrypt.compare(
+    parsed.data.currentPassword,
+    user.passwordHash,
+  );
   if (!valid) {
-    return NextResponse.json({ message: "現在のパスワードが正しくありません。" }, { status: 400 });
+    return NextResponse.json(
+      { message: "現在のパスワードが正しくありません。" },
+      { status: 400 },
+    );
   }
 
   try {
-    const chargeableSubscription = await hasChargeableStripeSubscription(user.stripeCustomerId, user.stripeSubscriptionId);
+    const chargeableSubscription = await hasChargeableStripeSubscription(
+      user.stripeCustomerId,
+      user.stripeSubscriptionId,
+    );
     if (chargeableSubscription) {
       return NextResponse.json(
-        { message: "継続中のPremium契約があります。契約管理で解約を完了してから、アカウントを削除してください。" },
+        {
+          message:
+            "継続中のPremium契約があります。契約管理で解約を完了してから、アカウントを削除してください。",
+        },
         { status: 409 },
       );
     }
   } catch {
-    console.error("Stripe subscription status check failed during account deletion.");
+    console.error(
+      "Stripe subscription status check failed during account deletion.",
+    );
     return NextResponse.json(
-      { message: "Stripeの契約状態を確認できなかったため、アカウントは削除していません。時間をおいて、もう一度お試しください。" },
+      {
+        message:
+          "Stripeの契約状態を確認できなかったため、アカウントは削除していません。時間をおいて、もう一度お試しください。",
+      },
       { status: 502 },
     );
   }
@@ -117,6 +182,10 @@ export async function DELETE(request: Request) {
     prisma.user.delete({ where: { id: user.id } }),
   ]);
 
-  await clearSession();
+  try {
+    await clearSession();
+  } catch {
+    console.error("Deleted account session cookie cleanup failed.");
+  }
   return NextResponse.json({ ok: true });
 }

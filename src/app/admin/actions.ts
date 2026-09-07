@@ -14,6 +14,7 @@ import { maintenanceModeCookie } from "@/lib/admin-constants";
 
 const titleMaxLength = 80;
 const bodyMaxLength = 1000;
+const recordIdMaxLength = 191;
 
 const announcementSchema = z.object({
   title: z.string().trim().min(1, "タイトルを入力してください。").max(titleMaxLength, "タイトルは80文字以内で入力してください。"),
@@ -22,7 +23,11 @@ const announcementSchema = z.object({
   pinned: z.boolean(),
 });
 
-const idSchema = z.string().min(1);
+const idSchema = z
+  .string()
+  .trim()
+  .min(1, "お知らせIDが指定されていません。")
+  .max(recordIdMaxLength, "お知らせIDが不正です。");
 
 export async function createAnnouncement(formData: FormData) {
   await requireAdminUser();

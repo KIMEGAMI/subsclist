@@ -1,4 +1,4 @@
-import { daysUntil, monthlyAmount } from "@/lib/billing";
+import { daysUntil, monthlyAmount } from "./billing.ts";
 import {
   REVIEW_CAUTION_SCORE_THRESHOLD,
   REVIEW_HIGH_AMOUNT_THRESHOLD,
@@ -8,9 +8,9 @@ import {
   REVIEW_URGENT_SCORE_THRESHOLD,
   SAME_CATEGORY_REVIEW_THRESHOLD,
   UPCOMING_DEADLINE_DAYS,
-} from "@/lib/app-constants";
+} from "./app-constants.ts";
 
-export { daysUntil, monthlyAmount } from "@/lib/billing";
+export { daysUntil, monthlyAmount } from "./billing.ts";
 
 export type InsightSubscription = {
   id: string;
@@ -26,6 +26,17 @@ export type InsightSubscription = {
   priority?: string | null;
   category?: { name: string } | null;
 };
+
+export const SAVINGS_ESTIMATE_FACTORS = {
+  rarelyUsed: 0.25,
+  optionalPriority: 0.25,
+  maximum: 0.5,
+} as const;
+
+function isUpcoming(value: Date, maximumDays: number) {
+  const remainingDays = daysUntil(value);
+  return remainingDays >= 0 && remainingDays <= maximumDays;
+}
 
 export function needsReview(value?: Date | null) {
   if (!value) return true;
@@ -68,12 +79,12 @@ export function reviewScore(item: InsightSubscription, sameCategoryCount = 1) {
     reasons.push("重要度が低い");
   }
 
-  if (item.trialEndsAt && daysUntil(item.trialEndsAt) <= UPCOMING_DEADLINE_DAYS) {
+  if (item.trialEndsAt && isUpcoming(item.trialEndsAt, UPCOMING_DEADLINE_DAYS)) {
     score += REVIEW_SCORE_WEIGHTS.upcomingTrial;
     reasons.push("無料トライアル終了が近い");
   }
 
-  if (item.cancellationDeadline && daysUntil(item.cancellationDeadline) <= UPCOMING_DEADLINE_DAYS) {
+  if (item.cancellationDeadline && isUpcoming(item.cancellationDeadline, UPCOMING_DEADLINE_DAYS)) {
     score += REVIEW_SCORE_WEIGHTS.upcomingCancellation;
     reasons.push("解約期限が近い");
   }
@@ -88,8 +99,10 @@ export function reviewScore(item: InsightSubscription, sameCategoryCount = 1) {
 
 export function estimatedMonthlySaving(item: InsightSubscription) {
   const amount = monthlyAmount(item.price, item.billingCycle, item.customCycleDays);
-  if (item.usageFrequency === "RARELY" || item.priority === "OPTIONAL") {
-    return amount;
-  }
-  return 0;
+  const factor = Math.min(
+    SAVINGS_ESTIMATE_FACTORS.maximum,
+    (item.usageFrequency === "RARELY" ? SAVINGS_ESTIMATE_FACTORS.rarelyUsed : 0)
+      + (item.priority === "OPTIONAL" ? SAVINGS_ESTIMATE_FACTORS.optionalPriority : 0),
+  );
+  return Math.round(amount * factor);
 }
