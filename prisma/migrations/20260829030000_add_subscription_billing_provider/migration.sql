@@ -1,0 +1,2 @@
+ALTER TABLE `Subscription`
+  ADD COLUMN `billingProvider` VARCHAR(30) NOT NULL DEFAULT 'DIRECT';

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { PREMIUM_MONTHLY_PRICE_YEN, STRIPE_TRIAL_PERIOD_DAYS } from "@/lib/app-constants";
 
 export const metadata: Metadata = {
   title: "特定商取引法に基づく表記 | SubscList",
@@ -8,19 +9,20 @@ export const metadata: Metadata = {
 };
 
 const rows = [
+  ["Premium無料体験", `初回のみ${STRIPE_TRIAL_PERIOD_DAYS}日間お試し無料。無料期間中に解約した場合、Premium料金は請求されません。無料期間終了後は月額${PREMIUM_MONTHLY_PRICE_YEN}円（税込）で自動更新されます。`],
   ["販売事業者", "SubscList 運営者"],
   ["運営責任者", "Shinji"],
   ["所在地", "請求があった場合、法令に基づき遅滞なく開示します。"],
   ["電話番号", "請求があった場合、法令に基づき遅滞なく開示します。"],
   ["メールアドレス", "saas.system.shinji@gmail.com"],
   ["販売URL", "https://subsclist.shinji.work"],
-  ["販売価格", "Premiumプラン 月額480円（税込）"],
+  ["販売価格", `Premiumプラン 月額${PREMIUM_MONTHLY_PRICE_YEN}円（税込）`],
   ["商品代金以外の必要料金", "インターネット接続料金、通信料金、振込手数料その他の利用環境に応じた費用はお客様の負担となります。"],
-  ["支払い方法", "クレジットカード決済（Stripe Checkout）"],
-  ["支払い時期", "Premiumプラン申込時に初回決済が行われ、以後は契約更新日に自動で決済されます。"],
-  ["サービス提供時期", "決済完了後、システム上でPremiumプランが有効化された時点から利用できます。"],
+  ["支払い方法", "Stripe Checkoutの決済画面に表示されるクレジットカードその他の支払い方法"],
+  ["支払い時期", `初回${STRIPE_TRIAL_PERIOD_DAYS}日間の無料期間終了後に初回決済が行われ、以後は契約更新日に自動で決済されます。`],
+  ["サービス提供時期", "Premiumプラン申込後、システム上でPremiumプランが有効化された時点から利用できます。"],
   ["返品・キャンセル", "デジタルサービスの性質上、決済完了後の返金は原則としてお受けしていません。ただし、本サービス側の重大な不具合などがある場合は個別に確認します。"],
-  ["解約方法", "ログイン後の設定画面、またはStripeのカスタマーポータルから解約できます。解約後は次回更新日以降の請求が停止されます。"],
+  ["解約方法", "ログイン後の「契約・解約」ページからStripeのカスタマーポータルを開いて解約できます。解約後は次回更新日以降の請求が停止されます。"],
   ["動作環境", "最新バージョンの主要ブラウザ（Chrome、Edge、Safari、Firefox）での利用を推奨します。"],
   ["注意事項", "本サービスはサブスクリプションや固定費の管理を支援するツールです。削減額、解約可否、通知の到達、各サービス提供会社の契約条件を保証するものではありません。"],
 ] as const;

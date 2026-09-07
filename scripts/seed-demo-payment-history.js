@@ -91,13 +91,14 @@ async function main() {
         }
         const paidAt = `${month.year}-${String(month.month).padStart(2, "0")}-${String(paymentDay(subscription, month)).padStart(2, "0")} 10:00:00`;
         await connection.query(
-          "INSERT INTO PaymentHistory (id, subscriptionId, userId, amount, paidAt, memo, createdAt) VALUES (?, ?, ?, ?, ?, ?, NOW())",
+          "INSERT INTO PaymentHistory (id, subscriptionId, userId, amount, paidAt, subscriptionNameSnapshot, memo, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())",
           [
             `hist_${subscription.id.slice(-10)}_${month.year}${String(month.month).padStart(2, "0")}`,
             subscription.id,
             userId,
             subscription.price,
             paidAt,
+            subscription.name,
             "2025-2026累計表示用データ",
           ],
         );

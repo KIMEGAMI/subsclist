@@ -4,6 +4,7 @@ import { MAX_CONTACT_MESSAGE_LENGTH, MAX_EMAIL_LENGTH, MAX_USER_NAME_LENGTH } fr
 import { getContactClientKey, hasContactNgPhrase, isContactRateLimited, recordContactAttempt } from "@/lib/contact-guard";
 import { assertMailEnv, env } from "@/lib/env";
 import { sendContactEmail } from "@/lib/mail";
+import { requestClientIdentifier } from "@/lib/request-client";
 
 const schema = z.object({
   name: z.string().trim().min(1).max(MAX_USER_NAME_LENGTH),
@@ -11,11 +12,6 @@ const schema = z.object({
   message: z.string().trim().min(1).max(MAX_CONTACT_MESSAGE_LENGTH),
   website: z.string().trim().max(200).optional(),
 });
-
-function clientIdentifier(request: Request) {
-  const forwardedFor = request.headers.get("x-forwarded-for");
-  return forwardedFor?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
-}
 
 function hasValidOrigin(request: Request) {
   return request.headers.get("origin") === env.appUrl;
@@ -44,15 +40,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "お問い合わせ内容を確認してください。" }, { status: 400 });
   }
 
-  const clientKey = getContactClientKey(clientIdentifier(request), env.authSecret);
+  const clientKey = getContactClientKey(requestClientIdentifier(request), env.authSecret);
   if (isContactRateLimited(clientKey)) {
     return NextResponse.json({ message: "短時間に送信できる回数を超えました。時間をおいて、もう一度お試しください。" }, { status: 429 });
   }
 
+  recordContactAttempt(clientKey);
   try {
     assertMailEnv();
     await sendContactEmail({ name: parsed.data.name, email: parsed.data.email, message: parsed.data.message });
-    recordContactAttempt(clientKey);
     return NextResponse.json({ ok: true, message: "お問い合わせを受け付けました。" });
   } catch {
     return NextResponse.json({ message: "お問い合わせを送信できませんでした。時間をおいて、もう一度お試しください。" }, { status: 500 });

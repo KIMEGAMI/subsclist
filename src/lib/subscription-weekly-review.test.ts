@@ -16,6 +16,20 @@ test("利用記録も見直しもなければ定期確認が必要", () => {
   assert.equal(needsWeeklyReview({ lastReviewedAt: new Date("2026-08-03T00:00:00.000Z"), usedDates: [] }, now), true);
 });
 
+test("今週の週次回答があれば定期確認は不要", () => {
+  assert.equal(
+    needsWeeklyReview(
+      {
+        lastReviewedAt: null,
+        usedDates: [],
+        weeklyReviewedAt: new Date("2026-08-10T00:00:00.000Z"),
+      },
+      now,
+    ),
+    false,
+  );
+});
+
 test("週の開始日は日本時間の月曜日になる", () => {
   assert.equal(startOfJapanWeek(now).toISOString(), "2026-08-10T00:00:00.000Z");
 });

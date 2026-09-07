@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
+import { PwaInstallButton } from "@/components/pwa-install-button";
 
 const brand = "SubscList";
 const nav = [
@@ -19,20 +20,23 @@ const nav = [
   { label: "支払い累計", href: "/payment-totals", icon: "T" },
   { label: "通知", href: "/notifications", icon: "N" },
   { label: "CSV", href: "/export", icon: "E" },
+  { label: "契約・解約", href: "/billing", icon: "B", prefetch: false },
   { label: "設定", href: "/settings", icon: "G" },
 ];
 
 const adminNav = [
   { label: "管理者メニュー", href: "/admin", icon: "A" },
   { label: "メンテナンス", href: "/admin#maintenance", icon: "M" },
+  { label: "通知ジョブ", href: "/admin#notification-job", icon: "N" },
   { label: "一斉メール", href: "/admin#bulk-email", icon: "E" },
   { label: "お知らせ", href: "/admin#announcements", icon: "I" },
   { label: "ユーザー一覧", href: "/admin#users", icon: "U" },
 ];
+const settingsNav = { label: "設定", href: "/settings", icon: "G" };
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
@@ -53,37 +57,61 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#eef9fb] bg-[url('/app-background.png')] bg-cover bg-fixed bg-center text-slate-950">
-      <div className="fixed inset-0 bg-white/28 backdrop-blur-[2px]" aria-hidden="true" />
-      <aside className="fixed inset-y-0 left-0 z-30 hidden w-[17.5rem] border-r border-white/65 bg-white/88 px-5 py-6 shadow-[18px_0_50px_rgba(15,23,42,0.08)] backdrop-blur-xl lg:flex lg:flex-col">
-        <Link href="/dashboard" className="group flex items-center gap-3 text-xl font-black">
-          <span className="grid size-11 place-items-center rounded-lg bg-gradient-to-br from-blue-600 via-cyan-500 to-fuchsia-500 text-white shadow-lg shadow-blue-500/20 transition group-hover:scale-105">S</span>
+    <div className="app-shell min-h-screen bg-[#eef9fb] bg-[url('/app-background.png')] bg-cover bg-fixed bg-center text-slate-950">
+      <div
+        className="app-shell-overlay fixed inset-0 bg-white/28 backdrop-blur-[2px]"
+        aria-hidden="true"
+      />
+      <aside className="app-shell-sidebar fixed inset-y-0 left-0 z-30 hidden w-[17.5rem] border-r border-white/65 bg-white/88 px-5 py-6 shadow-[18px_0_50px_rgba(15,23,42,0.08)] backdrop-blur-xl lg:flex lg:flex-col">
+        <Link
+          href={isAdmin === true ? "/admin" : isAdmin === false ? "/dashboard" : pathname}
+          className="group flex items-center gap-3 text-xl font-black"
+        >
+          <span className="grid size-11 place-items-center rounded-lg bg-gradient-to-br from-blue-600 via-cyan-500 to-fuchsia-500 text-white shadow-lg shadow-blue-500/20 transition group-hover:scale-105">
+            S
+          </span>
           <span>
             {brand}
-            <span className="block text-xs font-bold text-slate-500">Subscription OS</span>
+            <span className="block text-xs font-bold text-slate-500">
+              Subscription OS
+            </span>
           </span>
         </Link>
         <nav className="mt-8 space-y-1.5 overflow-y-auto pr-1">
-          {nav.map(({ label, href, icon }) => {
-            const active = pathname === href || (href === "/subscriptions" && pathname.startsWith("/subscriptions"));
+          {isAdmin === false && nav.map(({ label, href, icon, prefetch }) => {
+            const active =
+              pathname === href ||
+              (href === "/subscriptions" &&
+                pathname.startsWith("/subscriptions"));
             return (
               <Link
                 key={href}
                 href={href}
+                prefetch={prefetch}
                 className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-bold transition ${
-                  active ? "bg-blue-600 text-white shadow-lg shadow-blue-600/18" : "text-slate-600 hover:bg-white hover:text-slate-950 hover:shadow-sm"
+                  active
+                    ? "bg-blue-600 text-white shadow-lg shadow-blue-600/18"
+                    : "text-slate-600 hover:bg-white hover:text-slate-950 hover:shadow-sm"
                 }`}
               >
-                <span className={`grid size-7 place-items-center rounded-md text-[11px] font-black ${
-                  active ? "bg-white/18 text-white" : "bg-slate-100 text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-700"
-                }`}>{icon}</span>
+                <span
+                  className={`grid size-7 place-items-center rounded-md text-[11px] font-black ${
+                    active
+                      ? "bg-white/18 text-white"
+                      : "bg-slate-100 text-slate-500 group-hover:bg-blue-50 group-hover:text-blue-700"
+                  }`}
+                >
+                  {icon}
+                </span>
                 {label}
               </Link>
             );
           })}
-          {isAdmin && (
-            <div className="mt-5 border-t border-slate-200 pt-4">
-              <p className="px-3 text-xs font-black text-slate-500">管理者メニュー</p>
+          {isAdmin === true && (
+            <div>
+              <p className="px-3 text-xs font-black text-slate-500">
+                管理者メニュー
+              </p>
               <div className="mt-2 space-y-1.5">
                 {adminNav.map(({ label, href, icon }) => {
                   const active = pathname === "/admin";
@@ -92,47 +120,152 @@ export function AppShell({ children }: { children: ReactNode }) {
                       key={href}
                       href={href}
                       className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-bold transition ${
-                        active ? "bg-slate-900 text-white shadow-lg shadow-slate-900/18" : "text-slate-600 hover:bg-white hover:text-slate-950 hover:shadow-sm"
+                        active
+                          ? "bg-slate-900 text-white shadow-lg shadow-slate-900/18"
+                          : "text-slate-600 hover:bg-white hover:text-slate-950 hover:shadow-sm"
                       }`}
                     >
-                      <span className={`grid size-7 place-items-center rounded-md text-[11px] font-black ${
-                        active ? "bg-white/18 text-white" : "bg-slate-100 text-slate-500 group-hover:bg-slate-200 group-hover:text-slate-900"
-                      }`}>{icon}</span>
+                      <span
+                        className={`grid size-7 place-items-center rounded-md text-[11px] font-black ${
+                          active
+                            ? "bg-white/18 text-white"
+                            : "bg-slate-100 text-slate-500 group-hover:bg-slate-200 group-hover:text-slate-900"
+                        }`}
+                      >
+                        {icon}
+                      </span>
                       {label}
                     </Link>
                   );
                 })}
+                <Link
+                  href={settingsNav.href}
+                  className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-bold transition ${
+                    pathname === settingsNav.href
+                      ? "bg-slate-900 text-white shadow-lg shadow-slate-900/18"
+                      : "text-slate-600 hover:bg-white hover:text-slate-950 hover:shadow-sm"
+                  }`}
+                >
+                  <span
+                    className={`grid size-7 place-items-center rounded-md text-[11px] font-black ${
+                      pathname === settingsNav.href
+                        ? "bg-white/18 text-white"
+                        : "bg-slate-100 text-slate-500 group-hover:bg-slate-200 group-hover:text-slate-900"
+                    }`}
+                  >
+                    {settingsNav.icon}
+                  </span>
+                  {settingsNav.label}
+                </Link>
               </div>
             </div>
           )}
         </nav>
       </aside>
-      <header className="sticky top-0 z-20 border-b border-white/65 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-xl lg:hidden">
+      <header className="app-shell-mobile-header sticky top-0 z-20 border-b border-white/65 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-xl lg:hidden">
         <div className="flex items-center justify-between">
-          <Link href="/dashboard" onClick={() => setIsMobileMenuOpen(false)} className="font-black">{brand}</Link>
+          <Link
+            href={isAdmin === true ? "/admin" : isAdmin === false ? "/dashboard" : pathname}
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="font-black"
+          >
+            {brand}
+          </Link>
           <div className="flex items-center gap-2">
-            <Link href="/subscriptions/new" onClick={() => setIsMobileMenuOpen(false)} className="btn-primary min-h-0 px-3 py-2 text-sm">追加</Link>
-            <button type="button" onClick={() => setIsMobileMenuOpen((open) => !open)} aria-expanded={isMobileMenuOpen} aria-controls="mobile-navigation" aria-label="メニューを開く" className="grid size-10 place-items-center rounded-lg border border-slate-200 bg-white text-lg font-black text-slate-700 shadow-sm" title="メニュー">
+            {isAdmin === false && (
+              <Link
+                href="/subscriptions/new"
+                onClick={() => setIsMobileMenuOpen(false)}
+                className="btn-primary min-h-0 px-3 py-2 text-sm"
+              >
+                追加
+              </Link>
+            )}
+            <button
+              type="button"
+              onClick={() => setIsMobileMenuOpen((open) => !open)}
+              aria-expanded={isMobileMenuOpen}
+              aria-controls="mobile-navigation"
+              aria-label="メニューを開く"
+              disabled={isAdmin === null}
+              className="grid size-10 place-items-center rounded-lg border border-slate-200 bg-white text-lg font-black text-slate-700 shadow-sm"
+              title="メニュー"
+            >
               &#8801;
             </button>
           </div>
         </div>
-        {isMobileMenuOpen && <nav id="mobile-navigation" className="mt-3 grid gap-1 border-t border-slate-100 pt-3" aria-label="モバイルメニュー">
-          {nav.map(({ label, href, icon }) => {
-            const active = pathname === href || (href === "/subscriptions" && pathname.startsWith("/subscriptions"));
-            return <Link key={href} href={href} onClick={() => setIsMobileMenuOpen(false)} className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-bold ${active ? "bg-blue-600 text-white" : "text-slate-700 hover:bg-slate-100"}`}><span className={`grid size-7 place-items-center rounded-md text-[11px] font-black ${active ? "bg-white/18 text-white" : "bg-slate-100 text-slate-500"}`}>{icon}</span>{label}</Link>;
-          })}
-          {isAdmin && <div className="mt-2 border-t border-slate-200 pt-2">
-            <p className="px-3 py-2 text-xs font-black text-slate-500">管理者メニュー</p>
-            {adminNav.map(({ label, href, icon }) => <Link key={href} href={href} onClick={() => setIsMobileMenuOpen(false)} className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-bold ${pathname === "/admin" ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100"}`}><span className={`grid size-7 place-items-center rounded-md text-[11px] font-black ${pathname === "/admin" ? "bg-white/18 text-white" : "bg-slate-100 text-slate-500"}`}>{icon}</span>{label}</Link>)}
-          </div>}
-        </nav>}
+        {isMobileMenuOpen && (
+          <nav
+            id="mobile-navigation"
+            className="mt-3 grid gap-1 border-t border-slate-100 pt-3"
+            aria-label="モバイルメニュー"
+          >
+            {isAdmin === false && nav.map(({ label, href, icon, prefetch }) => {
+              const active =
+                pathname === href ||
+                (href === "/subscriptions" &&
+                  pathname.startsWith("/subscriptions"));
+              return (
+                <Link
+                  key={href}
+                  href={href}
+                  prefetch={prefetch}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-bold ${active ? "bg-blue-600 text-white" : "text-slate-700 hover:bg-slate-100"}`}
+                >
+                  <span
+                    className={`grid size-7 place-items-center rounded-md text-[11px] font-black ${active ? "bg-white/18 text-white" : "bg-slate-100 text-slate-500"}`}
+                  >
+                    {icon}
+                  </span>
+                  {label}
+                </Link>
+              );
+            })}
+            {isAdmin === true && (
+              <div>
+                <p className="px-3 py-2 text-xs font-black text-slate-500">
+                  管理者メニュー
+                </p>
+                {adminNav.map(({ label, href, icon }) => (
+                  <Link
+                    key={href}
+                    href={href}
+                    onClick={() => setIsMobileMenuOpen(false)}
+                    className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-bold ${pathname === "/admin" ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100"}`}
+                  >
+                    <span
+                      className={`grid size-7 place-items-center rounded-md text-[11px] font-black ${pathname === "/admin" ? "bg-white/18 text-white" : "bg-slate-100 text-slate-500"}`}
+                    >
+                      {icon}
+                    </span>
+                    {label}
+                  </Link>
+                ))}
+                <Link
+                  href={settingsNav.href}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-bold ${pathname === settingsNav.href ? "bg-slate-900 text-white" : "text-slate-700 hover:bg-slate-100"}`}
+                >
+                  <span
+                    className={`grid size-7 place-items-center rounded-md text-[11px] font-black ${pathname === settingsNav.href ? "bg-white/18 text-white" : "bg-slate-100 text-slate-500"}`}
+                  >
+                    {settingsNav.icon}
+                  </span>
+                  {settingsNav.label}
+                </Link>
+              </div>
+            )}
+          </nav>
+        )}
       </header>
-      <main className="relative z-10 lg:pl-[17.5rem]">
-        <div className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
+      <main className="app-shell-main relative z-10 lg:pl-[17.5rem]">
+        <div className="app-shell-content mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8 lg:py-6">
           {children}
         </div>
       </main>
+      <div className="print-hidden"><PwaInstallButton /></div>
     </div>
   );
 }
@@ -150,14 +283,33 @@ export function PageHeader({
     <div className="mb-7 flex flex-col gap-4 border-b border-white/55 pb-5 sm:flex-row sm:items-end sm:justify-between">
       <div>
         <p className="text-xs font-black uppercase text-blue-700">SubscList</p>
-        <h1 className="mt-1 text-2xl font-black text-slate-950 sm:text-3xl">{title}</h1>
-        <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-slate-600">{description}</p>
+        <h1 className="mt-1 text-2xl font-black text-slate-950 sm:text-3xl">
+          {title}
+        </h1>
+        <p className="mt-2 max-w-2xl text-sm font-medium leading-6 text-slate-600">
+          {description}
+        </p>
       </div>
       {action}
     </div>
   );
 }
 
-export function Card({ children, className = "", id }: { children: ReactNode; className?: string; id?: string }) {
-  return <section id={id} className={`rounded-lg border border-white/75 bg-white/92 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur-xl ${className}`}>{children}</section>;
+export function Card({
+  children,
+  className = "",
+  id,
+}: {
+  children: ReactNode;
+  className?: string;
+  id?: string;
+}) {
+  return (
+    <section
+      id={id}
+      className={`rounded-lg border border-white/75 bg-white/92 p-5 shadow-[0_18px_50px_rgba(15,23,42,0.08)] backdrop-blur-xl ${className}`}
+    >
+      {children}
+    </section>
+  );
 }

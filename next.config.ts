@@ -20,14 +20,15 @@ const productionContentSecurityPolicy = [
   "connect-src 'self'",
 ].join("; ");
 
-const privateRouteSources = [
-  "/admin/:path*", "/analytics/:path*", "/calendar/:path*", "/categories/:path*", "/dashboard/:path*", "/export/:path*",
+export const privateRouteSources = [
+  "/admin/:path*", "/analytics/:path*", "/annual-report/:path*", "/billing/:path*", "/calendar/:path*", "/categories/:path*", "/dashboard/:path*", "/export/:path*",
   "/monthly-report/:path*", "/notifications/:path*", "/payment-methods/:path*", "/payment-totals/:path*", "/payments/:path*",
   "/review/:path*", "/settings/:path*", "/simulation/:path*", "/subscriptions/:path*", "/api/:path*", "/login", "/register",
   "/forgot-password", "/reset-password", "/verify-email", "/maintenance",
 ];
 
 const nextConfig: NextConfig = {
+  distDir: process.env.NEXT_DIST_DIR || ".next",
   devIndicators: false,
   async headers() {
     const headers: Array<{ key: string; value: string }> = [...securityHeaders];
@@ -36,6 +37,14 @@ const nextConfig: NextConfig = {
     }
     return [
       { source: "/:path*", headers },
+      {
+        source: "/sw.js",
+        headers: [
+          { key: "Content-Type", value: "application/javascript; charset=utf-8" },
+          { key: "Cache-Control", value: "no-cache, no-store, must-revalidate" },
+          { key: "Content-Security-Policy", value: "default-src 'self'; script-src 'self'" },
+        ],
+      },
       ...privateRouteSources.map((source) => ({
         source,
         headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" }],

@@ -48,6 +48,20 @@ enum CancellationStatus {
   COMPLETED
 }
 
+enum WeeklyUsageRange {
+  ZERO
+  ONE_TWO
+  THREE_FIVE
+  SIX_SEVEN
+}
+
+enum LoginSecurityEventType {
+  LOGIN_SUCCESS
+  NEW_DEVICE
+  ACCOUNT_LOCKED
+  ALL_SESSIONS_REVOKED
+}
+
 enum PaymentMethodType {
   CREDIT_CARD
   DEBIT_CARD
@@ -79,36 +93,84 @@ enum PaymentMethodType {
 }
 
 model User {
-  id                      String                   @id @default(cuid())
-  name                    String?
-  email                   String                   @unique
-  emailVerified           DateTime?
-  passwordHash            String
-  sessionVersion          Int                      @default(1)
-  plan                    Plan                     @default(FREE)
-  stripeCustomerId        String?
-  stripeSubscriptionId    String?
-  stripeSubscriptionStatus String?
-  stripeTrialStartAt      DateTime?
-  stripeTrialEndAt        DateTime?
-  trialUsedAt             DateTime?
-  createdAt               DateTime                 @default(now())
-  updatedAt               DateTime                 @updatedAt
-  categories              Category[]
-  cancellationChecklist   CancellationChecklistItem[]
-  cancellationEvidences   CancellationEvidence[]
-  emailVerificationTokens EmailVerificationToken[]
-  emailChangeTokens      EmailChangeToken[]
-  notificationDeliveries  NotificationDelivery[]
+  id                         String                      @id @default(cuid())
+  name                       String?
+  email                      String                      @unique
+  emailVerified              DateTime?
+  passwordHash               String
+  sessionVersion             Int                         @default(1)
+  failedLoginCount           Int                         @default(0)
+  lastFailedLoginAt          DateTime?
+  lockedUntil                DateTime?
+  lastLoginAt                DateTime?
+  plan                       Plan                        @default(FREE)
+  stripeCustomerId           String?                     @unique
+  stripeSubscriptionId       String?                     @unique
+  stripeSubscriptionStatus   String?
+  stripeTrialStartAt         DateTime?
+  stripeTrialEndAt           DateTime?
+  trialUsedAt                DateTime?
+  stripeCurrentPeriodEnd     DateTime?
+  stripeCancelAt             DateTime?
+  stripeCancelAtPeriodEnd    Boolean                     @default(false)
+  createdAt                  DateTime                    @default(now())
+  updatedAt                  DateTime                    @updatedAt
+  categories                 Category[]
+  cancellationChecklist      CancellationChecklistItem[]
+  cancellationEvidences      CancellationEvidence[]
+  emailVerificationTokens    EmailVerificationToken[]
+  emailChangeTokens          EmailChangeToken[]
+  notificationDeliveries     NotificationDelivery[]
   userNotificationDeliveries UserNotificationDelivery[]
-  notificationSettings    NotificationSetting[]
-  paymentHistories        PaymentHistory[]
-  paymentMethods          PaymentMethod[]
-  passwordResetTokens     PasswordResetToken[]
-  preference              UserPreference?
-  subscriptions           Subscription[]
-  subscriptionUsages      SubscriptionUsage[]
+  notificationSettings       NotificationSetting[]
+  paymentHistories           PaymentHistory[]
+  paymentMethods             PaymentMethod[]
+  passwordResetTokens        PasswordResetToken[]
+  preference                 UserPreference?
+  subscriptions              Subscription[]
+  subscriptionUsages         SubscriptionUsage[]
+  weeklyUsageReviews         WeeklyUsageReview[]
   subscriptionPriceHistories SubscriptionPriceHistory[]
+  savingChallenges           SavingChallenge[]
+  monthlyCloses              MonthlyClose[]
+  statementMerchantAliases   StatementMerchantAlias[]
+  statementPaymentImports    StatementPaymentImport[]
+  trustedLoginDevices        TrustedLoginDevice[]
+  loginSecurityEvents        LoginSecurityEvent[]
+  geminiAnalysisRequests     GeminiAnalysisRequest[]
+}
+
+model GeminiAnalysisRequest {
+  id        String   @id @default(cuid())
+  userId    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+}
+
+model TrustedLoginDevice {
+  id          String   @id @default(cuid())
+  userId      String
+  tokenHash   String   @db.Char(64)
+  clientLabel String   @db.VarChar(100)
+  createdAt   DateTime @default(now())
+  lastUsedAt  DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, tokenHash])
+  @@index([userId, lastUsedAt])
+}
+
+model LoginSecurityEvent {
+  id          String                 @id @default(cuid())
+  userId      String
+  type        LoginSecurityEventType
+  clientLabel String?                @db.VarChar(100)
+  createdAt   DateTime               @default(now())
+  user        User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 model Announcement {
@@ -156,88 +218,130 @@ model PasswordResetToken {
 }
 
 model Subscription {
-  id                   String                @id @default(cuid())
-  userId               String
-  categoryId           String?
-  paymentMethodId      String?
-  name                 String
-  price                Int
-  currency             String                @default("JPY")
-  billingCycle         BillingCycle
-  customCycleDays      Int?
-  nextBillingDate      DateTime
-  status               SubscriptionStatus    @default(ACTIVE)
-  memo                 String?               @db.Text
-  serviceUrl           String?
-  cancellationUrl      String?
-  trialEndsAt          DateTime?
-  cancellationDeadline DateTime?
-  lastReviewedAt       DateTime?
-  notifyDaysBefore     Int?
-  usageFrequency       UsageFrequency         @default(UNKNOWN)
-  priority             SubscriptionPriority   @default(UNKNOWN)
-  logoUrl              String?
-  cancellationStatus   CancellationStatus     @default(NONE)
-  plannedCancelAt      DateTime?
-  cancellationMemo     String?                @db.Text
-  cancellationCompletedAt DateTime?
-  createdAt            DateTime              @default(now())
-  updatedAt            DateTime              @updatedAt
-  deletedAt            DateTime?
-  cancellationChecklist CancellationChecklistItem[]
-  cancellationEvidences CancellationEvidence[]
-  category             Category?             @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  notificationSettings NotificationSetting[]
-  notificationDeliveries NotificationDelivery[]
-  paymentHistories     PaymentHistory[]
-  paymentMethod        PaymentMethod?        @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
-  usageRecords         SubscriptionUsage[]
-  priceHistories       SubscriptionPriceHistory[]
-  user                 User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                       String                      @id @default(cuid())
+  userId                   String
+  categoryId               String?
+  paymentMethodId          String?
+  billingProvider          String                      @default("DIRECT") @db.VarChar(30)
+  name                     String
+  price                    Int
+  scheduledPrice           Int?
+  scheduledPriceAt         DateTime?
+  currency                 String                      @default("JPY")
+  sourceAmountMinor        Int?
+  exchangeRateToJpyScaled  Int?
+  exchangeRateUpdatedAt    DateTime?
+  billingCycle             BillingCycle
+  customCycleDays          Int?
+  nextBillingDate          DateTime
+  status                   SubscriptionStatus          @default(ACTIVE)
+  memo                     String?                     @db.Text
+  serviceUrl               String?
+  cancellationUrl          String?
+  trialEndsAt              DateTime?
+  cancellationDeadline     DateTime?
+  lastReviewedAt           DateTime?
+  notifyDaysBefore         Int?
+  notificationSnoozedUntil DateTime?
+  usageFrequency           UsageFrequency              @default(UNKNOWN)
+  priority                 SubscriptionPriority        @default(UNKNOWN)
+  businessUsePercent       Int                         @default(0)
+  defaultAccountingLabel   String?                     @db.VarChar(100)
+  logoUrl                  String?
+  cancellationStatus       CancellationStatus          @default(NONE)
+  plannedCancelAt          DateTime?
+  cancellationMemo         String?                     @db.Text
+  cancellationCompletedAt  DateTime?
+  createdAt                DateTime                    @default(now())
+  updatedAt                DateTime                    @updatedAt
+  deletedAt                DateTime?
+  cancellationChecklist    CancellationChecklistItem[]
+  cancellationEvidences    CancellationEvidence[]
+  category                 Category?                   @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  notificationSettings     NotificationSetting[]
+  notificationDeliveries   NotificationDelivery[]
+  paymentHistories         PaymentHistory[]
+  paymentMethod            PaymentMethod?              @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  usageRecords             SubscriptionUsage[]
+  weeklyUsageReviews       WeeklyUsageReview[]
+  priceHistories           SubscriptionPriceHistory[]
+  savingChallenges         SavingChallenge[]
+  statementMerchantAliases StatementMerchantAlias[]
+  user                     User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status, nextBillingDate])
 }
 
 model EmailChangeToken {
-  id        String   @id @default(cuid())
+  id        String    @id @default(cuid())
   userId    String
   newEmail  String
-  tokenHash String   @unique
+  tokenHash String    @unique
   expiresAt DateTime
   usedAt    DateTime?
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
   @@index([expiresAt])
 }
 
 model SavingChallenge {
-  id                     String                @id @default(cuid())
+  id                     String       @id @default(cuid())
   userId                 String
   subscriptionId         String
   year                   Int
   month                  Int
   status                 String
   potentialMonthlySaving Int
-  createdAt              DateTime              @default(now())
-  updatedAt              DateTime              @updatedAt
+  reason                 String?      @db.VarChar(500)
+  renewalDate            DateTime     @db.Date
+  decidedAt              DateTime     @default(now())
+  createdAt              DateTime     @default(now())
+  updatedAt              DateTime     @updatedAt
+  subscription           Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  user                   User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, year, month])
+  @@unique([userId, subscriptionId, year, month])
+  @@index([userId, decidedAt])
   @@index([subscriptionId])
 }
 
+model MonthlyClose {
+  id                        String   @id @default(cuid())
+  userId                    String
+  year                      Int
+  month                     Int
+  paidAmount                Int
+  businessPaidAmount        Int
+  activeMonthlyAmount       Int
+  activeSubscriptionCount   Int
+  reviewedSubscriptionCount Int
+  deadlineRiskCount         Int
+  readinessScore            Int?
+  unresolvedCount           Int?
+  reconciliationPercent     Int?
+  organizationPercent       Int?
+  renewalDecisionPercent    Int?
+  completedAt               DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+  user                      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, year, month])
+  @@index([userId, completedAt])
+}
+
 model SubscriptionPriceHistory {
-  id            String       @id @default(cuid())
-  userId        String
-  subscriptionId String
-  price         Int
-  billingCycle  BillingCycle
+  id              String       @id @default(cuid())
+  userId          String
+  subscriptionId  String
+  price           Int
+  billingCycle    BillingCycle
   customCycleDays Int?
-  effectiveFrom DateTime     @default(now())
-  createdAt     DateTime     @default(now())
-  subscription  Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  effectiveFrom   DateTime     @default(now())
+  createdAt       DateTime     @default(now())
+  subscription    Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, effectiveFrom])
   @@index([subscriptionId, effectiveFrom])
@@ -257,6 +361,22 @@ model SubscriptionUsage {
   @@unique([userId, subscriptionId, usedDate])
   @@index([userId, usedDate])
   @@index([subscriptionId, usedDate])
+}
+
+model WeeklyUsageReview {
+  id             String           @id @default(cuid())
+  userId         String
+  subscriptionId String
+  weekStart      DateTime         @db.Date
+  usageRange     WeeklyUsageRange
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+  subscription   Subscription     @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, subscriptionId, weekStart])
+  @@index([userId, weekStart])
+  @@index([subscriptionId, weekStart])
 }
 
 model CancellationChecklistItem {
@@ -294,14 +414,15 @@ model CancellationEvidence {
 }
 
 model UserPreference {
-  id                  String   @id @default(cuid())
-  userId              String   @unique
-  monthlyBudget       Int?
-  defaultNotifyDaysBefore Int   @default(7)
-  notificationHour    Int      @default(9)
-  createdAt           DateTime @default(now())
-  updatedAt           DateTime @updatedAt
-  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                      String   @id @default(cuid())
+  userId                  String   @unique
+  monthlyBudget           Int?
+  defaultNotifyDaysBefore Int      @default(7)
+  notificationHour        Int      @default(9)
+  monthlyDigestEnabled    Boolean  @default(true)
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+  user                    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model NotificationDelivery {
@@ -356,17 +477,57 @@ model PaymentMethod {
 }
 
 model PaymentHistory {
-  id             String       @id @default(cuid())
-  subscriptionId String
-  userId         String
-  amount         Int
-  paidAt         DateTime
-  memo           String?
-  createdAt      DateTime     @default(now())
-  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                        String                  @id @default(cuid())
+  subscriptionId            String
+  userId                    String
+  amount                    Int
+  paidAt                    DateTime
+  businessUsePercent        Int                     @default(0)
+  subscriptionNameSnapshot  String                  @db.VarChar(100)
+  categoryNameSnapshot      String?                 @db.VarChar(50)
+  paymentMethodNameSnapshot String?                 @db.VarChar(50)
+  accountingLabel           String?                 @db.VarChar(100)
+  referenceNumber           String?                 @db.VarChar(100)
+  referenceUrl              String?                 @db.Text
+  memo                      String?
+  statementPaymentImportId  String?
+  createdAt                 DateTime                @default(now())
+  subscription              Subscription            @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  statementPaymentImport    StatementPaymentImport? @relation(fields: [statementPaymentImportId], references: [id], onDelete: SetNull)
+  user                      User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, paidAt])
+  @@index([statementPaymentImportId])
+}
+
+model StatementMerchantAlias {
+  id                 String       @id @default(cuid())
+  userId             String
+  subscriptionId     String
+  merchantLabel      String       @db.VarChar(200)
+  normalizedMerchant String       @db.VarChar(191)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  subscription       Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  user               User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, normalizedMerchant])
+  @@index([subscriptionId, createdAt])
+}
+
+model StatementPaymentImport {
+  id               String           @id @default(cuid())
+  userId           String
+  importedCount    Int
+  savedAliasCount  Int              @default(0)
+  undoneAt         DateTime?
+  undoneCount      Int?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  paymentHistories PaymentHistory[]
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
 }
 
 model NotificationSetting {
@@ -379,4 +540,13 @@ model NotificationSetting {
   updatedAt      DateTime     @updatedAt
   subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model StripeWebhookEvent {
+  id          String    @id @db.VarChar(255)
+  type        String    @db.VarChar(100)
+  createdAt   DateTime  @default(now())
+  processedAt DateTime?
+
+  @@index([processedAt])
 }
