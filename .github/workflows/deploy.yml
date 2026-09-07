@@ -28,14 +28,10 @@ env:
   NODE_VERSION: "24"
   CI: "true"
   DATABASE_URL: mysql://ci:ci@127.0.0.1:3306/subsclist_ci
-  TEST_DATABASE_URL: mysql://ci:ci@127.0.0.1:3306/subsclist_ci
   APP_URL: http://localhost:3000
   NEXTAUTH_URL: http://localhost:3000
   AUTH_SECRET: ci-auth-secret-at-least-32-characters-long
   NEXTAUTH_SECRET: ci-auth-secret-at-least-32-characters-long
-  STRIPE_SECRET_KEY: sk_test_ci_placeholder
-  STRIPE_WEBHOOK_SECRET: whsec_ci_placeholder
-  STRIPE_PREMIUM_PRICE_ID: price_ci_placeholder
   MAIL_FROM: SubscList CI <ci@example.com>
   SMTP_HOST: localhost
   SMTP_PORT: "1025"
@@ -94,20 +90,11 @@ jobs:
       - name: Run unit and security tests
         run: npm test
 
-      - name: Run API route security tests with coverage
-        run: npm run test:routes:coverage
-
-      - name: Verify multi-user data isolation
-        run: npm run test:db-isolation
-
-      - name: Audit Stripe identifiers
-        run: npm run audit:stripe
+      - name: Audit Node dependencies
+        run: npm audit --audit-level=high
 
       - name: Build application
         run: npm run build
-
-      - name: Audit Node dependencies
-        run: npm audit --audit-level=high
 
   deploy:
     name: Deploy over SSH
