@@ -5,8 +5,8 @@ rules:
       - javascript
     paths:
       include:
-        - src/**/*.tsx
-        - src/**/*.jsx
+        - /src/**/*.tsx
+        - /src/**/*.jsx
     patterns:
       - pattern: <$ELEMENT dangerouslySetInnerHTML={...} />
       - pattern-not: |
@@ -25,10 +25,10 @@ rules:
       - generic
     paths:
       include:
-        - src/**/*.js
-        - src/**/*.jsx
-        - src/**/*.ts
-        - src/**/*.tsx
+        - /src/**/*.js
+        - /src/**/*.jsx
+        - /src/**/*.ts
+        - /src/**/*.tsx
     pattern-regex: "(innerHTML|outerHTML)\\s*=\\s*(?!['\"`]\\s*['\"`])|insertAdjacentHTML\\s*\\("
     message: 'Writing HTML strings directly to the DOM can introduce XSS. Use textContent, React rendering, or a reviewed sanitizer for trusted HTML only.'
     severity: ERROR
@@ -45,12 +45,12 @@ rules:
       - javascript
     paths:
       include:
-        - src/**/*.js
-        - src/**/*.jsx
-        - src/**/*.ts
-        - src/**/*.tsx
-        - scripts/**/*.js
-        - scripts/**/*.cjs
+        - /src/**/*.js
+        - /src/**/*.jsx
+        - /src/**/*.ts
+        - /src/**/*.tsx
+        - /scripts/**/*.js
+        - /scripts/**/*.cjs
     pattern-either:
       - pattern: eval(...)
       - pattern: Function(...)
@@ -70,12 +70,12 @@ rules:
       - generic
     paths:
       include:
-        - src/**/*.js
-        - src/**/*.jsx
-        - src/**/*.ts
-        - src/**/*.tsx
-        - scripts/**/*.js
-        - scripts/**/*.cjs
+        - /src/**/*.js
+        - /src/**/*.jsx
+        - /src/**/*.ts
+        - /src/**/*.tsx
+        - /scripts/**/*.js
+        - /scripts/**/*.cjs
     pattern-regex: "\\bset(?:Timeout|Interval)\\s*\\(\\s*['\"`]"
     message: 'String-based timers execute dynamic code. Pass a function callback instead of a string.'
     severity: ERROR
@@ -91,10 +91,10 @@ rules:
       - javascript
     paths:
       include:
-        - src/**/*.ts
-        - src/**/*.tsx
-        - scripts/**/*.js
-        - scripts/**/*.cjs
+        - /src/**/*.ts
+        - /src/**/*.tsx
+        - /scripts/**/*.js
+        - /scripts/**/*.cjs
     pattern-either:
       - pattern: $CLIENT.$queryRawUnsafe(...)
       - pattern: $CLIENT.$executeRawUnsafe(...)
@@ -112,12 +112,12 @@ rules:
       - generic
     paths:
       include:
-        - src/**/*.js
-        - src/**/*.jsx
-        - src/**/*.ts
-        - src/**/*.tsx
-        - scripts/**/*.js
-        - scripts/**/*.cjs
+        - /src/**/*.js
+        - /src/**/*.jsx
+        - /src/**/*.ts
+        - /src/**/*.tsx
+        - /scripts/**/*.js
+        - /scripts/**/*.cjs
     pattern-regex: "console\\.(log|info|warn|error|debug)\\s*\\([^\\n;]*process\\.env"
     message: 'Do not print process.env or secret-bearing environment values to logs.'
     severity: ERROR
@@ -134,8 +134,8 @@ rules:
         - '**/*'
       exclude:
         - package-lock.json
-        - .next/**
-        - node_modules/**
+        - /.next/**
+        - /node_modules/**
     pattern-regex: '\\b[rs]k_live_[A-Za-z0-9_]+\\b'
     message: 'A live Stripe API key appears to be hardcoded. Remove it, rotate the key, and use environment secrets or a restricted API key.'
     severity: ERROR
