@@ -126,6 +126,10 @@ export const SESSION_MAX_AGE_SECONDS = 14 * 24 * 60 * 60;
 
 export const CSV_MIN_YEARLY_GAP_DAYS = 330;
 export const CSV_MAX_YEARLY_GAP_DAYS = 400;
+export const CSV_MIN_SEMIANNUAL_GAP_DAYS = 165;
+export const CSV_MAX_SEMIANNUAL_GAP_DAYS = 200;
+export const CSV_MIN_QUARTERLY_GAP_DAYS = 80;
+export const CSV_MAX_QUARTERLY_GAP_DAYS = 100;
 export const CSV_MIN_MONTHLY_GAP_DAYS = 25;
 export const CSV_MAX_MONTHLY_GAP_DAYS = 35;
 export const CSV_MIN_WEEKLY_GAP_DAYS = 6;

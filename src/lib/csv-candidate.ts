@@ -5,9 +5,11 @@ import {
   nextBillingOccurrence,
 } from "./billing.ts";
 
-export type CandidateBillingCycle = "MONTHLY" | "YEARLY" | "WEEKLY";
+export type CandidateBillingCycle = "MONTHLY" | "QUARTERLY" | "SEMIANNUAL" | "YEARLY" | "WEEKLY";
 
 export function candidateBillingCycle(value: string): CandidateBillingCycle {
+  if (value === "QUARTERLY") return "QUARTERLY";
+  if (value === "SEMIANNUAL") return "SEMIANNUAL";
   if (value === "YEARLY") return "YEARLY";
   if (value === "WEEKLY") return "WEEKLY";
   return "MONTHLY";

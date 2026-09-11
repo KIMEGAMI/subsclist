@@ -39,6 +39,8 @@ export {
 } from "./subscription-csv-columns.ts";
 export type SubscriptionImportBillingCycle =
   | "MONTHLY"
+  | "QUARTERLY"
+  | "SEMIANNUAL"
   | "YEARLY"
   | "WEEKLY"
   | "CUSTOM";
@@ -90,7 +92,7 @@ const rowSchema = z.object({
   price: integerString.transform(Number).pipe(
     z.number().int().min(0).max(MAX_SUBSCRIPTION_PRICE),
   ),
-  billingCycle: z.enum(["MONTHLY", "YEARLY", "WEEKLY", "CUSTOM"]),
+  billingCycle: z.enum(["MONTHLY", "QUARTERLY", "SEMIANNUAL", "YEARLY", "WEEKLY", "CUSTOM"]),
   nextBillingDate: z.date(),
   customCycleDays: z.number().int().min(MIN_CUSTOM_CYCLE_DAYS).max(MAX_CUSTOM_CYCLE_DAYS).nullable(),
   categoryName: z.string().trim().max(MAX_CATEGORY_NAME_LENGTH),
@@ -149,6 +151,8 @@ function calendarDate(raw: string) {
 function billingCycle(raw: string): SubscriptionImportBillingCycle | null {
   const normalized = raw.trim().toUpperCase();
   if (!normalized || ["MONTHLY", "月額", "月間", "月"].includes(normalized)) return "MONTHLY";
+  if (["QUARTERLY", "3か月", "3ヶ月", "四半期"].includes(normalized)) return "QUARTERLY";
+  if (["SEMIANNUAL", "SEMI_ANNUAL", "HALF_YEARLY", "6か月", "6ヶ月", "半年"].includes(normalized)) return "SEMIANNUAL";
   if (["YEARLY", "年額", "年間", "年"].includes(normalized)) return "YEARLY";
   if (["WEEKLY", "週額", "週間", "週"].includes(normalized)) return "WEEKLY";
   if (["CUSTOM", "カスタム"].includes(normalized)) return "CUSTOM";
