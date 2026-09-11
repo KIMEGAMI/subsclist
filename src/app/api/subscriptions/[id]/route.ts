@@ -61,7 +61,7 @@ const updateSchema = z.object({
   sourceAmount: z.string().max(MAX_SOURCE_AMOUNT_INPUT_LENGTH).optional(),
   exchangeRateToJpy: z.string().max(MAX_EXCHANGE_RATE_INPUT_LENGTH).optional(),
   exchangeRateUpdatedAt: optionalCalendarDateSchema,
-  billingCycle: z.enum(["MONTHLY", "YEARLY", "WEEKLY", "CUSTOM"]).optional(),
+  billingCycle: z.enum(["MONTHLY", "QUARTERLY", "SEMIANNUAL", "YEARLY", "WEEKLY", "CUSTOM"]).optional(),
   customCycleDays: z.preprocess(
     (value) => (value === "" || value === null ? undefined : value),
     z.coerce

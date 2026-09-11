@@ -1,6 +1,8 @@
 import { japanCalendarDate } from "./subscription-usage.ts";
 
 export const MONTHS_PER_YEAR = 12;
+export const MONTHS_PER_QUARTER = 3;
+export const MONTHS_PER_SEMIANNUAL_PERIOD = 6;
 export const AVERAGE_WEEKS_PER_MONTH = 4.345;
 export const AVERAGE_DAYS_PER_MONTH = 30.437;
 export const MILLISECONDS_PER_SECOND = 1_000;
@@ -11,6 +13,8 @@ export const DEFAULT_CUSTOM_CYCLE_DAYS = 30;
 export const MAX_BILLING_OCCURRENCES_PER_RANGE = 400;
 
 export function monthlyAmount(price: number, cycle: string, customCycleDays?: number | null) {
+  if (cycle === "QUARTERLY") return price / MONTHS_PER_QUARTER;
+  if (cycle === "SEMIANNUAL") return price / MONTHS_PER_SEMIANNUAL_PERIOD;
   if (cycle === "YEARLY") return price / MONTHS_PER_YEAR;
   if (cycle === "WEEKLY") return price * AVERAGE_WEEKS_PER_MONTH;
   if (cycle === "CUSTOM") return customCycleDays ? price * (AVERAGE_DAYS_PER_MONTH / customCycleDays) : price;
@@ -25,6 +29,14 @@ export function daysUntil(date: Date, referenceDate = new Date()) {
   const today = japanCalendarDate(referenceDate);
   const target = japanCalendarDate(date);
   return Math.ceil((target.getTime() - today.getTime()) / MILLISECONDS_PER_DAY);
+}
+
+function calendarMonthsPerCycle(cycle: string) {
+  if (cycle === "MONTHLY") return 1;
+  if (cycle === "QUARTERLY") return MONTHS_PER_QUARTER;
+  if (cycle === "SEMIANNUAL") return MONTHS_PER_SEMIANNUAL_PERIOD;
+  if (cycle === "YEARLY") return MONTHS_PER_YEAR;
+  return null;
 }
 
 function addDaysFromAnchor(anchor: Date, days: number) {
@@ -56,8 +68,8 @@ export function nextBillingOccurrence(
 
   if (anchor >= reference) return anchor;
 
-  if (billingCycle === "MONTHLY" || billingCycle === "YEARLY") {
-    const monthsPerCycle = billingCycle === "YEARLY" ? MONTHS_PER_YEAR : 1;
+  const monthsPerCycle = calendarMonthsPerCycle(billingCycle);
+  if (monthsPerCycle !== null) {
     const elapsedMonths = (reference.getUTCFullYear() - anchor.getUTCFullYear()) * MONTHS_PER_YEAR
       + reference.getUTCMonth() - anchor.getUTCMonth();
     let cycleCount = Math.max(0, Math.floor(elapsedMonths / monthsPerCycle));

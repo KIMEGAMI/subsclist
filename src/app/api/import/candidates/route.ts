@@ -7,10 +7,14 @@ import {
   CSV_MAX_CANDIDATE_COUNT,
   CSV_MAX_CONFIDENCE,
   CSV_MAX_MONTHLY_GAP_DAYS,
+  CSV_MAX_QUARTERLY_GAP_DAYS,
+  CSV_MAX_SEMIANNUAL_GAP_DAYS,
   CSV_MAX_WEEKLY_GAP_DAYS,
   CSV_MAX_YEARLY_GAP_DAYS,
   CSV_MIN_CANDIDATE_CONFIDENCE,
   CSV_MIN_MONTHLY_GAP_DAYS,
+  CSV_MIN_QUARTERLY_GAP_DAYS,
+  CSV_MIN_SEMIANNUAL_GAP_DAYS,
   CSV_MIN_WEEKLY_GAP_DAYS,
   CSV_MIN_YEARLY_GAP_DAYS,
   CSV_RECURRING_MIN_OCCURRENCES,
@@ -43,6 +47,8 @@ function inferCycle(dates: Date[]) {
   const average = gaps.reduce((sum, gap) => sum + gap, 0) / gaps.length;
   if (average >= CSV_MIN_MONTHLY_GAP_DAYS && average <= CSV_MAX_MONTHLY_GAP_DAYS) return "MONTHLY";
   if (average >= CSV_MIN_WEEKLY_GAP_DAYS && average <= CSV_MAX_WEEKLY_GAP_DAYS) return "WEEKLY";
+  if (average >= CSV_MIN_QUARTERLY_GAP_DAYS && average <= CSV_MAX_QUARTERLY_GAP_DAYS) return "QUARTERLY";
+  if (average >= CSV_MIN_SEMIANNUAL_GAP_DAYS && average <= CSV_MAX_SEMIANNUAL_GAP_DAYS) return "SEMIANNUAL";
   if (average >= CSV_MIN_YEARLY_GAP_DAYS && average <= CSV_MAX_YEARLY_GAP_DAYS) return "YEARLY";
   return "CUSTOM";
 }
@@ -50,6 +56,8 @@ function inferCycle(dates: Date[]) {
 function cycleLabel(value: string) {
   if (value === "MONTHLY") return "月額の可能性";
   if (value === "WEEKLY") return "週額の可能性";
+  if (value === "QUARTERLY") return "3か月ごとの可能性";
+  if (value === "SEMIANNUAL") return "6か月ごとの可能性";
   if (value === "YEARLY") return "年額の可能性";
   if (value === "CUSTOM") return "独自周期の可能性";
   return "周期不明";

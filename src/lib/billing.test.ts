@@ -58,6 +58,45 @@ test("月末アンカーを維持して対象月の請求を列挙する", () =>
   );
 });
 
+test("31日アンカーの月額請求は短い月の末日へ寄せ、翌月には元の日付へ戻る", () => {
+  const occurrences = billingOccurrencesInRange(
+    new Date("2024-01-31T00:00:00.000Z"),
+    "MONTHLY",
+    null,
+    new Date("2024-01-01T00:00:00.000Z"),
+    new Date("2024-06-01T00:00:00.000Z"),
+  );
+  assert.deepEqual(
+    occurrences.map((item) => item.toISOString().slice(0, 10)),
+    ["2024-01-31", "2024-02-29", "2024-03-31", "2024-04-30", "2024-05-31"],
+  );
+});
+
+test("3か月・6か月周期は日数ではなく暦月アンカーで月末とうるう日を扱う", () => {
+  const quarterly = billingOccurrencesInRange(
+    new Date("2023-08-31T00:00:00.000Z"),
+    "QUARTERLY",
+    null,
+    new Date("2023-08-01T00:00:00.000Z"),
+    new Date("2024-07-01T00:00:00.000Z"),
+  );
+  const semiannual = billingOccurrencesInRange(
+    new Date("2023-08-31T00:00:00.000Z"),
+    "SEMIANNUAL",
+    null,
+    new Date("2023-08-01T00:00:00.000Z"),
+    new Date("2025-03-01T00:00:00.000Z"),
+  );
+  assert.deepEqual(
+    quarterly.map((item) => item.toISOString().slice(0, 10)),
+    ["2023-08-31", "2023-11-30", "2024-02-29", "2024-05-31"],
+  );
+  assert.deepEqual(
+    semiannual.map((item) => item.toISOString().slice(0, 10)),
+    ["2023-08-31", "2024-02-29", "2024-08-31", "2025-02-28"],
+  );
+});
+
 test("対象期間外の請求と不正な期間は返さない", () => {
   assert.deepEqual(
     billingOccurrencesInRange(
