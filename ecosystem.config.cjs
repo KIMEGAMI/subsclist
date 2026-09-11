@@ -1,6 +1,7 @@
 const appDir = process.env.APP_DIR || __dirname;
 const appName = process.env.APP_NAME || "subsclist";
 const appPort = process.env.APP_PORT || "3000";
+const appHost = process.env.APP_HOST || "127.0.0.1";
 
 module.exports = {
   apps: [
@@ -8,7 +9,7 @@ module.exports = {
       name: appName,
       cwd: appDir,
       script: "node_modules/next/dist/bin/next",
-      args: ["start", "-p", appPort],
+      args: ["start", "-H", appHost, "-p", appPort],
       exec_mode: "fork",
       instances: 1,
       autorestart: true,

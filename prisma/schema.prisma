@@ -14,6 +14,8 @@ enum Plan {
 
 enum BillingCycle {
   MONTHLY
+  QUARTERLY
+  SEMIANNUAL
   YEARLY
   WEEKLY
   CUSTOM

@@ -99,7 +99,7 @@ type Option = { id: string; name: string };
 type ServicePreset = {
   name: string;
   price: number;
-  billingCycle: "MONTHLY" | "YEARLY" | "WEEKLY" | "CUSTOM";
+  billingCycle: "MONTHLY" | "QUARTERLY" | "SEMIANNUAL" | "YEARLY" | "WEEKLY" | "CUSTOM";
   serviceUrl: string;
   cancellationUrl: string;
 };
@@ -766,6 +766,8 @@ export function SubscriptionForm({
           required
         >
           <option value="MONTHLY">月額</option>
+          <option value="QUARTERLY">3か月ごと</option>
+          <option value="SEMIANNUAL">6か月ごと</option>
           <option value="YEARLY">年額</option>
           <option value="WEEKLY">週額</option>
           <option value="CUSTOM">カスタム</option>
@@ -2942,6 +2944,8 @@ function CsvReviewField({
         {header}
         <select {...common}>
           <option value="MONTHLY">月額</option>
+          <option value="QUARTERLY">3か月ごと</option>
+          <option value="SEMIANNUAL">6か月ごと</option>
           <option value="YEARLY">年額</option>
           <option value="WEEKLY">週額</option>
           <option value="CUSTOM">カスタム</option>
@@ -3173,7 +3177,7 @@ export function CsvImportForm({ disabled }: { disabled: boolean }) {
             {
               label: "請求周期",
               description:
-                "MONTHLY / YEARLY / WEEKLY / CUSTOM を入れます。CUSTOMの場合はカスタム周期日数も入力します。",
+                "MONTHLY / QUARTERLY / SEMIANNUAL / YEARLY / WEEKLY / CUSTOM を入れます。QUARTERLYは3か月、SEMIANNUALは6か月の暦月周期です。CUSTOMの場合はカスタム周期日数も入力します。",
             },
             { label: "次回更新日", description: "YYYY-MM-DD 形式の日付です。" },
             {
@@ -3530,7 +3534,7 @@ type CsvSubscriptionCandidate = {
   lastDate: string;
   confidence: number;
   reason: string;
-  billingCycle: "MONTHLY" | "YEARLY" | "WEEKLY";
+  billingCycle: "MONTHLY" | "QUARTERLY" | "SEMIANNUAL" | "YEARLY" | "WEEKLY";
   nextBillingDate: string;
   existingSubscriptionId: string | null;
 };
@@ -3637,6 +3641,8 @@ function CsvCandidateRegistrationCard({ item }: { item: CsvSubscriptionCandidate
           <Field label="請求周期">
             <select value={billingCycle} onChange={(event) => setBillingCycle(event.target.value as CsvSubscriptionCandidate["billingCycle"])} className="input">
               <option value="MONTHLY">月額</option>
+              <option value="QUARTERLY">3か月ごと</option>
+              <option value="SEMIANNUAL">6か月ごと</option>
               <option value="YEARLY">年額</option>
               <option value="WEEKLY">週額</option>
             </select>

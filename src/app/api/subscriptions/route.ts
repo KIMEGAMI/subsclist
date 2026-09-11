@@ -51,7 +51,7 @@ const schema = z.object({
   sourceAmount: z.string().max(MAX_SOURCE_AMOUNT_INPUT_LENGTH).optional(),
   exchangeRateToJpy: z.string().max(MAX_EXCHANGE_RATE_INPUT_LENGTH).optional(),
   exchangeRateUpdatedAt: optionalCalendarDateSchema,
-  billingCycle: z.enum(["MONTHLY", "YEARLY", "WEEKLY", "CUSTOM"]),
+  billingCycle: z.enum(["MONTHLY", "QUARTERLY", "SEMIANNUAL", "YEARLY", "WEEKLY", "CUSTOM"]),
   customCycleDays: z.preprocess(
     (value) => (value === "" || value === null ? undefined : value),
     z.coerce
