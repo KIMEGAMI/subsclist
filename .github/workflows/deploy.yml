@@ -90,6 +90,9 @@ jobs:
       - name: Run unit and security tests
         run: npm test
 
+      - name: Run usage tests
+        run: npm run test:usage
+
       - name: Audit Node dependencies
         run: npm audit --audit-level=high
 

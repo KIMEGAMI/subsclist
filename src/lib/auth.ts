@@ -13,7 +13,14 @@ import { decodeSignedSession, encodeSignedSession } from "@/lib/signed-session";
 const sessionCookie = "subsclist_session";
 
 export function hashToken(token: string) {
-  return crypto.createHash("sha256").update(token).digest("hex");
+  return crypto
+    .scryptSync(token, env.authSecret, 32, {
+      N: 16_384,
+      r: 8,
+      p: 1,
+      maxmem: 32 * 1024 * 1024,
+    })
+    .toString("hex");
 }
 
 export function createVerificationToken() {
