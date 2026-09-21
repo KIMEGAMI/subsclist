@@ -1,4 +1,4 @@
-ALTER TABLE `monthlyclose`
+ALTER TABLE `MonthlyClose`
   ADD COLUMN `readinessScore` INTEGER NULL,
   ADD COLUMN `unresolvedCount` INTEGER NULL,
   ADD COLUMN `reconciliationPercent` INTEGER NULL,
