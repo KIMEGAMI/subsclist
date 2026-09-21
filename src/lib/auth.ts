@@ -13,8 +13,14 @@ import { decodeSignedSession, encodeSignedSession } from "@/lib/signed-session";
 const sessionCookie = "subsclist_session";
 
 export function hashToken(token: string) {
-  // codeql[js/insufficient-password-hash] This is a high-entropy one-time token, not a password.
-  return crypto.createHmac("sha256", env.authSecret).update(token).digest("hex");
+  return crypto
+    .scryptSync(token, env.authSecret, 32, {
+      N: 16_384,
+      r: 8,
+      p: 1,
+      maxmem: 32 * 1024 * 1024,
+    })
+    .toString("hex");
 }
 
 export function createVerificationToken() {
