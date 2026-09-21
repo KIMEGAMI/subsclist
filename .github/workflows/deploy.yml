@@ -94,6 +94,9 @@ jobs:
       - name: Run unit and security tests
         run: npm test
 
+      - name: Run usage tests
+        run: npm run test:usage
+
       - name: Run API route security tests with coverage
         run: npm run test:routes:coverage
 
