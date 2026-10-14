@@ -49,6 +49,19 @@ if (!allowedHosts.has(parsedUrl.hostname) || !allowedDatabasePattern.test(databa
 }
 
 const mode = process.argv[2] ?? "routes";
+const requestedTestFile = process.env.DB_TEST_FILE ?? "";
+if (requestedTestFile) {
+  const normalizedTestFile = path.posix.normalize(requestedTestFile.replace(/\\/g, "/"));
+  if (
+    !normalizedTestFile.startsWith("tests/routes/")
+    || normalizedTestFile.includes("..")
+    || !normalizedTestFile.endsWith(".test.ts")
+  ) {
+    console.error("DB_TEST_FILEはtests/routes配下のテストファイルだけを指定できます。");
+    process.exit(1);
+  }
+  process.env.DB_TEST_FILE = normalizedTestFile;
+}
 const generatedTestSecret = randomTestValue();
 const environment = {
   ...process.env,
@@ -70,11 +83,13 @@ const environment = {
   SMTP_USER: "integration@invalid.example",
   SMTP_PASS: randomTestValue(),
   MAIL_FROM: "SubscList Integration <integration@invalid.example>",
+  RESEND_API_KEY: "",
   GOOGLE_CLIENT_ID: randomTestValue(),
   GOOGLE_CLIENT_SECRET: randomTestValue(),
   GEMINI_API_KEY: randomTestValue(),
   E2E_ADMIN_EMAIL: "admin.integration@invalid.example",
   E2E_DEMO_EMAIL: "demo.integration@invalid.example",
+  E2E_MEMBER_EMAIL: "member.integration@invalid.example",
   E2E_USER_PASSWORD: randomTestValue(),
 };
 
@@ -83,8 +98,21 @@ let args;
 if (mode === "isolation") {
   command = process.execPath;
   args = [path.join(process.cwd(), "scripts", "test-multi-user-isolation.cjs")];
+} else if (mode === "stripe-audit") {
+  command = process.execPath;
+  args = [path.join(process.cwd(), "scripts", "audit-stripe-identifiers.cjs")];
+} else if (mode === "savings-migration-backfill") {
+  command = process.execPath;
+  args = [path.join(process.cwd(), "scripts", "test-savings-migration-backfill.cjs")];
 } else if (mode === "e2e") {
-  environment.NEXT_DIST_DIR = ".next-e2e";
+  environment.GOOGLE_CLIENT_ID = "";
+  environment.GOOGLE_CLIENT_SECRET = "";
+  const e2eDistDir = process.env.E2E_NEXT_DIST_DIR ?? ".next-e2e";
+  if (!/^\.next-[A-Za-z0-9._-]+$/.test(e2eDistDir)) {
+    console.error("E2E_NEXT_DIST_DIRは.next-で始まるローカル出力先だけ指定できます。");
+    process.exit(1);
+  }
+  environment.NEXT_DIST_DIR = e2eDistDir;
   const npmCli = process.env.npm_execpath;
   if (!npmCli) {
     console.error("npm CLIの実行パスを確認できませんでした。");
@@ -112,7 +140,10 @@ if (mode === "isolation") {
     "--config",
     "vitest.config.mts",
   ];
+  if (requestedTestFile) args.push(process.env.DB_TEST_FILE);
   if (mode === "coverage") args.push("--coverage");
+  // Allow the caller to control Vitest execution without bypassing the DB safety checks above.
+  args.push(...process.argv.slice(3));
 }
 
 const result = spawnSync(command, args, {

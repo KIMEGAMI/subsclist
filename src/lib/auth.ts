@@ -3,24 +3,61 @@ import { redirect } from "next/navigation";
 import crypto from "node:crypto";
 import {
   DEFAULT_ADMIN_USER_EMAIL,
+  ONE_TIME_TOKEN_MAX_LENGTH,
   SESSION_MAX_AGE_SECONDS,
 } from "@/lib/app-constants";
 import { getMaintenanceMode } from "@/lib/admin";
 import { prisma } from "@/lib/prisma";
 import { assertAuthSecret, env } from "@/lib/env";
-import { decodeSignedSession, encodeSignedSession } from "@/lib/signed-session";
-
-const sessionCookie = "subsclist_session";
+import {
+  decodeSignedSession,
+  encodeSignedSession,
+  SESSION_COOKIE_NAME,
+} from "@/lib/signed-session";
 
 export function hashToken(token: string) {
-  return crypto
-    .scryptSync(token, env.authSecret, 32, {
-      N: 16_384,
-      r: 8,
-      p: 1,
-      maxmem: 32 * 1024 * 1024,
-    })
-    .toString("hex");
+  assertAuthSecret();
+  return crypto.createHmac("sha256", env.authSecret).update(token).digest("hex");
+}
+
+export async function findTokenRecord<T>(
+  token: string,
+  findByHash: (tokenHash: string) => Promise<T | null>,
+  allowTokenLookup: () => boolean = () => true,
+) {
+  if (token.length === 0 || token.length > ONE_TIME_TOKEN_MAX_LENGTH) {
+    return null;
+  }
+  if (!allowTokenLookup()) return null;
+
+  const currentRecord = await findByHash(hashToken(token));
+  if (currentRecord) return currentRecord;
+
+  const legacySha256 = crypto.createHash("sha256").update(token).digest("hex");
+  const sha256Record = await findByHash(legacySha256);
+  if (sha256Record) return sha256Record;
+
+  const legacyScrypt = await new Promise<string>((resolve, reject) => {
+    crypto.scrypt(
+      token,
+      env.authSecret,
+      32,
+      {
+        N: 16_384,
+        r: 8,
+        p: 1,
+        maxmem: 32 * 1024 * 1024,
+      },
+      (error, derivedKey) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+        resolve(derivedKey.toString("hex"));
+      },
+    );
+  });
+  return findByHash(legacyScrypt);
 }
 
 export function createVerificationToken() {
@@ -31,16 +68,17 @@ export async function setSession(userId: string, emailVerified: boolean) {
   assertAuthSecret();
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { sessionVersion: true },
+    select: { email: true, sessionVersion: true },
   });
   if (!user) throw new Error("Session user was not found.");
   const cookieStore = await cookies();
   cookieStore.set(
-    sessionCookie,
+    SESSION_COOKIE_NAME,
     encodeSignedSession(
       {
         userId,
         emailVerified,
+        demoReadOnly: user.email.toLowerCase() === env.demoUserEmail.toLowerCase(),
         sessionVersion: user.sessionVersion,
         exp: Math.floor(Date.now() / 1000) + SESSION_MAX_AGE_SECONDS,
       },
@@ -58,14 +96,14 @@ export async function setSession(userId: string, emailVerified: boolean) {
 
 export async function clearSession() {
   const cookieStore = await cookies();
-  cookieStore.delete(sessionCookie);
+  cookieStore.delete(SESSION_COOKIE_NAME);
 }
 
 export async function getSession() {
   assertAuthSecret();
   const cookieStore = await cookies();
   return decodeSignedSession(
-    cookieStore.get(sessionCookie)?.value,
+    cookieStore.get(SESSION_COOKIE_NAME)?.value,
     env.authSecret,
   );
 }
@@ -123,10 +161,10 @@ export function readSessionFromCookieHeader(cookieHeader: string | null) {
   const cookie = cookieHeader
     .split(";")
     .map((item) => item.trim())
-    .find((item) => item.startsWith(`${sessionCookie}=`));
+    .find((item) => item.startsWith(`${SESSION_COOKIE_NAME}=`));
   if (!cookie) return null;
   return decodeSignedSession(
-    decodeURIComponent(cookie.slice(sessionCookie.length + 1)),
+    decodeURIComponent(cookie.slice(SESSION_COOKIE_NAME.length + 1)),
     env.authSecret,
   );
 }

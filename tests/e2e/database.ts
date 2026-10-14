@@ -6,7 +6,11 @@ import { maintenanceModeKey } from "../../src/lib/admin-constants";
 function testPrisma() {
   const url = new URL(process.env.DATABASE_URL ?? "");
   const database = url.pathname.replace(/^\//, "");
-  if (!/_(?:test|ci)$/.test(database)) {
+  if (
+    url.protocol !== "mysql:" ||
+    !["localhost", "127.0.0.1", "mysql"].includes(url.hostname) ||
+    !/_(?:test|ci)$/.test(database)
+  ) {
     throw new Error("E2Eはテスト専用DBでのみ実行できます。");
   }
   const adapter = new PrismaMariaDb({
@@ -23,8 +27,9 @@ function testPrisma() {
 export async function seedE2eUsers() {
   const adminEmail = process.env.E2E_ADMIN_EMAIL ?? "";
   const demoEmail = process.env.E2E_DEMO_EMAIL ?? "";
+  const memberEmail = process.env.E2E_MEMBER_EMAIL ?? "";
   const password = process.env.E2E_USER_PASSWORD ?? "";
-  if (!adminEmail || !demoEmail || password.length < 16) {
+  if (!adminEmail || !demoEmail || !memberEmail || password.length < 16) {
     throw new Error("E2E fixture用の環境変数が不足しています。");
   }
   const prisma = testPrisma();
@@ -34,7 +39,7 @@ export async function seedE2eUsers() {
       create: { key: maintenanceModeKey, value: "disabled" },
       update: { value: "disabled" },
     });
-    await prisma.user.deleteMany({ where: { email: { in: [adminEmail, demoEmail] } } });
+    await prisma.user.deleteMany({ where: { email: { in: [adminEmail, demoEmail, memberEmail] } } });
     const passwordHash = await bcrypt.hash(password, 4);
     await prisma.user.create({
       data: {
@@ -43,6 +48,14 @@ export async function seedE2eUsers() {
         passwordHash,
         emailVerified: new Date(),
         plan: "PREMIUM",
+      },
+    });
+    await prisma.user.create({
+      data: {
+        name: "E2E一般ユーザー",
+        email: memberEmail,
+        passwordHash,
+        emailVerified: new Date(),
       },
     });
     await prisma.user.create({
@@ -69,7 +82,7 @@ export async function seedE2eUsers() {
 }
 
 export async function cleanupE2eUsers() {
-  const emails = [process.env.E2E_ADMIN_EMAIL, process.env.E2E_DEMO_EMAIL].filter(
+  const emails = [process.env.E2E_ADMIN_EMAIL, process.env.E2E_DEMO_EMAIL, process.env.E2E_MEMBER_EMAIL].filter(
     (value): value is string => Boolean(value),
   );
   if (emails.length === 0) return;
@@ -81,6 +94,18 @@ export async function cleanupE2eUsers() {
       update: { value: "disabled" },
     });
     await prisma.user.deleteMany({ where: { email: { in: emails } } });
+  } finally {
+    await prisma.$disconnect();
+  }
+}
+
+export async function deleteE2eRegistrationUser(email: string) {
+  if (!/^registration-e2e-[a-z0-9-]+@invalid\.example$/i.test(email)) {
+    throw new Error("E2E登録ユーザー以外の削除は許可されていません。");
+  }
+  const prisma = testPrisma();
+  try {
+    await prisma.user.deleteMany({ where: { email } });
   } finally {
     await prisma.$disconnect();
   }

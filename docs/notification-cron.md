@@ -33,7 +33,7 @@ chmod 600 /var/www/subsclist/.env
 ```bash
 cd /var/www/subsclist
 chmod 750 scripts/run-notifications.sh
-APP_DIR=/var/www/subsclist APP_PORT=3000 ./scripts/run-notifications.sh
+APP_DIR=/var/www/subsclist APP_PORT=3001 ./scripts/run-notifications.sh
 ```
 
 `Notification job completed successfully.` と表示されれば、Next.jsへの接続とシークレット認証は成功しています。対象通知がなければメールは送られません。
@@ -52,7 +52,7 @@ crontab -e
 
 ```cron
 CRON_TZ=Asia/Tokyo
-0 * * * * APP_DIR=/var/www/subsclist APP_PORT=3000 /var/www/subsclist/scripts/run-notifications.sh >> /var/www/subsclist/logs/notifications-cron.log 2>&1
+0 * * * * APP_DIR=/var/www/subsclist APP_PORT=3001 /var/www/subsclist/scripts/run-notifications.sh >> /var/www/subsclist/logs/notifications-cron.log 2>&1
 ```
 
 登録内容は次で確認できます。
@@ -79,8 +79,8 @@ tail -n 50 /var/www/subsclist/logs/notifications-cron.log
 ```bash
 cd /var/www/subsclist
 pm2 status subsclist
-curl -I http://127.0.0.1:3000
-APP_DIR=/var/www/subsclist APP_PORT=3000 ./scripts/run-notifications.sh
+curl -I http://127.0.0.1:3001
+APP_DIR=/var/www/subsclist APP_PORT=3001 ./scripts/run-notifications.sh
 ```
 
 `NOTIFICATION_JOB_SECRET is missing` は `.env` の設定漏れです。`Notification job request failed` は、Next.jsが起動していない、ポートが異なる、または認証に失敗している可能性があります。管理画面が「一部失敗」の場合はメール設定と送信先を確認し、「停止の可能性」の場合はcrontab、アプリの稼働状態、ポートを順に確認してください。シークレットの値自体はログやチャットに貼り付けないでください。

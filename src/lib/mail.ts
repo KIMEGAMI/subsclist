@@ -1,12 +1,11 @@
+import { randomUUID } from "node:crypto";
 import nodemailer from "nodemailer";
-import { SYSTEM_EMAIL_ADDRESS, SYSTEM_EMAIL_FROM } from "@/lib/app-constants";
 import { assertMailEnv, env } from "@/lib/env";
 
 const MAX_SEND_ATTEMPTS = 3;
 const RETRY_DELAY_MS = 1200;
 
 function createTransporter() {
-  assertMailEnv();
   return nodemailer.createTransport({
     host: env.smtpHost,
     port: env.smtpPort,
@@ -18,21 +17,25 @@ function createTransporter() {
   });
 }
 
+function systemMailFrom() {
+  return env.mailFrom;
+}
+
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export async function sendVerificationEmail(email: string, token: string) {
-  const verifyUrl = new URL("/api/auth/verify-email", env.appUrl);
+  const verifyUrl = new URL("/verify-email", env.appUrl);
   verifyUrl.searchParams.set("token", token);
 
   await sendMailWithRetry({
-    from: SYSTEM_EMAIL_FROM,
+    from: systemMailFrom(),
     to: email,
     subject: "SubscList メール認証",
     text: [
       "SubscListへの登録ありがとうございます。",
-      "以下のURLを開いてメール認証を完了してください。",
+      "以下のURLを開き、本人確認後にSubscListで使用するパスワードを設定して登録を完了してください。",
       "",
       verifyUrl.toString(),
       "",
@@ -40,8 +43,8 @@ export async function sendVerificationEmail(email: string, token: string) {
     ].join("\n"),
     html: [
       "<p>SubscListへの登録ありがとうございます。</p>",
-      "<p>以下のリンクを開いてメール認証を完了してください。</p>",
-      `<p><a href="${escapeHtml(verifyUrl.toString())}">メール認証を完了する</a></p>`,
+      "<p>以下のリンクを開き、本人確認後にSubscListで使用するパスワードを設定して登録を完了してください。</p>",
+      `<p><a href="${escapeHtml(verifyUrl.toString())}">本人確認とパスワード設定へ</a></p>`,
       "<p>このURLの有効期限は24時間です。</p>",
     ].join(""),
   });
@@ -52,7 +55,7 @@ export async function sendEmailChangeVerificationEmail(email: string, token: str
   verifyUrl.searchParams.set("token", token);
 
   await sendMailWithRetry({
-    from: SYSTEM_EMAIL_FROM,
+    from: systemMailFrom(),
     to: email,
     subject: "SubscList メールアドレス変更の確認",
     text: [
@@ -77,7 +80,7 @@ export async function sendPasswordResetEmail(email: string, token: string) {
   resetUrl.searchParams.set("token", token);
 
   await sendMailWithRetry({
-    from: SYSTEM_EMAIL_FROM,
+    from: systemMailFrom(),
     to: email,
     subject: "SubscList パスワード再設定",
     text: [
@@ -167,16 +170,19 @@ export async function sendSubscriptionReminderEmail({
   email,
   title,
   lines,
+  idempotencyKey,
 }: {
   email: string;
   title: string;
   lines: string[];
+  idempotencyKey?: string;
 }) {
   await sendSystemEmail({
     to: email,
     subject: `SubscList ${title}`,
     text: lines.join("\n"),
     html: lines.map((line) => `<p>${escapeHtml(line)}</p>`).join(""),
+    idempotencyKey,
   });
 }
 
@@ -216,8 +222,8 @@ export async function sendContactEmail({
   ].join("\n");
 
   await sendMailWithRetry({
-    from: SYSTEM_EMAIL_FROM,
-    to: SYSTEM_EMAIL_ADDRESS,
+    from: systemMailFrom(),
+    to: env.contactEmail,
     replyTo: email,
     subject: "SubscList 問い合わせ",
     text,
@@ -236,10 +242,11 @@ async function sendSystemEmail(mail: {
   subject: string;
   text: string;
   html: string;
+  idempotencyKey?: string;
 }) {
   await sendMailWithRetry({
     ...mail,
-    from: SYSTEM_EMAIL_FROM,
+    from: systemMailFrom(),
   });
 }
 
@@ -253,9 +260,16 @@ function escapeHtml(value: string) {
 }
 
 function mailErrorKind(error: unknown): string {
+  if (error instanceof ResendRequestError) return `HTTP_${error.status}`;
   if (!error || typeof error !== "object" || !("code" in error)) return "unknown";
   const code = (error as { code?: unknown }).code;
   return typeof code === "string" && /^[A-Z0-9_]{1,64}$/.test(code) ? code : "unknown";
+}
+
+class ResendRequestError extends Error {
+  constructor(readonly status: number) {
+    super(`Resend API error (${status}).`);
+  }
 }
 
 async function sendMailWithRetry(mail: {
@@ -265,22 +279,87 @@ async function sendMailWithRetry(mail: {
   text: string;
   html: string;
   replyTo?: string;
+  idempotencyKey?: string;
 }) {
-  let lastError: unknown;
-  for (let attempt = 1; attempt <= MAX_SEND_ATTEMPTS; attempt += 1) {
-    try {
-      const transporter = createTransporter();
-      await transporter.verify();
-      await transporter.sendMail(mail);
-      return;
-    } catch (error) {
-      lastError = error;
-      console.error(`Email send failed on attempt ${attempt} (kind: ${mailErrorKind(error)}).`);
-      if (attempt < MAX_SEND_ATTEMPTS) {
+  assertMailEnv();
+  if (env.resendApiKey) {
+    const idempotencyKey = mail.idempotencyKey ?? randomUUID();
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= MAX_SEND_ATTEMPTS; attempt += 1) {
+      try {
+        await sendWithResend(mail, idempotencyKey);
+        return;
+      } catch (error) {
+        lastError = error;
+        console.error(`Email send failed on attempt ${attempt} (kind: ${mailErrorKind(error)}).`);
+        if (!isRetryableResendError(error) || attempt === MAX_SEND_ATTEMPTS) break;
         await wait(RETRY_DELAY_MS);
       }
     }
+
+    throw lastError instanceof Error ? lastError : new Error("メールを送信できませんでした。");
   }
 
-  throw lastError instanceof Error ? lastError : new Error("メールを送信できませんでした。");
+  const transporter = createTransporter();
+  let verified = false;
+  let lastVerificationError: unknown;
+  for (let attempt = 1; attempt <= MAX_SEND_ATTEMPTS; attempt += 1) {
+    try {
+      await transporter.verify();
+      verified = true;
+      break;
+    } catch (error) {
+      lastVerificationError = error;
+      console.error(`Email send failed on attempt ${attempt} (kind: ${mailErrorKind(error)}).`);
+      if (attempt === MAX_SEND_ATTEMPTS) break;
+      await wait(RETRY_DELAY_MS);
+    }
+  }
+
+  if (!verified) {
+    throw lastVerificationError instanceof Error
+      ? lastVerificationError
+      : new Error("メールサーバーに接続できませんでした。");
+  }
+
+  try {
+    await transporter.sendMail(mail);
+  } catch (error) {
+    console.error(`Email send failed (kind: ${mailErrorKind(error)}).`);
+    throw error instanceof Error ? error : new Error("メールを送信できませんでした。");
+  }
+}
+
+function isRetryableResendError(error: unknown) {
+  return !(error instanceof ResendRequestError) || error.status === 429 || error.status >= 500;
+}
+
+async function sendWithResend(mail: {
+  from: string;
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+  replyTo?: string;
+}, idempotencyKey: string) {
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.resendApiKey}`,
+      "Content-Type": "application/json",
+      "Idempotency-Key": idempotencyKey,
+    },
+    body: JSON.stringify({
+      from: mail.from,
+      to: [mail.to],
+      subject: mail.subject,
+      text: mail.text,
+      html: mail.html,
+      ...(mail.replyTo ? { reply_to: [mail.replyTo] } : {}),
+    }),
+  });
+
+  if (!response.ok) {
+    throw new ResendRequestError(response.status);
+  }
 }

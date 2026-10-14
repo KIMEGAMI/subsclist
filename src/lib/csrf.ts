@@ -1,6 +1,7 @@
 const csrfExemptApiPaths = new Set([
   "/api/stripe/webhook",
   "/api/notifications/send",
+  "/api/admin/prices/sync",
 ]);
 const unsafeMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 

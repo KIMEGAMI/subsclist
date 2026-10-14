@@ -60,10 +60,13 @@ async function subscription(userId: string, data: Partial<{
   return item;
 }
 
-function request(authorization?: string) {
+function request(authorization?: string, origin: string | null = "http://127.0.0.1:3100") {
+  const headers = new Headers();
+  if (authorization) headers.set("authorization", authorization);
+  if (origin) headers.set("origin", origin);
   return new NextRequest("http://127.0.0.1:3100/api/notifications/send", {
     method: "POST",
-    headers: authorization ? { authorization } : undefined,
+    headers,
   });
 }
 
@@ -121,6 +124,36 @@ describe("契約全体の通知", () => {
     })).toBe(1);
   });
 
+  it("同時リクエストでも利用者単位の予算通知を1回だけ送信する", async () => {
+    const owner = await user();
+    await prisma.userPreference.create({ data: { userId: owner.id, monthlyBudget: 500 } });
+    const item = await subscription(owner.id, {});
+    await prisma.notificationSetting.updateMany({
+      where: { userId: owner.id, subscriptionId: item.id },
+      data: { enabled: false },
+    });
+    authState.user = owner;
+    let signalStarted: () => void = () => undefined;
+    let finishSend: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => { signalStarted = resolve; });
+    const blockedSend = new Promise<void>((resolve) => { finishSend = resolve; });
+    mailMock.mockImplementationOnce(async () => {
+      signalStarted();
+      await blockedSend;
+    });
+
+    const firstRequest = POST(request());
+    await started;
+    const secondResponse = await POST(request());
+    expect(await secondResponse.json()).toMatchObject({ sent: 0, skipped: 1 });
+    finishSend();
+    expect(await (await firstRequest).json()).toMatchObject({ sent: 1, skipped: 0 });
+    expect(mailMock).toHaveBeenCalledTimes(1);
+    expect(await prisma.userNotificationDelivery.count({
+      where: { userId: owner.id, type: "budget_overrun", sentAt: { not: null } },
+    })).toBe(1);
+  });
+
   it("Premiumへ月初サマリーを送信し、同月の再送を防ぐ", async () => {
     const owner = await user("PREMIUM");
     await prisma.userPreference.create({
@@ -144,6 +177,17 @@ describe("契約全体の通知", () => {
 });
 
 describe("通知ジョブ認証と実行状態", () => {
+  it("セッション認証では信頼できないOriginを拒否する", async () => {
+    authState.user = await user();
+
+    const missingOrigin = await POST(request(undefined, null));
+    expect(missingOrigin.status).toBe(403);
+
+    const untrustedOrigin = await POST(request(undefined, "https://attacker.example"));
+    expect(untrustedOrigin.status).toBe(403);
+    expect(mailMock).not.toHaveBeenCalled();
+  });
+
   it("不正なBearerではジョブを実行せず401を返す", async () => {
     const response = await POST(request("Bearer invalid-notification-secret"));
     expect(response.status).toBe(401);
@@ -192,6 +236,8 @@ describe("通知ジョブ認証と実行状態", () => {
       sent: 0,
       failures: 1,
     });
-    expect(await prisma.notificationDelivery.count({ where: { subscriptionId: item.id } })).toBe(0);
+    expect(await prisma.notificationDelivery.count({
+      where: { subscriptionId: item.id, sentAt: { not: null } },
+    })).toBe(0);
   });
 });

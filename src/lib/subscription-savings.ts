@@ -2,6 +2,33 @@ import { monthlyAmount, MONTHS_PER_YEAR } from "./billing.ts";
 import { japanCalendarDate } from "./subscription-usage.ts";
 
 export const SAVINGS_TIMELINE_MONTHS = 12;
+const JAPAN_UTC_OFFSET_MS = 9 * 60 * 60 * 1_000;
+
+export type JapanMonthInterval = {
+  year: number;
+  month: number;
+  start: Date;
+  end: Date;
+};
+
+export function japanMonthInterval(year: number, month: number): JapanMonthInterval {
+  const start = new Date(Date.UTC(year, month - 1, 1) - JAPAN_UTC_OFFSET_MS);
+  const end = new Date(Date.UTC(year, month, 1) - JAPAN_UTC_OFFSET_MS);
+  return { year, month, start, end };
+}
+
+export function recentJapanMonthIntervals(referenceDate = new Date(), count = SAVINGS_TIMELINE_MONTHS) {
+  const safeCount = Math.max(1, Math.floor(count));
+  const reference = japanCalendarDate(referenceDate);
+  return Array.from({ length: safeCount }, (_, index) => {
+    const monthDate = new Date(Date.UTC(
+      reference.getUTCFullYear(),
+      reference.getUTCMonth() - safeCount + index + 1,
+      1,
+    ));
+    return japanMonthInterval(monthDate.getUTCFullYear(), monthDate.getUTCMonth() + 1);
+  });
+}
 
 export type CompletedSubscriptionSaving = {
   price: number;

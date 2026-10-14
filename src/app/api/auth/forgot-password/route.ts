@@ -1,13 +1,14 @@
 ﻿import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createVerificationToken, hashToken } from "@/lib/auth";
-import { MAX_EMAIL_LENGTH, PASSWORD_RESET_TOKEN_TTL_MS } from "@/lib/app-constants";
+import { MAX_AUTH_REQUEST_BODY_BYTES, MAX_EMAIL_LENGTH, PASSWORD_RESET_TOKEN_TTL_MS } from "@/lib/app-constants";
 import { authMailKeys, authMailRateLimit, recordAuthMailAttempt, releaseAuthMailAttempt } from "@/lib/auth-mail-rate-limit";
 import { assertAuthSecret, assertMailEnv, env } from "@/lib/env";
 import { userErrorMessage } from "@/lib/error-messages";
 import { sendPasswordResetEmail } from "@/lib/mail";
 import { prisma } from "@/lib/prisma";
 import { requestClientIdentifier } from "@/lib/request-client";
+import { readJsonBodyWithLimit } from "@/lib/request-body";
 
 const schema = z.object({
   email: z.string().trim().email().max(MAX_EMAIL_LENGTH),
@@ -16,14 +17,15 @@ const schema = z.object({
 const successMessage = "入力されたメールアドレス宛に、パスワード再設定URLを送信しました。";
 
 export async function POST(request: Request) {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
+  const body = await readJsonBodyWithLimit(request, MAX_AUTH_REQUEST_BODY_BYTES);
+  if (!body.ok && body.reason === "too_large") {
+    return NextResponse.json({ message: "リクエストが大きすぎます。入力内容を確認してください。" }, { status: 413 });
+  }
+  if (!body.ok) {
     return NextResponse.json({ message: "入力内容を確認してください。" }, { status: 400 });
   }
 
-  const parsed = schema.safeParse(body);
+  const parsed = schema.safeParse(body.value);
   if (!parsed.success) {
     return NextResponse.json({ message: "メールアドレスの形式を確認してください。" }, { status: 400 });
   }
@@ -43,17 +45,23 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, message: successMessage });
     }
 
-    const user = await prisma.user.findUnique({
-      where: { email },
-      select: { id: true, email: true },
-    });
+    const attemptedAt = Date.now();
+    recordAuthMailAttempt(keys, attemptedAt);
+    let user: { id: string; email: string } | null;
+    try {
+      user = await prisma.user.findUnique({
+        where: { email },
+        select: { id: true, email: true },
+      });
+    } catch (error) {
+      releaseAuthMailAttempt(keys, attemptedAt);
+      throw error;
+    }
 
     if (!user) {
       return NextResponse.json({ ok: true, message: successMessage });
     }
 
-    const attemptedAt = Date.now();
-    recordAuthMailAttempt(keys, attemptedAt);
     let createdTokenHash: string | null = null;
     try {
       const token = createVerificationToken();

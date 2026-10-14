@@ -21,18 +21,31 @@ export async function POST(request: Request) {
       { message: "入力内容を確認してください。" },
       { status: 400 },
     );
-  const count = await prisma.category.count({ where: { userId: user.id } });
-  if (user.plan === "FREE" && count >= FREE_CATEGORY_LIMIT) {
-    return NextResponse.json(
-      {
-        message:
-          "Freeプランではカテゴリは5件までです。Premiumに変更するとカテゴリを無制限に登録できます。",
-      },
-      { status: 403 },
-    );
-  }
   try {
-    await prisma.category.create({ data: { userId: user.id, ...parsed.data } });
+    const created = await prisma.$transaction(async (transaction) => {
+      const [lockedUser] = await transaction.$queryRaw<Array<{ id: string; plan: string }>>`
+        SELECT id, plan FROM User WHERE id = ${user.id} FOR UPDATE
+      `;
+      if (lockedUser?.plan === "FREE") {
+        const count = await transaction.category.count({
+          where: { userId: user.id },
+        });
+        if (count >= FREE_CATEGORY_LIMIT) return false;
+      }
+      await transaction.category.create({
+        data: { userId: user.id, ...parsed.data },
+      });
+      return true;
+    });
+    if (!created) {
+      return NextResponse.json(
+        {
+          message:
+            "Freeプランではカテゴリは5件までです。Premiumに変更するとカテゴリを無制限に登録できます。",
+        },
+        { status: 403 },
+      );
+    }
   } catch (error) {
     if (error instanceof Error && "code" in error && error.code === "P2002") {
       return NextResponse.json(

@@ -1,4 +1,12 @@
 export function requestClientIdentifier(request: Request) {
   const forwardedFor = request.headers.get("x-forwarded-for");
-  return forwardedFor?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || "unknown";
+  const forwardedAddresses = forwardedFor
+    ?.split(",")
+    .map((address) => address.trim())
+    .filter(Boolean);
+  return (
+    forwardedAddresses?.[forwardedAddresses.length - 1] ||
+    request.headers.get("x-real-ip") ||
+    "unknown"
+  );
 }

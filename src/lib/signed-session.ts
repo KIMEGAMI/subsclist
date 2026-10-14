@@ -6,12 +6,14 @@ const sessionPayloadSchema = z
   .object({
     userId: z.string().min(1).max(MAX_SESSION_USER_ID_LENGTH),
     emailVerified: z.boolean(),
+    demoReadOnly: z.boolean(),
     sessionVersion: z.number().int().nonnegative(),
     exp: z.number().int().positive(),
   })
   .strict();
 
 export type SessionPayload = z.infer<typeof sessionPayloadSchema>;
+export const SESSION_COOKIE_NAME = "subsclist_session";
 
 function signature(body: string, secret: string) {
   return crypto.createHmac("sha256", secret).update(body).digest("base64url");

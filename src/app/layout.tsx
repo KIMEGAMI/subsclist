@@ -1,5 +1,4 @@
-import type { Metadata } from "next";
-import { MaintenanceModeGate } from "@/components/maintenance-mode-gate";
+import type { Metadata, Viewport } from "next";
 import { PwaServiceWorker } from "@/components/pwa-service-worker";
 import { publicSiteUrl } from "@/lib/site-url";
 import "./globals.css";
@@ -14,12 +13,20 @@ export const metadata: Metadata = {
     title: "SubscList",
     statusBarStyle: "default",
   },
+  icons: { apple: "/app-icon.png" },
   openGraph: {
     type: "website",
     locale: "ja_JP",
     siteName: "SubscList",
     images: [{ url: "/hero-subsclist.png", width: 1536, height: 1024, alt: "SubscList" }],
   },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#2563eb",
 };
 
 export default function RootLayout({
@@ -31,7 +38,7 @@ export default function RootLayout({
     <html lang="ja" className="h-full antialiased">
       <body className="min-h-full">
         <PwaServiceWorker />
-        <MaintenanceModeGate>{children}</MaintenanceModeGate>
+        {children}
       </body>
     </html>
   );

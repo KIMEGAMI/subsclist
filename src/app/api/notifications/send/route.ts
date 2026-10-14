@@ -16,6 +16,7 @@ import {
   serializeNotificationJobStatus,
 } from "@/lib/notification-job-status";
 import { effectiveSubscriptionNotification } from "@/lib/subscription-notification";
+import { hasTrustedRequestOrigin } from "@/lib/csrf";
 import {
   isMonthlyDigestDay,
   previousMonthlyOutcomePeriod,
@@ -29,6 +30,16 @@ import {
   formatSourceAmountMinor,
   isSubscriptionCurrency,
 } from "@/lib/subscription-currency";
+import { isAuthorizedJobRequest } from "@/lib/job-secret";
+import {
+  claimSubscriptionNotification,
+  claimUserNotification,
+  completeSubscriptionNotification,
+  completeUserNotification,
+  releaseSubscriptionNotification,
+  releaseUserNotification,
+  sendClaimedNotification,
+} from "@/lib/notification-delivery-claim";
 
 type Reminder = {
   type: "renewal" | "trial" | "cancellation" | "weekly_review" | "unused_30" | "unused_60" | "unused_90" | "price_increase" | "scheduled_price_change";
@@ -51,15 +62,6 @@ function sameDay(a: Date, b: Date) {
 
 function formatDate(date: Date) {
   return isoDate(date);
-}
-
-function hasPrismaErrorCode(error: unknown, code: string) {
-  return Boolean(
-    error &&
-      typeof error === "object" &&
-      "code" in error &&
-      (error as { code?: unknown }).code === code,
-  );
 }
 
 async function saveNotificationJobStatus(value: string) {
@@ -234,11 +236,24 @@ function remindersFor(subscription: {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = request.headers.get("authorization");
-  const cronAuthorized = Boolean(env.notificationJobSecret && auth === `Bearer ${env.notificationJobSecret}`);
+  const cronAuthorized = isAuthorizedJobRequest(
+    env.notificationJobSecret,
+    request.headers.get("authorization"),
+  );
   const access = cronAuthorized ? null : await getVerifiedApiUser();
   if (access && !access.ok) return access.response;
   const user = access?.ok ? access.user : null;
+  if (
+    user
+    && !hasTrustedRequestOrigin({
+      requestUrl: request.url,
+      originHeader: request.headers.get("origin"),
+      refererHeader: request.headers.get("referer"),
+      configuredUrls: [env.appUrl],
+    })
+  ) {
+    return NextResponse.json({ message: "リクエスト元を確認できませんでした。ページを再読み込みしてお試しください。" }, { status: 403 });
+  }
   const jobStartedAt = new Date();
   if (cronAuthorized) {
     await saveNotificationJobStatus(serializeNotificationJobStatus({
@@ -305,38 +320,31 @@ export async function POST(request: NextRequest) {
       notificationDaysBefore: notification.daysBefore,
     })) {
       const scheduledFor = startOfDay(reminder.targetDate);
-      const delivered = await prisma.notificationDelivery.findFirst({
-        where: {
-          subscriptionId: subscription.id,
-          type: reminder.type,
-          scheduledFor,
-        },
+      const claim = await claimSubscriptionNotification({
+        userId: subscription.userId,
+        subscriptionId: subscription.id,
+        type: reminder.type,
+        scheduledFor,
       });
-      if (delivered) {
+      if (!claim) {
         skipped += 1;
         continue;
       }
 
       try {
-        await sendSubscriptionReminderEmail({
-          email: subscription.user.email,
-          title: reminder.title,
-          lines: reminder.lines,
-        });
-        await prisma.notificationDelivery.create({
-          data: {
-            userId: subscription.userId,
-            subscriptionId: subscription.id,
-            type: reminder.type,
-            scheduledFor,
-          },
+        await sendClaimedNotification({
+          claim,
+          send: (idempotencyKey) => sendSubscriptionReminderEmail({
+            email: subscription.user.email,
+            title: reminder.title,
+            lines: reminder.lines,
+            idempotencyKey,
+          }),
+          complete: completeSubscriptionNotification,
+          release: releaseSubscriptionNotification,
         });
         sent += 1;
-      } catch (error) {
-        if (hasPrismaErrorCode(error, "P2002")) {
-          skipped += 1;
-          continue;
-        }
+      } catch {
         failures.push(subscription.name);
         console.error("Failed to send subscription reminder.");
       }
@@ -356,33 +364,34 @@ export async function POST(request: NextRequest) {
     );
     if (monthlyTotal <= monthlyBudget) continue;
 
-    const alreadySent = await prisma.userNotificationDelivery.findFirst({
-      where: { userId, type: "budget_overrun", scheduledFor: budgetNotificationDate },
+    const claim = await claimUserNotification({
+      userId,
+      type: "budget_overrun",
+      scheduledFor: budgetNotificationDate,
     });
-    if (alreadySent) {
+    if (!claim) {
       skipped += 1;
       continue;
     }
 
     try {
-      await sendSubscriptionReminderEmail({
-        email: userSubscriptions[0].user.email,
-        title: "月額予算の超過",
-        lines: [
-          `月額換算の合計 ${Math.round(monthlyTotal).toLocaleString("ja-JP")}円 が、設定した予算 ${monthlyBudget.toLocaleString("ja-JP")}円 を超えています。`,
-          `超過額: ${Math.round(monthlyTotal - monthlyBudget).toLocaleString("ja-JP")}円`,
-          "SubscListのダッシュボードで、利用頻度や見直し候補を確認してください。",
-        ],
-      });
-      await prisma.userNotificationDelivery.create({
-        data: { userId, type: "budget_overrun", scheduledFor: budgetNotificationDate },
+      await sendClaimedNotification({
+        claim,
+        send: (idempotencyKey) => sendSubscriptionReminderEmail({
+          email: userSubscriptions[0].user.email,
+          title: "月額予算の超過",
+          lines: [
+            `月額換算の合計 ${Math.round(monthlyTotal).toLocaleString("ja-JP")}円 が、設定した予算 ${monthlyBudget.toLocaleString("ja-JP")}円 を超えています。`,
+            `超過額: ${Math.round(monthlyTotal - monthlyBudget).toLocaleString("ja-JP")}円`,
+            "SubscListのダッシュボードで、利用頻度や見直し候補を確認してください。",
+          ],
+          idempotencyKey,
+        }),
+        complete: completeUserNotification,
+        release: releaseUserNotification,
       });
       sent += 1;
-    } catch (error) {
-      if (hasPrismaErrorCode(error, "P2002")) {
-        skipped += 1;
-        continue;
-      }
+    } catch {
       failures.push("月額予算");
       console.error("Failed to send budget overrun notification.");
     }
@@ -448,10 +457,12 @@ export async function POST(request: NextRequest) {
       const userSubscriptions = subscriptionsByUser.get(userId) ?? [];
       if (cronAuthorized && !shouldRunNotificationAtHour(notificationUser.preference?.notificationHour)) continue;
 
-      const alreadySent = await prisma.userNotificationDelivery.findFirst({
-        where: { userId, type: "monthly_portfolio_digest", scheduledFor: challengeNotificationDate },
+      const claim = await claimUserNotification({
+        userId,
+        type: "monthly_portfolio_digest",
+        scheduledFor: challengeNotificationDate,
       });
-      if (alreadySent) {
+      if (!claim) {
         skipped += 1;
         continue;
       }
@@ -478,29 +489,28 @@ export async function POST(request: NextRequest) {
       });
 
       try {
-        await sendSubscriptionReminderEmail({
-          email: notificationUser.email,
-          title: `${challengeMonth}月のサブスク運用サマリー`,
-          lines: [
-            ...previousMonthlyOutcomeSummaryLines(outcome),
-            `有効な契約: ${digest.activeCount}件 / 月額見込み: ${digest.monthlyTotal.toLocaleString("ja-JP")}円`,
-            `仕事利用分の見込み: ${digest.businessMonthlyTotal.toLocaleString("ja-JP")}円`,
-            budgetLine,
-            `30日以内の更新: ${digest.upcomingRenewalCount}件 / 30日以上未見直し: ${digest.reviewNeededCount}件`,
-            highestCostLine,
-            `前月レポート: ${new URL(`/monthly-report?month=${outcome.year}-${String(outcome.month).padStart(2, "0")}`, env.appUrl).toString()}`,
-            `今月の確認: ${new URL("/monthly-report", env.appUrl).toString()}`,
-          ],
-        });
-        await prisma.userNotificationDelivery.create({
-          data: { userId, type: "monthly_portfolio_digest", scheduledFor: challengeNotificationDate },
+        await sendClaimedNotification({
+          claim,
+          send: (idempotencyKey) => sendSubscriptionReminderEmail({
+            email: notificationUser.email,
+            title: `${challengeMonth}月のサブスク運用サマリー`,
+            lines: [
+              ...previousMonthlyOutcomeSummaryLines(outcome),
+              `有効な契約: ${digest.activeCount}件 / 月額見込み: ${digest.monthlyTotal.toLocaleString("ja-JP")}円`,
+              `仕事利用分の見込み: ${digest.businessMonthlyTotal.toLocaleString("ja-JP")}円`,
+              budgetLine,
+              `30日以内の更新: ${digest.upcomingRenewalCount}件 / 30日以上未見直し: ${digest.reviewNeededCount}件`,
+              highestCostLine,
+              `前月レポート: ${new URL(`/monthly-report?month=${outcome.year}-${String(outcome.month).padStart(2, "0")}`, env.appUrl).toString()}`,
+              `今月の確認: ${new URL("/monthly-report", env.appUrl).toString()}`,
+            ],
+            idempotencyKey,
+          }),
+          complete: completeUserNotification,
+          release: releaseUserNotification,
         });
         sent += 1;
-      } catch (error) {
-        if (hasPrismaErrorCode(error, "P2002")) {
-          skipped += 1;
-          continue;
-        }
+      } catch {
         failures.push("月次運用サマリー");
         console.error("Failed to send monthly portfolio digest.");
       }
@@ -528,35 +538,36 @@ export async function POST(request: NextRequest) {
     });
     if (answered) continue;
 
-    const alreadySent = await prisma.userNotificationDelivery.findFirst({
-      where: { userId, type: "monthly_saving_challenge", scheduledFor: challengeNotificationDate },
+    const claim = await claimUserNotification({
+      userId,
+      type: "monthly_saving_challenge",
+      scheduledFor: challengeNotificationDate,
     });
-    if (alreadySent) {
+    if (!claim) {
       skipped += 1;
       continue;
     }
 
     try {
-      await sendSubscriptionReminderEmail({
-        email: notificationUser.email,
-        title: `${challengeMonth}月の削減チャレンジ`,
-        lines: [
-          `${candidate.name} を今月の見直し候補として確認してください。`,
-          `月額換算: 約${Math.round(candidate.monthlyCost).toLocaleString("ja-JP")}円`,
-          `確度補正後の年間試算: 約${Math.round(candidate.annualSaving).toLocaleString("ja-JP")}円（確度 ${candidate.confidencePercent}%）`,
-          `理由: ${candidate.reasons.join(" / ")}`,
-          "自動解約は行いません。SubscListで継続・解約予定・保留を選択してください。",
-        ],
-      });
-      await prisma.userNotificationDelivery.create({
-        data: { userId, type: "monthly_saving_challenge", scheduledFor: challengeNotificationDate },
+      await sendClaimedNotification({
+        claim,
+        send: (idempotencyKey) => sendSubscriptionReminderEmail({
+          email: notificationUser.email,
+          title: `${challengeMonth}月の削減チャレンジ`,
+          lines: [
+            `${candidate.name} を今月の見直し候補として確認してください。`,
+            `月額換算: 約${Math.round(candidate.monthlyCost).toLocaleString("ja-JP")}円`,
+            `確度補正後の年間試算: 約${Math.round(candidate.annualSaving).toLocaleString("ja-JP")}円（確度 ${candidate.confidencePercent}%）`,
+            `理由: ${candidate.reasons.join(" / ")}`,
+            "自動解約は行いません。SubscListで継続・解約予定・保留を選択してください。",
+          ],
+          idempotencyKey,
+        }),
+        complete: completeUserNotification,
+        release: releaseUserNotification,
       });
       sent += 1;
-    } catch (error) {
-      if (hasPrismaErrorCode(error, "P2002")) {
-        skipped += 1;
-        continue;
-      }
+    } catch {
       failures.push("月次削減チャレンジ");
       console.error("Failed to send monthly saving challenge notification.");
     }

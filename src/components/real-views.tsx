@@ -59,6 +59,7 @@ import { subscriptionOnboardingSummary, type SubscriptionOnboardingInput } from 
 import { needsWeeklyReview, startOfJapanWeek } from "@/lib/subscription-weekly-review";
 import {
   buildCompletedSavingsTimeline,
+  japanMonthInterval,
   summarizeCompletedSavings,
 } from "@/lib/subscription-savings";
 import { stripePlanTrialDisplay } from "@/lib/stripe-trial";
@@ -78,6 +79,7 @@ import {
   type SubscriptionListFilters,
 } from "@/lib/subscription-list";
 import { SubscriptionSimulator } from "@/components/subscription-simulator";
+import { ServiceMasterLinkForm } from "@/components/service-master-link-form";
 import { GeminiAnalysisPanel } from "@/components/gemini-analysis-panel";
 import { SubscriptionBulkEditor } from "@/components/subscription-bulk-editor";
 import { PaymentHistoryBulkOrganizer, type PaymentHistoryBulkGroup } from "@/components/payment-history-bulk-organizer";
@@ -265,6 +267,7 @@ type SubscriptionView = {
   updatedAt: Date;
   category?: CategoryView | null;
   paymentMethod?: PaymentMethodView | null;
+  serviceMaster?: { id: string; name: string; category: string; officialUrl: string; pricingUrl: string | null } | null;
   paymentHistories: PaymentHistoryView[];
   statementMerchantAliases?: Array<{ id: string; merchantLabel: string }>;
   notificationSettings?: Array<{ enabled: boolean; daysBefore: number }>;
@@ -1466,6 +1469,16 @@ export async function DashboardView() {
           </div>
         </Card>
       </div>
+      <footer className="mt-10 border-t border-slate-200 pt-5 pb-2" aria-label="サポート・法務情報">
+        <nav className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-slate-600" aria-label="公開ページ">
+          <Link href="/legal-notice" className="hover:text-slate-950">特定商取引法に基づく表記</Link>
+          <Link href="/privacy" className="hover:text-slate-950">プライバシーポリシー</Link>
+          <Link href="/terms" className="hover:text-slate-950">利用規約</Link>
+          <Link href="/faq" className="hover:text-slate-950">よくある質問</Link>
+          <Link href="/security" className="hover:text-slate-950">セキュリティ</Link>
+          <Link href="/contact?returnTo=dashboard" className="hover:text-slate-950">お問い合わせ</Link>
+        </nav>
+      </footer>
     </AppShell>
   );
 }
@@ -1601,7 +1614,6 @@ export async function SubscriptionsView({ filters }: { filters: SubscriptionList
               <div className="flex items-start justify-between gap-4">
                 <div className="flex min-w-0 items-center gap-3">
                   {serviceIcon(item) ? (
-                    // eslint-disable-next-line @next/next/no-img-element
                     <img src={serviceIcon(item) ?? ""} alt="" className="size-10 rounded-lg border border-slate-100 bg-white object-contain p-1 shadow-sm" />
                   ) : (
                     <span className="grid size-10 shrink-0 place-items-center rounded-lg bg-blue-50 text-sm font-black text-blue-700">{item.name.slice(0, 1)}</span>
@@ -1697,9 +1709,11 @@ export async function SubscriptionDetailView({ id }: { id: string }) {
         orderBy: { createdAt: "asc" },
         select: { id: true, merchantLabel: true },
       },
+      serviceMaster: true,
     },
   })) as unknown as SubscriptionView | null;
   if (!item) notFound();
+  const serviceMasters = await prisma.serviceMaster.findMany({ where: { status: "ACTIVE" }, select: { id: true, name: true, category: true }, orderBy: [{ category: "asc" }, { name: "asc" }] });
   const upcomingBillingDate = item.status === "ACTIVE"
     ? nextBillingOccurrence(item.nextBillingDate, item.billingCycle, item.customCycleDays)
     : item.nextBillingDate;
@@ -1807,6 +1821,7 @@ export async function SubscriptionDetailView({ id }: { id: string }) {
             <p className="mt-4 text-sm font-semibold text-blue-900">確度補正後の削減試算: 月 {yen.format(saving)} / 年 {yen.format(saving * MONTHS_PER_YEAR)}</p>
           </div>
           <p className="mt-5 rounded-lg border border-slate-100 bg-slate-50/80 p-4 text-sm font-medium leading-6 text-slate-600">{item.memo || "メモは登録されていません。"}</p>
+          <ServiceMasterLinkForm subscriptionId={item.id} serviceId={item.serviceMaster?.id ?? null} services={serviceMasters} />
         </Card>
         <Card>
           <h2 className="mb-4 font-bold">操作</h2>
@@ -2902,13 +2917,34 @@ export async function CalendarView({ month }: { month?: string }) {
 export async function AnalyticsView() {
   const user = await requireVerifiedUser();
   if (!isPremiumPlan(user.plan)) return <AppShell><PageHeader title="分析" description="支出割合、上位契約、更新集中、見直し候補をグラフで確認します。" /><PremiumOnlyNotice title="高度分析はPremium限定です" description="カテゴリ比率、支払い方法別分析、上位契約、更新集中、見直し候補のグラフ表示はPremiumで利用できます。" /></AppShell>;
-  const subscriptions = (await prisma.subscription.findMany({
+  const analysisReferenceDate = new Date();
+  const japanToday = japanCalendarDate(analysisReferenceDate);
+  const currentYear = japanToday.getUTCFullYear();
+  const currentMonth = japanToday.getUTCMonth() + 1;
+  const currentMonthInterval = japanMonthInterval(currentYear, currentMonth);
+  const yearInterval = {
+    start: japanMonthInterval(currentYear, 1).start,
+    end: japanMonthInterval(currentYear + 1, 1).start,
+  };
+  const [subscriptions, savingsLifetime, savingsThisMonth, savingsThisYear, savingsByTypeRows, savingsBySubscriptionRows] = await Promise.all([prisma.subscription.findMany({
     where: { userId: user.id, deletedAt: null },
     include: { category: true, paymentMethod: true },
     orderBy: { nextBillingDate: "asc" },
-  })) as unknown as SubscriptionView[];
+  }),
+  prisma.savingsEvent.aggregate({ where: { userId: user.id }, _sum: { monthlySaving: true } }),
+  prisma.savingsEvent.aggregate({ where: { userId: user.id, confirmedAt: { gte: currentMonthInterval.start, lt: currentMonthInterval.end } }, _sum: { monthlySaving: true } }),
+  prisma.savingsEvent.aggregate({ where: { userId: user.id, confirmedAt: { gte: yearInterval.start, lt: yearInterval.end } }, _sum: { monthlySaving: true } }),
+  prisma.savingsEvent.groupBy({ by: ["type"], where: { userId: user.id }, _sum: { monthlySaving: true } }),
+  prisma.savingsEvent.groupBy({ by: ["subscriptionId"], where: { userId: user.id }, _sum: { monthlySaving: true } }),
+  ]) as unknown as [
+    SubscriptionView[],
+    { _sum: { monthlySaving: number | null } },
+    { _sum: { monthlySaving: number | null } },
+    { _sum: { monthlySaving: number | null } },
+    Array<{ type: string; _sum: { monthlySaving: number | null } }>,
+    Array<{ subscriptionId: string; _sum: { monthlySaving: number | null } }>,
+  ];
   const active = subscriptions.filter((item) => item.status === "ACTIVE");
-  const analysisReferenceDate = new Date();
   const activeWithUpcomingBilling = active.map((item) => ({
     ...item,
     nextBillingDate: nextBillingOccurrence(item.nextBillingDate, item.billingCycle, item.customCycleDays, analysisReferenceDate),
@@ -2946,6 +2982,14 @@ export async function AnalyticsView() {
   const insight = topCategory
     ? `${topCategory[0]} が月額支出の ${percent(topCategory[1], monthlyTotal)}% を占めています。`
     : "分析対象のサブスクリプションはありません。";
+  const confirmedSavingsThisMonth = savingsThisMonth._sum.monthlySaving ?? 0;
+  const confirmedSavingsThisYear = savingsThisYear._sum.monthlySaving ?? 0;
+  const confirmedSavingsLifetime = savingsLifetime._sum.monthlySaving ?? 0;
+  const savingsByType = savingsByTypeRows.reduce<Record<string, number>>((totals, row) => { totals[row.type] = row._sum.monthlySaving ?? 0; return totals; }, {});
+  const savingsSubscriptionIds = savingsBySubscriptionRows.map((row) => row.subscriptionId);
+  const savingsSubscriptions = await prisma.subscription.findMany({ where: { userId: user.id, id: { in: savingsSubscriptionIds } }, select: { id: true, name: true } });
+  const savingsNameById = new Map(savingsSubscriptions.map((item) => [item.id, item.name]));
+  const savingsByService = savingsBySubscriptionRows.map((row) => [savingsNameById.get(row.subscriptionId) ?? "削除済み契約", row._sum.monthlySaving ?? 0] as const).sort((left, right) => right[1] - left[1]).slice(0, 5);
 
   return (
     <AppShell>
@@ -2959,6 +3003,8 @@ export async function AnalyticsView() {
       <p className="mt-3 text-xs font-medium leading-5 text-slate-500">
         仕事利用分は、各契約に入力した利用割合に基づく整理用の見積もりです。税務上の必要経費を確定するものではありません。
       </p>
+
+      <Card className="mt-6"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-bold">確定した節約実績</h2><p className="mt-1 text-sm text-slate-600">実際に完了した変更だけを集計しています。削減見込みとは別の実績値です。</p></div><Link href="/savings" className="btn-secondary">実績を管理</Link></div><div className="mt-5 grid gap-3 sm:grid-cols-3"><MiniMetric label="今月の月額削減" value={yen.format(confirmedSavingsThisMonth)} /><MiniMetric label="今年の月額削減" value={yen.format(confirmedSavingsThisYear)} /><MiniMetric label="累計月額削減" value={yen.format(confirmedSavingsLifetime)} /></div>{confirmedSavingsLifetime === 0 ? <p className="mt-4 rounded-lg bg-slate-50 p-4 text-sm font-semibold text-slate-600">確定済みの節約実績はありません。</p> : <div className="mt-5 grid gap-5 md:grid-cols-2"><div><p className="text-sm font-black">種別</p><div className="mt-3 space-y-3">{Object.entries(savingsByType).map(([type, value]) => <AnalyticsBar key={type} label={type === "CANCELLED" ? "解約" : type === "PLAN_DOWNGRADE" ? "プラン変更" : type === "SWITCHED" ? "乗り換え" : "料金交渉"} value={value} total={confirmedSavingsLifetime} color="#059669" />)}</div></div><div><p className="text-sm font-black">サービス別</p><div className="mt-3 space-y-3">{savingsByService.map(([name, value]) => <AnalyticsBar key={name} label={name} value={value} total={confirmedSavingsLifetime} color="#0ea5e9" />)}</div></div></div>}</Card>
 
       <GeminiAnalysisPanel configured={Boolean(env.geminiApiKey)} />
 
@@ -3653,16 +3699,22 @@ export async function NotificationsView() {
     },
     orderBy: { nextBillingDate: "asc" },
   })) as unknown as SubscriptionView[];
-  const deliveries = await prisma.notificationDelivery.findMany({
-    where: { userId: user.id },
+  const deliveryRows = await prisma.notificationDelivery.findMany({
+    where: { userId: user.id, sentAt: { not: null } },
     orderBy: { sentAt: "desc" },
     take: 200,
   });
-  const userDeliveries = await prisma.userNotificationDelivery.findMany({
-    where: { userId: user.id },
+  const deliveries = deliveryRows.filter(
+    (delivery): delivery is typeof delivery & { sentAt: Date } => delivery.sentAt !== null,
+  );
+  const userDeliveryRows = await prisma.userNotificationDelivery.findMany({
+    where: { userId: user.id, sentAt: { not: null } },
     orderBy: { sentAt: "desc" },
     take: 50,
   });
+  const userDeliveries = userDeliveryRows.filter(
+    (delivery): delivery is typeof delivery & { sentAt: Date } => delivery.sentAt !== null,
+  );
   const notificationReferenceDate = new Date();
   const subscriptions = limitByPlan(allSubscriptions, user.plan).map((item) => {
     const notification = effectiveSubscriptionNotification({
@@ -3687,6 +3739,7 @@ export async function NotificationsView() {
   const subscriptionNames = new Map(allSubscriptions.map((item) => [item.id, item.name]));
   const lastSentBySubscription = new Map<string, Date>();
   for (const delivery of deliveries) {
+    if (!delivery.sentAt) continue;
     if (!lastSentBySubscription.has(delivery.subscriptionId)) {
       lastSentBySubscription.set(delivery.subscriptionId, delivery.sentAt);
     }
@@ -3916,7 +3969,7 @@ export async function BillingView({ checkoutStatus, checkoutSessionId }: Billing
           </div>
           <StripeTrialStatusCard
             plan={user.plan}
-            stripeSubscriptionStatus={user.stripeSubscriptionStatus}
+            stripeSubscriptionStatus={user.stripeCustomerId ? user.stripeSubscriptionStatus : null}
             stripeTrialEndAt={user.stripeTrialEndAt}
             trialUsedAt={user.trialUsedAt}
           />
@@ -3930,7 +3983,7 @@ export async function BillingView({ checkoutStatus, checkoutSessionId }: Billing
             <PlanSettingsForm
               plan={user.plan}
               stripeTestMode={env.stripeTestMode}
-              canManageStripe={stripeSubscriptionCanBeManaged(user.stripeSubscriptionStatus)}
+              canManageStripe={Boolean(user.stripeCustomerId) && stripeSubscriptionCanBeManaged(user.stripeSubscriptionStatus)}
               protectedAccount={protectedAccount}
             />
           </div>

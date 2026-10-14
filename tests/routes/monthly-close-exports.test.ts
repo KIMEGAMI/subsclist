@@ -104,7 +104,7 @@ describe("アカウントデータ出力", () => {
     expect(body).toContain(ownedMarker);
     expect(body).not.toContain(foreignMarker);
     for (const sensitiveKey of ["passwordHash", "sessionVersion", "stripeCustomerId", "stripeSubscriptionId", "tokenHash"]) {
-      expect(body).not.toContain(`\"${sensitiveKey}\"`);
+      expect(body).not.toContain(`"${sensitiveKey}"`);
     }
     for (const sensitiveValue of [stripeCustomerSecret, stripeSubscriptionSecret, verificationSecret, resetSecret, deviceSecret]) {
       expect(body).not.toContain(sensitiveValue);

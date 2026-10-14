@@ -70,6 +70,8 @@
   <path d="M1160 270 C1260 360 1320 540 1400 664" class="line-user"/>
   <path d="M1080 320 C1250 470 1330 760 1400 910" class="line-user"/>
   <path d="M1120 320 C1300 560 1360 1000 1400 1196" class="line-user"/>
+  <path d="M1160 300 C1320 520 1320 930 1200 1000" class="line-user"/>
+  <path d="M980 320 C900 560 900 920 940 1140" class="line-user"/>
 
   <path d="M470 440 C570 452 615 494 700 520" class="line-lookup"/>
   <path d="M470 688 C570 690 610 660 700 642" class="line-lookup"/>
@@ -77,8 +79,10 @@
   <path d="M1200 520 C1280 430 1320 250 1400 188" class="line-sub"/>
   <path d="M1200 584 C1285 560 1320 470 1400 428" class="line-sub"/>
   <path d="M1200 652 C1275 658 1320 660 1400 668" class="line-sub"/>
+  <path d="M1200 1210 C1370 1040 1300 390 1400 230" class="line-sub"/>
   <path d="M1200 742 C1290 800 1340 862 1400 916" class="line-sub"/>
   <path d="M1200 804 C1310 914 1365 1112 1400 1198" class="line-sub"/>
+  <path d="M950 870 L950 920" class="line-sub"/>
 
   <!-- Cardinality and relation labels. -->
   <text x="700" y="160" class="cardinality">1</text><text x="528" y="166" class="cardinality">0..*</text>
@@ -101,6 +105,8 @@
   <text x="1272" y="760" class="label-user">userId</text>
   <text x="1122" y="346" class="cardinality">1</text><text x="1360" y="1188" class="cardinality">0..*</text>
   <text x="1282" y="1040" class="label-user">userId</text>
+  <text x="1170" y="304" class="cardinality">1</text><text x="1180" y="990" class="cardinality">0..*</text>
+  <text x="1290" y="680" class="label-user">userId</text>
 
   <text x="486" y="458" class="cardinality">1</text><text x="676" y="510" class="cardinality">0..*</text>
   <text x="552" y="482" class="label-lookup">categoryId nullable</text>
@@ -117,6 +123,8 @@
   <text x="1272" y="830" class="label-sub">subscriptionId</text>
   <text x="1212" y="798" class="cardinality">1</text><text x="1360" y="1194" class="cardinality">0..*</text>
   <text x="1282" y="1054" class="label-sub">subscriptionId</text>
+  <text x="962" y="888" class="cardinality">1</text><text x="962" y="916" class="cardinality">0..*</text>
+  <text x="968" y="908" class="label-sub">subscriptionId</text>
 
   <!-- Table cards. -->
   <g transform="translate(740,70)">
@@ -191,15 +199,15 @@
     <text x="18" y="104" class="field key">FK categoryId -> CATEGORY.id nullable</text>
     <text x="18" y="124" class="field key">FK paymentMethodId -> PAYMENT_METHOD.id nullable</text>
     <text x="18" y="144" class="field">name</text>
-    <text x="18" y="164" class="field">price, currency</text>
-    <text x="18" y="184" class="field">billingCycle: BillingCycle, customCycleDays</text>
+    <text x="18" y="164" class="field">price, scheduledPrice/At, currency, source amount/rate</text>
+    <text x="18" y="184" class="field">billingProvider, billingCycle, customCycleDays</text>
     <text x="18" y="204" class="field">nextBillingDate</text>
     <text x="18" y="224" class="field">status: SubscriptionStatus</text>
     <text x="18" y="244" class="field">memo, serviceUrl, cancellationUrl</text>
     <text x="18" y="264" class="field">trialEndsAt, cancellationDeadline</text>
     <text x="18" y="284" class="field">lastReviewedAt, notifyDaysBefore</text>
     <text x="18" y="304" class="field">usageFrequency, priority</text>
-    <text x="18" y="324" class="field">logoUrl</text>
+    <text x="18" y="324" class="field">businessUsePercent, defaultAccountingLabel, logoUrl</text>
     <text x="18" y="344" class="field">cancellationStatus, plannedCancelAt</text>
     <text x="18" y="364" class="field">cancellationMemo, cancellationCompletedAt</text>
     <text x="18" y="384" class="field">createdAt, updatedAt, deletedAt</text>
@@ -207,15 +215,16 @@
   </g>
 
   <g transform="translate(1400,90)">
-    <rect class="table-box" width="420" height="190" rx="16"/>
+    <rect class="table-box" width="420" height="210" rx="16"/>
     <rect class="header sub" width="420" height="42" rx="16"/>
     <text x="18" y="27" class="table-title">PAYMENT_HISTORY</text>
     <text x="18" y="64" class="field key">PK id</text>
     <text x="18" y="84" class="field key">FK subscriptionId -> SUBSCRIPTION.id</text>
     <text x="18" y="104" class="field key">FK userId -> USER.id</text>
     <text x="18" y="124" class="field">amount</text>
-    <text x="18" y="144" class="field">paidAt, memo</text>
-    <text x="18" y="164" class="field">createdAt</text>
+    <text x="18" y="144" class="field key">FK statementPaymentImportId -> STATEMENT_PAYMENT_IMPORT.id</text>
+    <text x="18" y="164" class="field">paidAt, memo</text>
+    <text x="18" y="184" class="field">createdAt</text>
   </g>
 
   <g transform="translate(1400,330)">
@@ -267,6 +276,29 @@
     <text x="18" y="164" class="field">memo</text>
     <text x="18" y="184" class="field">recordedAt</text>
     <text x="18" y="204" class="field">createdAt, updatedAt</text>
+  </g>
+
+  <g transform="translate(700,920)">
+    <rect class="table-box" width="500" height="190" rx="16"/>
+    <rect class="header sub" width="500" height="42" rx="16"/>
+    <text x="18" y="27" class="table-title">STATEMENT_MERCHANT_ALIAS</text>
+    <text x="18" y="64" class="field key">PK id</text>
+    <text x="18" y="84" class="field key">FK userId -> USER.id</text>
+    <text x="18" y="104" class="field key">FK subscriptionId -> SUBSCRIPTION.id</text>
+    <text x="18" y="124" class="field">merchantLabel, normalizedMerchant</text>
+    <text x="18" y="144" class="field">createdAt, updatedAt</text>
+    <text x="18" y="166" class="note">unique(userId, normalizedMerchant)</text>
+  </g>
+
+  <g transform="translate(700,1140)">
+    <rect class="table-box" width="500" height="170" rx="16"/>
+    <rect class="header child" width="500" height="42" rx="16"/>
+    <text x="18" y="27" class="table-title">STATEMENT_PAYMENT_IMPORT</text>
+    <text x="18" y="64" class="field key">PK id</text>
+    <text x="18" y="84" class="field key">FK userId -> USER.id</text>
+    <text x="18" y="104" class="field">importedCount, savedAliasCount</text>
+    <text x="18" y="124" class="field">undoneAt, undoneCount</text>
+    <text x="18" y="144" class="field">createdAt, updatedAt</text>
   </g>
 
   <g transform="translate(80,1120)">

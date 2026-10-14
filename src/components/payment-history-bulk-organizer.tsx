@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { MAX_ACCOUNTING_LABEL_LENGTH } from "@/lib/app-constants";
 import { PAYMENT_HISTORY_BULK_MAX_ITEMS } from "@/lib/payment-history-bulk-organization";
 
@@ -14,6 +14,7 @@ export type PaymentHistoryBulkGroup = {
 
 export function PaymentHistoryBulkOrganizer({ groups }: { groups: PaymentHistoryBulkGroup[] }) {
   const router = useRouter();
+  const idPrefix = useId();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -97,16 +98,16 @@ export function PaymentHistoryBulkOrganizer({ groups }: { groups: PaymentHistory
       <form onSubmit={submit} className="border-t border-cyan-100 p-4">
         <p className="text-sm font-semibold leading-6 text-slate-600">表示中の科目未設定履歴を契約単位で選び、同じ整理用科目をまとめて設定します。既に設定済みの科目は変更しません。</p>
         <div className="mt-4 rounded-lg border border-slate-200 bg-white/90">
-          <label className="flex cursor-pointer items-center gap-3 border-b border-slate-200 px-4 py-3 text-sm font-black text-slate-800">
-            <input type="checkbox" checked={allSelected} onChange={toggleAll} className="size-4 accent-cyan-700" />
+          <label htmlFor={`${idPrefix}-all`} className="flex cursor-pointer items-center gap-3 border-b border-slate-200 px-4 py-3 text-sm font-black text-slate-800">
+            <input id={`${idPrefix}-all`} type="checkbox" checked={allSelected} onChange={toggleAll} className="size-4 accent-cyan-700" />
             表示中の科目未設定{selectableIds.length}件をすべて選択
           </label>
           <div className="grid max-h-64 overflow-y-auto md:grid-cols-2 xl:grid-cols-3">
             {groups.map((group) => {
               const checked = group.historyIds.every((id) => selectedIds.has(id));
               return (
-                <label key={group.subscriptionId} className="flex cursor-pointer items-start gap-3 border-b border-slate-100 px-4 py-3 text-sm transition hover:bg-cyan-50/70">
-                  <input type="checkbox" checked={checked} onChange={() => toggleGroup(group.historyIds)} className="mt-0.5 size-4 shrink-0 accent-cyan-700" />
+                <label key={group.subscriptionId} htmlFor={`${idPrefix}-${group.subscriptionId}`} aria-label={`${group.subscriptionName}の支払い履歴を選択`} className="flex cursor-pointer items-start gap-3 border-b border-slate-100 px-4 py-3 text-sm transition hover:bg-cyan-50/70">
+                  <input id={`${idPrefix}-${group.subscriptionId}`} type="checkbox" checked={checked} onChange={() => toggleGroup(group.historyIds)} className="mt-0.5 size-4 shrink-0 accent-cyan-700" />
                   <span className="min-w-0">
                     <span className="block truncate font-bold text-slate-900">{group.subscriptionName}</span>
                     <span className="mt-1 block truncate text-xs font-semibold text-slate-500">{group.categoryName ?? "未分類"} / {group.historyIds.length}件</span>

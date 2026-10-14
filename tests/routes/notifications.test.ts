@@ -5,7 +5,9 @@ import { japanCalendarDate, shiftCalendarDays } from "@/lib/subscription-usage";
 import { createTestUser, deleteTestUsers, type TestUser, uniqueLabel } from "../helpers/database";
 
 const authState = vi.hoisted(() => ({ user: null as TestUser | null }));
-const mailMock = vi.hoisted(() => vi.fn(async () => undefined));
+const mailMock = vi.hoisted(() => vi.fn(async (message: { idempotencyKey?: string }) => {
+  void message;
+}));
 vi.mock("@/lib/api-auth", () => ({
   getVerifiedApiUser: async () => authState.user
     ? { ok: true as const, user: authState.user }
@@ -41,7 +43,10 @@ async function renewalSubscription(userId: string, enabled = true) {
 }
 
 function request() {
-  return new NextRequest("http://127.0.0.1:3100/api/notifications/send", { method: "POST" });
+  return new NextRequest("http://127.0.0.1:3100/api/notifications/send", {
+    method: "POST",
+    headers: { origin: "http://127.0.0.1:3100" },
+  });
 }
 
 afterEach(async () => {
@@ -72,6 +77,29 @@ describe("通知送信と重複防止", () => {
     expect(mailMock).toHaveBeenCalledTimes(1);
   });
 
+  it("同時リクエストでも同じ契約通知を1回だけ送信する", async () => {
+    const owner = await user();
+    const item = await renewalSubscription(owner.id);
+    authState.user = owner;
+    let signalStarted: () => void = () => undefined;
+    let finishSend: () => void = () => undefined;
+    const started = new Promise<void>((resolve) => { signalStarted = resolve; });
+    const blockedSend = new Promise<void>((resolve) => { finishSend = resolve; });
+    mailMock.mockImplementationOnce(async () => {
+      signalStarted();
+      await blockedSend;
+    });
+
+    const firstRequest = POST(request());
+    await started;
+    const secondResponse = await POST(request());
+    expect(await secondResponse.json()).toMatchObject({ sent: 0, skipped: 1 });
+    finishSend();
+    expect(await (await firstRequest).json()).toMatchObject({ sent: 1, skipped: 0 });
+    expect(mailMock).toHaveBeenCalledTimes(1);
+    expect(await prisma.notificationDelivery.count({ where: { subscriptionId: item.id, sentAt: { not: null } } })).toBe(1);
+  });
+
   it("通知無効の契約と他ユーザーの契約を送信しない", async () => {
     const owner = await user();
     const other = await user();
@@ -91,10 +119,13 @@ describe("通知送信と重複防止", () => {
     mailMock.mockRejectedValueOnce(new Error("mail provider unavailable"));
     const failed = await POST(request());
     expect(await failed.json()).toMatchObject({ ok: false, sent: 0, failures: [item.name] });
-    expect(await prisma.notificationDelivery.count({ where: { subscriptionId: item.id } })).toBe(0);
+    expect(await prisma.notificationDelivery.count({
+      where: { subscriptionId: item.id, sentAt: { not: null } },
+    })).toBe(0);
 
     const retried = await POST(request());
     expect(await retried.json()).toMatchObject({ ok: true, sent: 1 });
     expect(await prisma.notificationDelivery.count({ where: { subscriptionId: item.id } })).toBe(1);
+    expect(mailMock.mock.calls[0]?.[0].idempotencyKey).toBe(mailMock.mock.calls[1]?.[0].idempotencyKey);
   });
 });

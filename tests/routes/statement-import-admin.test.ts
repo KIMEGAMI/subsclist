@@ -142,6 +142,21 @@ describe("管理者一斉メール", () => {
     expect(mailMock).not.toHaveBeenCalled();
   });
 
+  it("本文サイズ上限を超えた要求ではメールを送信しない", async () => {
+    const admin = await user({ plan: "PREMIUM" });
+    authState.user = admin;
+    adminState.allowed = true;
+
+    const response = await sendBulkEmail(jsonRequest("/api/admin/bulk-email", {
+      subject: "件名",
+      body: "あ".repeat(11_000),
+      recipientScope: "VERIFIED",
+    }));
+
+    expect(response.status).toBe(413);
+    expect(mailMock).not.toHaveBeenCalled();
+  });
+
   it("PREMIUM指定では認証済みPremiumだけへ送る", async () => {
     const admin = await user({ plan: "PREMIUM" });
     const premium = await user({ plan: "PREMIUM" });

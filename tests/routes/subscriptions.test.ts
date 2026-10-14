@@ -91,10 +91,33 @@ describe("Subscription RouteとMySQL", () => {
         status: "ACTIVE",
       })),
     });
-    authState.user = owner;
+    authState.user = { ...owner, plan: "PREMIUM" };
     const response = await POST(request(validPayload()));
     expect(response.status).toBe(403);
     expect(await prisma.subscription.count({ where: { userId: owner.id } })).toBe(10);
+  });
+
+  it("同時登録でもFreeプランの10件上限を超えない", async () => {
+    const owner = await user({ plan: "FREE" });
+    await prisma.subscription.createMany({
+      data: Array.from({ length: 9 }, (_, index) => ({
+        userId: owner.id,
+        name: `ConcurrentFreeLimit${index}`,
+        price: 100,
+        billingCycle: "MONTHLY",
+        nextBillingDate: new Date("2026-10-01T00:00:00.000Z"),
+        status: "ACTIVE",
+      })),
+    });
+    authState.user = owner;
+
+    const responses = await Promise.all([
+      POST(request(validPayload())),
+      POST(request({ ...validPayload(), name: uniqueLabel("ConcurrentSubscription") })),
+    ]);
+
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 403]);
+    expect(await prisma.subscription.count({ where: { userId: owner.id, deletedAt: null } })).toBe(10);
   });
 
   it("CUSTOM周期の日数不足を項目付きで返す", async () => {

@@ -23,8 +23,17 @@ const productionContentSecurityPolicy = [
 export const privateRouteSources = [
   "/admin/:path*", "/analytics/:path*", "/annual-report/:path*", "/billing/:path*", "/calendar/:path*", "/categories/:path*", "/dashboard/:path*", "/export/:path*",
   "/monthly-report/:path*", "/notifications/:path*", "/payment-methods/:path*", "/payment-totals/:path*", "/payments/:path*",
-  "/review/:path*", "/settings/:path*", "/simulation/:path*", "/subscriptions/:path*", "/api/:path*", "/login", "/register",
+  "/review/:path*", "/savings/:path*", "/settings/:path*", "/simulation/:path*", "/subscriptions/:path*", "/api/:path*", "/login", "/register",
   "/forgot-password", "/reset-password", "/verify-email", "/maintenance",
+];
+
+export const sensitiveTokenRouteSources = [
+  "/reset-password",
+  "/verify-email",
+  "/verify-email-change",
+  "/api/auth/reset-password",
+  "/api/auth/verify-email",
+  "/api/auth/verify-email-change",
 ];
 
 const nextConfig: NextConfig = {
@@ -47,7 +56,19 @@ const nextConfig: NextConfig = {
       },
       ...privateRouteSources.map((source) => ({
         source,
-        headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" }],
+        headers: [
+          { key: "X-Robots-Tag", value: "noindex, nofollow, noarchive" },
+          ...(source === "/api/:path*"
+            ? [{ key: "Cache-Control", value: "private, no-store" }]
+            : []),
+        ],
+      })),
+      ...sensitiveTokenRouteSources.map((source) => ({
+        source,
+        headers: [
+          { key: "Cache-Control", value: "private, no-store" },
+          { key: "Referrer-Policy", value: "no-referrer" },
+        ],
       })),
     ];
   },

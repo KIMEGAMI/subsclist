@@ -15,8 +15,7 @@ const t = {
   googleConfig: "Googleログイン設定が未完了です。GOOGLE_CLIENT_ID と GOOGLE_CLIENT_SECRET を確認してください。",
   googleInvalid: "Googleログインの認証状態を確認できませんでした。もう一度お試しください。",
   googleFailed: "Googleログインに失敗しました。もう一度お試しください。",
-  verificationNotice: "このメールアドレスは登録済みです。メール本文の認証リンクから続けてください。",
-  verificationSendFailed: "認証メールの送信に失敗しました。メール認証画面またはログイン後に再送してください。",
+  verificationNotice: "申請を受け付けました。入力したアドレスが未認証の場合は認証メールを送信しています。届かない場合はログイン後に再送してください。既にご利用中の場合はログインしてください。",
   login: "ログイン",
   register: "新規登録",
   or: "または",
@@ -30,7 +29,7 @@ const t = {
   registerFailed: "登録に失敗しました。",
   emailPasswordRequired: "メールアドレスとパスワードを入力してください。",
   invalidEmail: "メールアドレスの形式を確認してください。",
-  registerRequired: "名前、メールアドレス、パスワードを入力してください。",
+  registerRequired: "名前とメールアドレスを入力してください。",
   passwordLength: `パスワードは${MIN_PASSWORD_LENGTH}文字以上で入力してください。`,
   passwordMismatch: "パスワードが一致しません。",
   firstTime: "はじめて利用する方はこちら",
@@ -46,6 +45,9 @@ const t = {
   forgotPasswordLead: "登録済みのメールアドレスを入力してください。再設定用URLを送信します。",
   resetPasswordTitle: "新しいパスワードを設定",
   resetPasswordLead: "メールに記載されたURLから、新しいパスワードを設定してください。",
+  verifyEmailTitle: "メール認証を完了",
+  verifyEmailLead: "リンクを開いただけでは認証されません。ご本人が使用するパスワードを設定すると、メール認証と登録が完了します。",
+  verifyEmailSubmit: "認証して登録を完了",
   resetPassword: "パスワードを再設定",
   resetPasswordLoading: "再設定中...",
   resetPasswordSuccess: "パスワードを再設定しました。新しいパスワードでログインしてください。",
@@ -59,8 +61,6 @@ type ApiResponse = {
   message?: string;
   emailVerified?: boolean;
   redirectTo?: string;
-  mailSent?: boolean;
-  alreadyRegistered?: boolean;
 };
 
 function AuthFrame({ title, children }: { title: string; children: React.ReactNode }) {
@@ -96,7 +96,6 @@ async function postJson(url: string, body?: unknown) {
 function GoogleLoginButton() {
   return (
     <a href="/api/auth/google/start" className="mt-5 flex min-h-12 w-full items-center justify-center gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-700 shadow-sm transition hover:border-blue-200 hover:bg-blue-50">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
       <img src="/google-logo.png" alt="" className="size-5" />
       {t.googleLogin}
     </a>
@@ -109,7 +108,7 @@ function GoogleLoginMessage({ status }: { status?: string }) {
   return <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{message}</p>;
 }
 
-export function LoginView({ googleStatus, notice }: { googleStatus?: string; notice?: string } = {}) {
+export function LoginView({ googleStatus, notice, googleLoginEnabled = false }: { googleStatus?: string; notice?: string; googleLoginEnabled?: boolean } = {}) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -125,7 +124,7 @@ export function LoginView({ googleStatus, notice }: { googleStatus?: string; not
     setLoading(true);
     try {
       const data = await postJson("/api/auth/login", { email, password });
-      router.push(data.redirectTo ?? (data.emailVerified ? "/dashboard" : "/verify-email"));
+      router.push(data.redirectTo ?? (data.emailVerified ? "/today" : "/verify-email"));
       router.refresh();
     } catch (err) {
       setError(userErrorMessage(err, t.loginFailed));
@@ -138,9 +137,8 @@ export function LoginView({ googleStatus, notice }: { googleStatus?: string; not
     <AuthFrame title={t.login}>
       <GoogleLoginMessage status={googleStatus} />
       {notice === "verification" && <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-800">{t.verificationNotice}</p>}
-      {notice === "verification-failed" && <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-800">{t.verificationSendFailed}</p>}
-      <GoogleLoginButton />
-      <div className="my-5 flex items-center gap-3 text-xs font-bold text-slate-400"><span className="h-px flex-1 bg-slate-200" />{t.or}<span className="h-px flex-1 bg-slate-200" /></div>
+      {googleLoginEnabled && <GoogleLoginButton />}
+      {googleLoginEnabled && <div className="my-5 flex items-center gap-3 text-xs font-bold text-slate-400"><span className="h-px flex-1 bg-slate-200" />{t.or}<span className="h-px flex-1 bg-slate-200" /></div>}
       <form onSubmit={submit} noValidate className="space-y-4">
         {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
         <label className="grid gap-2 text-sm font-semibold">
@@ -268,12 +266,10 @@ export function ResetPasswordView({ token }: { token?: string }) {
   );
 }
 
-export function RegisterView() {
+export function RegisterView({ googleLoginEnabled = false }: { googleLoginEnabled?: boolean } = {}) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [privacyAccepted, setPrivacyAccepted] = useState(false);
   const [message, setMessage] = useState("");
@@ -284,21 +280,15 @@ export function RegisterView() {
     event.preventDefault();
     setError("");
     setMessage("");
-    if (!name || !email || !password) return setError(t.registerRequired);
+    if (!name || !email) return setError(t.registerRequired);
     if (!email.includes("@")) return setError(t.invalidEmail);
-    if (password.length < MIN_PASSWORD_LENGTH) return setError(t.passwordLength);
-    if (password !== confirmPassword) return setError(t.passwordMismatch);
     if (!termsAccepted || !privacyAccepted) return setError(t.termsRequired);
 
     setLoading(true);
     try {
-      const data = await postJson("/api/auth/register", { name, email, password, termsAccepted, privacyAccepted });
+      const data = await postJson("/api/auth/register", { name, email, termsAccepted, privacyAccepted });
       if (data.message) setMessage(data.message);
-      if (data.alreadyRegistered) {
-        router.push(data.mailSent === false ? "/login?notice=verification-failed" : "/login?notice=verification");
-      } else {
-        router.push(data.mailSent === false ? "/verify-email?mail=failed" : "/verify-email");
-      }
+      router.push("/login?notice=verification");
       router.refresh();
     } catch (err) {
       setError(userErrorMessage(err, t.registerFailed));
@@ -309,8 +299,8 @@ export function RegisterView() {
 
   return (
     <AuthFrame title={t.register}>
-      <GoogleLoginButton />
-      <div className="my-5 flex items-center gap-3 text-xs font-bold text-slate-400"><span className="h-px flex-1 bg-slate-200" />{t.or}<span className="h-px flex-1 bg-slate-200" /></div>
+      {googleLoginEnabled && <GoogleLoginButton />}
+      {googleLoginEnabled && <div className="my-5 flex items-center gap-3 text-xs font-bold text-slate-400"><span className="h-px flex-1 bg-slate-200" />{t.or}<span className="h-px flex-1 bg-slate-200" /></div>}
       <form onSubmit={submit} noValidate className="space-y-4">
         {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
         {message && <p className="rounded-lg bg-blue-50 p-3 text-sm font-semibold text-blue-700">{message}</p>}
@@ -322,14 +312,7 @@ export function RegisterView() {
           {t.email}
           <input value={email} onChange={(e) => setEmail(e.target.value)} className="input" type="email" />
         </label>
-        <label className="grid gap-2 text-sm font-semibold">
-          {t.password}
-          <input value={password} onChange={(e) => setPassword(e.target.value)} className="input" type="password" />
-        </label>
-        <label className="grid gap-2 text-sm font-semibold">
-          {t.confirmPassword}
-          <input value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="input" type="password" />
-        </label>
+        <p className="text-sm leading-6 text-slate-600">認証メールのリンクから本人確認を行い、その画面でパスワードを設定します。</p>
         <label className="flex items-start gap-3 text-sm font-semibold text-slate-700">
           <input type="checkbox" checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} className="mt-1 size-4" />
           <span><Link href="/terms" className="text-blue-700 underline">利用規約</Link>に同意します</span>
@@ -450,5 +433,56 @@ export function PricingView() {
         </section>
       </div>
     </main>
+  );
+}
+
+export function VerifyEmailView({ token }: { token: string }) {
+  const router = useRouter();
+  const [newPassword, setNewPassword] = useState("");
+  const [newPasswordConfirm, setNewPasswordConfirm] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
+    setError("");
+    if (newPassword.length < MIN_PASSWORD_LENGTH) return setError(t.passwordLength);
+    if (newPassword !== newPasswordConfirm) return setError(t.passwordMismatch);
+
+    setLoading(true);
+    try {
+      const data = await postJson("/api/auth/verify-email", {
+        token,
+        newPassword,
+        newPasswordConfirm,
+      });
+      router.replace(data.redirectTo ?? "/dashboard");
+      router.refresh();
+    } catch (err) {
+      setError(userErrorMessage(err, "メール認証に失敗しました。"));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <AuthFrame title={t.verifyEmailTitle}>
+      <p className="mt-3 text-sm leading-6 text-slate-600">{t.verifyEmailLead}</p>
+      <form onSubmit={submit} noValidate className="mt-5 space-y-4">
+        {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
+        <label className="grid gap-2 text-sm font-semibold">
+          使用するパスワード
+          <input value={newPassword} onChange={(event) => setNewPassword(event.target.value)} className="input" type="password" minLength={MIN_PASSWORD_LENGTH} maxLength={128} autoComplete="new-password" />
+        </label>
+        <label className="grid gap-2 text-sm font-semibold">
+          使用するパスワード（確認）
+          <input value={newPasswordConfirm} onChange={(event) => setNewPasswordConfirm(event.target.value)} className="input" type="password" minLength={MIN_PASSWORD_LENGTH} maxLength={128} autoComplete="new-password" />
+        </label>
+        <button disabled={loading} className="btn-primary w-full">
+          {loading ? t.sending : t.verifyEmailSubmit}
+        </button>
+      </form>
+      <Link href="/login" className="btn-secondary mt-5 w-full">ログインへ戻る</Link>
+    </AuthFrame>
   );
 }

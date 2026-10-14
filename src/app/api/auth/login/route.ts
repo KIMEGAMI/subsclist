@@ -1,15 +1,16 @@
 import bcrypt from "bcryptjs";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { isAdminEmail, setSession } from "@/lib/auth";
 import { authAttemptKey, clearFailedAuthAttempts, isAuthRateLimited, recordFailedAuthAttempt } from "@/lib/auth-rate-limit";
-import { AUTH_RATE_LIMIT_WINDOW_MINUTES, LOGIN_ACCOUNT_LOCK_MINUTES } from "@/lib/app-constants";
+import { AUTH_RATE_LIMIT_WINDOW_MINUTES, LOGIN_ACCOUNT_LOCK_MINUTES, MAX_AUTH_REQUEST_BODY_BYTES } from "@/lib/app-constants";
 import { env } from "@/lib/env";
 import { isAccountLoginLocked } from "@/lib/login-security-policy";
 import { recordFailedLogin, recordSuccessfulLogin } from "@/lib/login-security";
 import { sendAccountLockedEmail, sendNewDeviceLoginEmail } from "@/lib/mail";
 import { prisma } from "@/lib/prisma";
 import { requestClientIdentifier } from "@/lib/request-client";
+import { readJsonBodyWithLimit } from "@/lib/request-body";
 
 const schema = z.object({
   email: z.string().trim().email(),
@@ -20,14 +21,15 @@ const invalidCredentialsMessage = "ログイン情報が正しくありません
 const lockedMessage = `安全のためログインを一時的に制限しています。${LOGIN_ACCOUNT_LOCK_MINUTES}分ほど時間をおくか、パスワードを再設定してください。`;
 
 export async function POST(request: Request) {
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
+  const body = await readJsonBodyWithLimit(request, MAX_AUTH_REQUEST_BODY_BYTES);
+  if (!body.ok && body.reason === "too_large") {
+    return NextResponse.json({ message: "リクエストが大きすぎます。入力内容を確認してください。" }, { status: 413 });
+  }
+  if (!body.ok) {
     return NextResponse.json({ message: "入力内容を確認してください。" }, { status: 400 });
   }
 
-  const parsed = schema.safeParse(body);
+  const parsed = schema.safeParse(body.value);
   if (!parsed.success) {
     return NextResponse.json({ message: "メールアドレスとパスワードを入力してください。" }, { status: 400 });
   }
@@ -45,6 +47,7 @@ export async function POST(request: Request) {
   }
 
   if (isAccountLoginLocked(user.lockedUntil)) {
+    recordFailedAuthAttempt(attemptKey);
     return NextResponse.json({ message: lockedMessage }, { status: 429 });
   }
 
@@ -66,20 +69,22 @@ export async function POST(request: Request) {
   const loginSecurity = await recordSuccessfulLogin(user.id, request);
   await setSession(user.id, Boolean(user.emailVerified));
   if (loginSecurity.newDevice && user.email.toLowerCase() !== env.demoUserEmail.toLowerCase()) {
-    try {
-      await sendNewDeviceLoginEmail({
-        email: user.email,
-        clientLabel: loginSecurity.clientLabel,
-        occurredAt: loginSecurity.occurredAt,
-      });
-    } catch {
-      console.error("New device login email failed.");
-    }
+    after(async () => {
+      try {
+        await sendNewDeviceLoginEmail({
+          email: user.email,
+          clientLabel: loginSecurity.clientLabel,
+          occurredAt: loginSecurity.occurredAt,
+        });
+      } catch {
+        console.error("New device login email failed.");
+      }
+    });
   }
 
   return NextResponse.json({
     ok: true,
-    emailVerified: Boolean(user.emailVerified),
-    redirectTo: isAdminEmail(user.email) ? "/admin" : Boolean(user.emailVerified) ? "/dashboard" : "/verify-email",
+    emailVerified: user.emailVerified,
+    redirectTo: isAdminEmail(user.email) ? "/admin" : user.emailVerified ? "/dashboard" : "/verify-email",
   });
 }

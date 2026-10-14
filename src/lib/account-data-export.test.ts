@@ -8,7 +8,7 @@ test("利用者データをバージョン付きJSONへ変換する", () => {
     subscriptions: [{ id: "sub-1", name: "Example" }],
   }, new Date("2026-08-30T00:00:00.000Z"));
   const parsed = JSON.parse(json) as { version: number; exportedAt: string; account: { profile: { email: string } } };
-  assert.equal(parsed.version, 2);
+  assert.equal(parsed.version, 3);
   assert.equal(parsed.exportedAt, "2026-08-30T00:00:00.000Z");
   assert.equal(parsed.account.profile.email, "user@example.com");
 });

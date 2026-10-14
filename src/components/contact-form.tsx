@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { userErrorMessage, userMessage } from "@/lib/error-messages";
 
 async function postJson(url: string, body: unknown) {
@@ -14,7 +15,7 @@ async function postJson(url: string, body: unknown) {
   return data;
 }
 
-export function AdminBulkEmailForm() {
+export function AdminBulkEmailForm({ from }: { from: string }) {
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [recipientScope, setRecipientScope] = useState<"VERIFIED" | "ALL" | "PREMIUM">("VERIFIED");
@@ -30,6 +31,8 @@ export function AdminBulkEmailForm() {
       setError("件名と本文を入力してください。");
       return;
     }
+
+    if (!window.confirm(`選択した対象へ一斉メールを送信します。送信元: ${from || "未設定"}\nこの操作は取り消せません。続行しますか？`)) return;
 
     setLoading(true);
     try {
@@ -62,7 +65,7 @@ export function AdminBulkEmailForm() {
         <span className="text-sm font-bold text-slate-700">本文</span>
         <textarea value={body} onChange={(event) => setBody(event.target.value)} className="input mt-1 min-h-44" maxLength={5000} required />
       </label>
-      <p className="text-xs leading-5 text-slate-500">送信元は SubscList &lt;saas.system.shinji@gmail.com&gt; です。宛先漏えい防止のため、ユーザーごとに個別送信します。</p>
+      <p className="text-xs leading-5 text-slate-500">送信元: {from || "未設定"}。宛先漏えい防止のため、ユーザーごとに個別送信します。</p>
       <button disabled={loading} className="btn-primary" type="submit">
         {loading ? "送信中..." : "一斉メールを送信"}
       </button>
@@ -70,7 +73,13 @@ export function AdminBulkEmailForm() {
   );
 }
 
-export function ContactForm() {
+export function ContactForm({
+  returnHref,
+  returnLabel,
+}: {
+  returnHref: "/dashboard" | "/";
+  returnLabel: "ダッシュボード" | "トップページ";
+}) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [messageBody, setMessageBody] = useState("");
@@ -105,7 +114,7 @@ export function ContactForm() {
 
   return (
     <form onSubmit={submit} noValidate className="space-y-4">
-      {message && <p className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p>}
+      {message && <div className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-800" role="status"><p>{message}</p><Link href={returnHref} className="mt-2 inline-block font-black text-emerald-900 underline">{returnLabel}へ戻る</Link></div>}
       {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
       <label className="block">
         <span className="text-sm font-bold text-slate-700">お名前</span>
@@ -122,7 +131,6 @@ export function ContactForm() {
       <div className="hidden" aria-hidden="true">
         <input value={website} onChange={(event) => setWebsite(event.target.value)} tabIndex={-1} autoComplete="off" name="website" />
       </div>
-      <p className="text-xs leading-5 text-slate-500">送信先: saas.system.shinji@gmail.com</p>
       <button disabled={loading} className="btn-primary" type="submit">
         {loading ? "送信中..." : "問い合わせを送信"}
       </button>

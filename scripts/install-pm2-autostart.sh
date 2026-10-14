@@ -2,7 +2,12 @@
 set -Eeuo pipefail
 
 PM2_USER="${PM2_USER:-$(id -un)}"
-PM2_HOME_DIR="${PM2_HOME_DIR:-$(eval echo "~${PM2_USER}")}"
+DEFAULT_PM2_HOME_DIR="$(getent passwd "$PM2_USER" | cut -d: -f6)"
+[ -n "$DEFAULT_PM2_HOME_DIR" ] || {
+  printf 'ERROR: PM2 user was not found: %s\n' "$PM2_USER" >&2
+  exit 1
+}
+PM2_HOME_DIR="${PM2_HOME_DIR:-$DEFAULT_PM2_HOME_DIR}"
 APP_NAME="${APP_NAME:-subsclist}"
 
 log() {
@@ -33,4 +38,4 @@ systemctl status "pm2-${PM2_USER}" --no-pager || true
 
 log "Verification commands"
 printf 'pm2 status %s\n' "$APP_NAME"
-printf 'curl -I http://127.0.0.1:3000\n'
+printf 'curl -I http://127.0.0.1:%s\n' "${APP_PORT:-3000}"

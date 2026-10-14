@@ -1,0 +1,8 @@
+"use client";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+export function ServiceMasterLinkForm({ subscriptionId, serviceId, services }: { subscriptionId: string; serviceId: string | null; services: Array<{ id: string; name: string; category: string }> }) {
+  const router = useRouter(); const [value, setValue] = useState(serviceId ?? ""); const [loading, setLoading] = useState(false); const [error, setError] = useState("");
+  async function save() { setLoading(true); setError(""); try { const response = await fetch(`/api/subscriptions/${subscriptionId}/service-master`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ serviceId: value }) }); if (!response.ok) throw new Error(); router.refresh(); } catch { setError("紐付けの保存に失敗しました。もう一度お試しください。"); } finally { setLoading(false); } }
+  return <div className="mt-5 rounded-lg border border-slate-200 bg-slate-50/80 p-4"><p className="text-sm font-black text-slate-800">公式情報との紐付け</p><p className="mt-1 text-sm text-slate-600">契約ニュースに、そのサービスに関係する公式更新だけを表示するための設定です。</p><div className="mt-3 flex flex-col gap-2 sm:flex-row"><select value={value} onChange={(event) => setValue(event.target.value)} className="input"><option value="">紐付けない</option>{services.map((service) => <option key={service.id} value={service.id}>{service.category} / {service.name}</option>)}</select><button type="button" onClick={save} disabled={loading} className="btn-primary shrink-0">{loading ? "保存中..." : "保存"}</button></div>{error && <p className="mt-2 text-sm font-bold text-red-700">{error}</p>}</div>;
+}

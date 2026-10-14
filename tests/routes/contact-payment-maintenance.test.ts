@@ -42,10 +42,10 @@ async function payment(userId: string, amount = 980, paidAt = new Date("2026-08-
   });
 }
 
-function jsonRequest(path: string, payload: object, origin = env.appUrl) {
+function jsonRequest(path: string, payload: object, origin = env.appUrl, extraHeaders: Record<string, string> = {}) {
   return new Request(`http://127.0.0.1:3100${path}`, {
     method: "POST",
-    headers: { "content-type": "application/json", origin },
+    headers: { "content-type": "application/json", origin, ...extraHeaders },
     body: JSON.stringify(payload),
   });
 }
@@ -77,6 +77,16 @@ describe("問い合わせ", () => {
     expect(contactMailMock).not.toHaveBeenCalled();
   });
 
+  it("本文サイズを検査し、超過時はメール送信しない", async () => {
+    const response = await submitContact(jsonRequest("/api/contact", {
+      ...validPayload,
+      message: "あ".repeat(3_000),
+    }));
+
+    expect(response.status).toBe(413);
+    expect(contactMailMock).not.toHaveBeenCalled();
+  });
+
   it("メール送信失敗時に内部情報を露出しない", async () => {
     contactMailMock.mockRejectedValueOnce(new Error("SMTP secret detail"));
     const response = await submitContact(jsonRequest("/api/contact", validPayload));
@@ -92,6 +102,23 @@ describe("問い合わせ", () => {
           message: `並行送信テスト ${index + 1}`,
         }))),
     );
+    expect(responses.filter((response) => response.status === 200)).toHaveLength(CONTACT_RATE_LIMIT_MAX_REQUESTS);
+    expect(responses.filter((response) => response.status === 429)).toHaveLength(1);
+    expect(contactMailMock).toHaveBeenCalledTimes(CONTACT_RATE_LIMIT_MAX_REQUESTS);
+  });
+
+  it("X-Forwarded-Forの偽装prefixを変えても同じ接続元として制限する", async () => {
+    const responses = await Promise.all(
+      Array.from({ length: CONTACT_RATE_LIMIT_MAX_REQUESTS + 1 }, (_, index) =>
+        submitContact(jsonRequest("/api/contact", {
+          ...validPayload,
+          message: `転送元偽装テスト ${index + 1}`,
+        }, env.appUrl, {
+          "x-forwarded-for": `198.51.100.${index + 1}, 203.0.113.20`,
+        })),
+      ),
+    );
+
     expect(responses.filter((response) => response.status === 200)).toHaveLength(CONTACT_RATE_LIMIT_MAX_REQUESTS);
     expect(responses.filter((response) => response.status === 429)).toHaveLength(1);
     expect(contactMailMock).toHaveBeenCalledTimes(CONTACT_RATE_LIMIT_MAX_REQUESTS);

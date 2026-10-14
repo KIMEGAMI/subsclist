@@ -12,11 +12,27 @@ test("状態変更APIだけをCSRF検証対象にする", () => {
   assert.equal(requiresCsrfValidation("/dashboard", "POST"), false);
 });
 
-test("署名検証を持つ外部ジョブだけをCSRF検証対象外にする", () => {
+test("外部署名で認証するルートだけをProxyのCSRF検証対象外にする", () => {
   assert.equal(requiresCsrfValidation("/api/stripe/webhook", "POST"), false);
   assert.equal(
     requiresCsrfValidation("/api/notifications/send", "POST"),
     false,
+  );
+  assert.equal(
+    requiresCsrfValidation("/api/admin/prices/sync", "POST"),
+    false,
+  );
+  assert.equal(
+    requiresCsrfValidation("/api/admin/prices/sync/extra", "POST"),
+    true,
+  );
+  assert.equal(
+    requiresCsrfValidation("/api/admin/news/sync", "POST"),
+    true,
+  );
+  assert.equal(
+    requiresCsrfValidation("/api/admin/news/daily", "POST"),
+    true,
   );
   assert.equal(
     requiresCsrfValidation("/api/stripe/webhook/extra", "POST"),
@@ -28,12 +44,12 @@ test("設定済みオリジンと一致する送信元だけを許可する", ()
   const base = {
     requestUrl: "http://127.0.0.1:3000/api/settings/profile",
     refererHeader: null,
-    configuredUrls: ["https://subsclist.shinji.work/path", null],
+    configuredUrls: ["https://subsclist.kimegami.jp/path", null],
   };
   assert.equal(
     hasTrustedRequestOrigin({
       ...base,
-      originHeader: "https://subsclist.shinji.work",
+      originHeader: "https://subsclist.kimegami.jp",
     }),
     true,
   );

@@ -1,24 +1,48 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { maintenanceModeCookie } from "@/lib/admin-constants";
+import { getMaintenanceMode } from "@/lib/admin";
 import { hasTrustedRequestOrigin, requiresCsrfValidation } from "@/lib/csrf";
+import { shouldBlockDemoMutation } from "@/lib/demo-readonly";
+import { isAdminEmail } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { decodeSignedSession, SESSION_COOKIE_NAME } from "@/lib/signed-session";
 
 const maintenancePath = "/maintenance";
 const allowedPathPrefixes = [
   "/login",
   "/admin",
-  "/api/admin",
   "/api/auth",
+  "/api/admin",
   "/api/system/status",
+  "/api/stripe/webhook",
+  "/api/notifications/send",
   "/_next",
 ];
 
 const publicFilePattern =
   /\.(?:ico|png|jpg|jpeg|gif|webp|svg|css|js|txt|xml|webmanifest)$/;
 
-export function proxy(request: NextRequest) {
+async function isVerifiedAdmin(request: NextRequest) {
+  const authSecret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? "";
+  const session = decodeSignedSession(
+    request.cookies.get(SESSION_COOKIE_NAME)?.value,
+    authSecret,
+  );
+  if (!session?.emailVerified) return false;
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.userId },
+    select: { email: true, emailVerified: true, sessionVersion: true },
+  });
+
+  return Boolean(
+    user?.emailVerified &&
+      user.sessionVersion === session.sessionVersion &&
+      isAdminEmail(user.email),
+  );
+}
+
+export async function proxy(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
-  const maintenanceMode =
-    request.cookies.get(maintenanceModeCookie)?.value === "enabled";
 
   if (
     requiresCsrfValidation(pathname, request.method) &&
@@ -38,16 +62,35 @@ export function proxy(request: NextRequest) {
     );
   }
 
-  if (!maintenanceMode) return NextResponse.next();
-  if (pathname === maintenancePath) return NextResponse.next();
-  if (publicFilePattern.test(pathname)) return NextResponse.next();
-  if (
+  const authSecret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? "";
+  const session = decodeSignedSession(
+    request.cookies.get(SESSION_COOKIE_NAME)?.value,
+    authSecret,
+  );
+  if (session?.demoReadOnly && shouldBlockDemoMutation(request.method, pathname)) {
+    return NextResponse.json(
+      { message: "デモアカウントは閲覧専用です。変更する場合はご自身のアカウントでご利用ください。" },
+      { status: 403 },
+    );
+  }
+
+  const maintenanceExempt = pathname === maintenancePath ||
+    (!pathname.startsWith("/api/") && publicFilePattern.test(pathname)) ||
     allowedPathPrefixes.some(
       (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
-    )
-  ) {
-    return NextResponse.next();
+    );
+
+  if (pathname.startsWith("/api/")) {
+    if (maintenanceExempt) return NextResponse.next();
+    if (!(await getMaintenanceMode())) return NextResponse.next();
+    return NextResponse.json(
+      { message: "ただいまメンテナンス中です。時間をおいて、もう一度お試しください。" },
+      { status: 503, headers: { "Cache-Control": "no-store" } },
+    );
   }
+
+  if (maintenanceExempt || !(await getMaintenanceMode())) return NextResponse.next();
+  if (await isVerifiedAdmin(request)) return NextResponse.next();
 
   const url = request.nextUrl.clone();
   url.pathname = maintenancePath;

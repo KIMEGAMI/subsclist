@@ -24,19 +24,16 @@ env:
   NODE_VERSION: "24"
   CI: "true"
   DATABASE_URL: mysql://ci:ci@127.0.0.1:3306/subsclist_ci
+  TEST_DATABASE_URL: mysql://ci:ci@127.0.0.1:3306/subsclist_ci
   APP_URL: http://localhost:3000
   NEXTAUTH_URL: http://localhost:3000
-  AUTH_SECRET: ci-auth-secret-at-least-32-characters-long
-  NEXTAUTH_SECRET: ci-auth-secret-at-least-32-characters-long
   MAIL_FROM: SubscList CI <ci@example.com>
   SMTP_HOST: localhost
   SMTP_PORT: "1025"
   SMTP_SECURE: "false"
   SMTP_USER: ci@example.com
-  SMTP_PASS: ci-placeholder
   ADMIN_USER_EMAIL: admin@example.com
   DEMO_USER_EMAIL: user@example.com
-  NOTIFICATION_JOB_SECRET: ci-notification-secret
 
 jobs:
   test:
@@ -61,16 +58,30 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
+
+      - name: Generate ephemeral test credentials
+        shell: bash
+        run: |
+          {
+            printf 'AUTH_SECRET=%s\n' "$(openssl rand -hex 32)"
+            printf 'NEXTAUTH_SECRET=%s\n' "$(openssl rand -hex 32)"
+            printf 'SMTP_PASS=%s\n' "$(openssl rand -hex 32)"
+            printf 'NOTIFICATION_JOB_SECRET=%s\n' "$(openssl rand -hex 32)"
+            printf 'NEWS_JOB_SECRET=%s\n' "$(openssl rand -hex 32)"
+          } >> "$GITHUB_ENV"
 
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
       - name: Install dependencies
         run: npm ci --ignore-scripts
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chrome
 
       - name: Generate Prisma Client
         run: npm run prisma:generate
@@ -81,14 +92,34 @@ jobs:
       - name: Run lint
         run: npm run lint
 
+      - name: Check deployment shell script syntax
+        run: bash -n scripts/production-restart.sh scripts/install-pm2-autostart.sh scripts/run-notifications.sh scripts/run-daily-news.sh
+
       - name: Run unit and security tests
         run: npm test
 
       - name: Run usage tests
         run: npm run test:usage
 
-      - name: Audit Node dependencies
-        run: npm audit --audit-level=high
+      - name: Verify test database safety guard
+        run: npm run test:db-guard
+
+      - name: Verify savings event migration backfill
+        run: npm run test:migration-backfill
+
+      - name: Run API route security tests with coverage
+        run: npm run test:routes:coverage
+
+      - name: Verify multi-user data isolation
+        run: npm run test:db-isolation
+
+      - name: Audit Stripe identifiers
+        run: npm run audit:stripe
 
       - name: Build application
         run: npm run build
+
+      - name: Run end-to-end browser tests
+        run: npm run test:e2e
+      - name: Audit all Node dependencies
+        run: npm audit --audit-level=high

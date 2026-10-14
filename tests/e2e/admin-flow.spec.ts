@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { AUTH_FLOW_TIMEOUT_MS } from "./constants";
 
 test("管理者は管理者メニューと設定だけを利用できる", async ({ page }, testInfo) => {
   const email = process.env.E2E_ADMIN_EMAIL ?? "";
@@ -10,7 +11,7 @@ test("管理者は管理者メニューと設定だけを利用できる", async
   await page.getByRole("textbox", { name: "メールアドレス" }).fill(email);
   await page.getByRole("textbox", { name: "パスワード" }).fill(password);
   await page.getByRole("button", { name: "ログイン", exact: true }).click();
-  await expect(page).toHaveURL(/\/admin$/);
+  await expect(page).toHaveURL(/\/admin$/, { timeout: AUTH_FLOW_TIMEOUT_MS });
 
   const navigation = testInfo.project.name === "mobile"
     ? page.getByRole("navigation", { name: "モバイルメニュー" })
@@ -34,10 +35,26 @@ test("管理者はメンテナンスを切り替え、一般ユーザーだけ�
   await page.getByRole("textbox", { name: "メールアドレス" }).fill(email);
   await page.getByRole("textbox", { name: "パスワード" }).fill(password);
   await page.getByRole("button", { name: "ログイン", exact: true }).click();
-  await expect(page).toHaveURL(/\/admin$/);
+  await expect(page).toHaveURL(/\/admin$/, { timeout: AUTH_FLOW_TIMEOUT_MS });
 
   await page.getByRole("button", { name: "メンテナンス中にする" }).click();
   await expect(page.getByText("メンテナンス中", { exact: true }).first()).toBeVisible();
+
+  const guestContext = await browser.newContext();
+  try {
+    const guestPage = await guestContext.newPage();
+    for (const path of ["/", "/pricing", "/faq"]) {
+      await guestPage.goto(path);
+      await expect(guestPage).toHaveURL(/\/maintenance$/);
+      await expect(guestPage.getByRole("heading", { name: "ただいまメンテナンス中です" })).toBeVisible();
+    }
+    const contact = await guestContext.request.get("/api/contact");
+    expect(contact.status()).toBe(503);
+    const privateApi = await guestContext.request.get("/api/today");
+    expect(privateApi.status()).toBe(503);
+  } finally {
+    await guestContext.close();
+  }
 
   const memberContext = await browser.newContext();
   try {
@@ -45,6 +62,8 @@ test("管理者はメンテナンスを切り替え、一般ユーザーだけ�
       headers: { origin: "http://127.0.0.1:3100" },
     });
     expect(demoLogin.ok()).toBe(true);
+    const privateApi = await memberContext.request.get("/api/today");
+    expect(privateApi.status()).toBe(503);
     const memberPage = await memberContext.newPage();
     await memberPage.goto("/dashboard");
     await expect(memberPage).toHaveURL(/\/maintenance$/);

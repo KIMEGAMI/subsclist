@@ -6,6 +6,8 @@ const authState = vi.hoisted(() => ({ user: null as TestUser | null }));
 const stripeMocks = vi.hoisted(() => ({
   list: vi.fn(),
   retrieve: vi.fn(),
+  checkoutRetrieve: vi.fn(),
+  checkoutExpire: vi.fn(),
 }));
 const clearSessionMock = vi.hoisted(() => vi.fn(async () => undefined));
 vi.mock("@/lib/api-auth", () => ({
@@ -16,7 +18,15 @@ vi.mock("@/lib/api-auth", () => ({
 }));
 vi.mock("@/lib/auth", () => ({ clearSession: clearSessionMock }));
 vi.mock("@/lib/stripe", () => ({
-  stripe: () => ({ subscriptions: stripeMocks }),
+  stripe: () => ({
+    subscriptions: stripeMocks,
+    checkout: {
+      sessions: {
+        retrieve: stripeMocks.checkoutRetrieve,
+        expire: stripeMocks.checkoutExpire,
+      },
+    },
+  }),
 }));
 
 import { DELETE } from "@/app/api/settings/account/route";
@@ -34,6 +44,8 @@ afterEach(async () => {
   authState.user = null;
   stripeMocks.list.mockReset();
   stripeMocks.retrieve.mockReset();
+  stripeMocks.checkoutRetrieve.mockReset();
+  stripeMocks.checkoutExpire.mockReset();
   clearSessionMock.mockReset();
   clearSessionMock.mockResolvedValue(undefined);
   await deleteTestUsers(...createdUserIds.splice(0));
@@ -57,6 +69,72 @@ describe("アカウント削除のfail-closed", () => {
     stripeMocks.list.mockRejectedValue(new Error("provider unavailable"));
     const response = await DELETE(request(owner));
     expect(response.status).toBe(502);
+    expect(await prisma.user.count({ where: { id: owner.id } })).toBe(1);
+  });
+
+  it("保存済みの未完了Checkoutを失効させてから削除する", async () => {
+    const owner = await createTestUser();
+    createdUserIds.push(owner.id);
+    authState.user = owner;
+    await prisma.user.update({
+      where: { id: owner.id },
+      data: { stripeCustomerId: "cus_checkout", stripeCheckoutSessionId: "cs_pending" },
+    });
+    stripeMocks.checkoutRetrieve
+      .mockResolvedValueOnce({
+        id: "cs_pending",
+        status: "open",
+        customer: "cus_checkout",
+        metadata: { userId: owner.id },
+      })
+      .mockResolvedValueOnce({ id: "cs_pending", status: "expired" });
+    stripeMocks.checkoutExpire.mockResolvedValue({ id: "cs_pending", status: "expired" });
+    stripeMocks.list.mockResolvedValue({ data: [], has_more: false });
+
+    const response = await DELETE(request(owner));
+
+    expect(response.status).toBe(200);
+    expect(stripeMocks.checkoutExpire).toHaveBeenCalledWith("cs_pending");
+    expect(await prisma.user.count({ where: { id: owner.id } })).toBe(0);
+  });
+
+  it("決済完了済みCheckoutがある場合は削除しない", async () => {
+    const owner = await createTestUser();
+    createdUserIds.push(owner.id);
+    authState.user = owner;
+    await prisma.user.update({
+      where: { id: owner.id },
+      data: { stripeCustomerId: "cus_checkout", stripeCheckoutSessionId: "cs_complete" },
+    });
+    stripeMocks.checkoutRetrieve.mockResolvedValue({
+      id: "cs_complete",
+      status: "complete",
+      customer: "cus_checkout",
+      metadata: { userId: owner.id },
+    });
+
+    const response = await DELETE(request(owner));
+
+    expect(response.status).toBe(409);
+    expect(stripeMocks.checkoutExpire).not.toHaveBeenCalled();
+    expect(await prisma.user.count({ where: { id: owner.id } })).toBe(1);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).stripeCheckoutLockToken).toBeNull();
+  });
+
+  it("Checkoutロック中は削除を競合させない", async () => {
+    const owner = await createTestUser();
+    createdUserIds.push(owner.id);
+    authState.user = owner;
+    await prisma.user.update({
+      where: { id: owner.id },
+      data: { stripeCheckoutLockToken: "checkout_in_progress", stripeCheckoutLockUntil: new Date(Date.now() + 60_000) },
+    });
+
+    const response = await DELETE(request(owner));
+
+    expect(response.status).toBe(409);
+    expect(stripeMocks.checkoutRetrieve).not.toHaveBeenCalled();
+    expect(stripeMocks.list).not.toHaveBeenCalled();
     expect(await prisma.user.count({ where: { id: owner.id } })).toBe(1);
   });
 

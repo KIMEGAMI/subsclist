@@ -7,7 +7,9 @@ import { PwaInstallButton } from "@/components/pwa-install-button";
 
 const brand = "SubscList";
 const nav = [
+  { label: "Today", href: "/today", icon: "T" },
   { label: "ダッシュボード", href: "/dashboard", icon: "D" },
+  { label: "契約ニュース", href: "/subscription-news", icon: "N" },
   { label: "サブスク", href: "/subscriptions", icon: "S" },
   { label: "カレンダー", href: "/calendar", icon: "C" },
   { label: "分析", href: "/analytics", icon: "A" },
@@ -18,6 +20,7 @@ const nav = [
   { label: "支払い方法", href: "/payment-methods", icon: "P" },
   { label: "支払い履歴", href: "/payments", icon: "Y" },
   { label: "支払い累計", href: "/payment-totals", icon: "T" },
+  { label: "節約実績", href: "/savings", icon: "S" },
   { label: "通知", href: "/notifications", icon: "N" },
   { label: "CSV", href: "/export", icon: "E" },
   { label: "契約・解約", href: "/billing", icon: "B", prefetch: false },
@@ -33,6 +36,7 @@ const adminNav = [
   { label: "ユーザー一覧", href: "/admin#users", icon: "U" },
 ];
 const settingsNav = { label: "設定", href: "/settings", icon: "G" };
+const manualNav = { label: "操作マニュアル", href: "/manual", icon: "?" };
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -64,7 +68,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       />
       <aside className="app-shell-sidebar fixed inset-y-0 left-0 z-30 hidden w-[17.5rem] border-r border-white/65 bg-white/88 px-5 py-6 shadow-[18px_0_50px_rgba(15,23,42,0.08)] backdrop-blur-xl lg:flex lg:flex-col">
         <Link
-          href={isAdmin === true ? "/admin" : isAdmin === false ? "/dashboard" : pathname}
+          href={isAdmin === true ? "/admin" : isAdmin === false ? "/today" : pathname}
           className="group flex items-center gap-3 text-xl font-black"
         >
           <span className="grid size-11 place-items-center rounded-lg bg-gradient-to-br from-blue-600 via-cyan-500 to-fuchsia-500 text-white shadow-lg shadow-blue-500/20 transition group-hover:scale-105">
@@ -77,7 +81,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </span>
           </span>
         </Link>
-        <nav className="mt-8 space-y-1.5 overflow-y-auto pr-1">
+        <nav className="mt-8 min-h-0 flex-1 space-y-1.5 overflow-y-auto pr-1">
           {isAdmin === false && nav.map(({ label, href, icon, prefetch }) => {
             const active =
               pathname === href ||
@@ -161,11 +165,25 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           )}
         </nav>
+        <Link
+          href={manualNav.href}
+          aria-current={pathname === manualNav.href ? "page" : undefined}
+          className={`mt-3 flex shrink-0 items-center gap-3 border-t border-slate-200 pt-4 text-sm font-bold transition ${
+            pathname === manualNav.href
+              ? "text-blue-700"
+              : "text-slate-600 hover:text-slate-950"
+          }`}
+        >
+          <span className="grid size-7 place-items-center rounded-md bg-slate-100 text-[11px] font-black text-slate-500">
+            {manualNav.icon}
+          </span>
+          {manualNav.label}
+        </Link>
       </aside>
       <header className="app-shell-mobile-header sticky top-0 z-20 border-b border-white/65 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-xl lg:hidden">
         <div className="flex items-center justify-between">
           <Link
-            href={isAdmin === true ? "/admin" : isAdmin === false ? "/dashboard" : pathname}
+            href={isAdmin === true ? "/admin" : isAdmin === false ? "/today" : pathname}
             onClick={() => setIsMobileMenuOpen(false)}
             className="font-black"
           >
@@ -176,7 +194,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Link
                 href="/subscriptions/new"
                 onClick={() => setIsMobileMenuOpen(false)}
-                className="btn-primary min-h-0 px-3 py-2 text-sm"
+              className="btn-primary min-h-11 px-3 py-2 text-sm"
               >
                 追加
               </Link>
@@ -188,7 +206,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               aria-controls="mobile-navigation"
               aria-label="メニューを開く"
               disabled={isAdmin === null}
-              className="grid size-10 place-items-center rounded-lg border border-slate-200 bg-white text-lg font-black text-slate-700 shadow-sm"
+              className="grid size-11 place-items-center rounded-lg border border-slate-200 bg-white text-lg font-black text-slate-700 shadow-sm"
               title="メニュー"
             >
               &#8801;
@@ -257,6 +275,16 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </Link>
               </div>
             )}
+            <Link
+              href={manualNav.href}
+              onClick={() => setIsMobileMenuOpen(false)}
+              className={`mt-2 flex items-center gap-3 border-t border-slate-200 px-3 py-3 text-sm font-bold ${pathname === manualNav.href ? "text-blue-700" : "text-slate-700 hover:bg-slate-100"}`}
+            >
+              <span className="grid size-7 place-items-center rounded-md bg-slate-100 text-[11px] font-black text-slate-500">
+                {manualNav.icon}
+              </span>
+              {manualNav.label}
+            </Link>
           </nav>
         )}
       </header>
