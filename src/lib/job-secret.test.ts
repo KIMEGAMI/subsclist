@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import test from "node:test";
 import { isAcceptableJobSecret, isAuthorizedJobRequest } from "./job-secret.ts";
 
-const validSecret = "0123456789abcdef0123456789abcdef";
+const validSecret = randomBytes(32).toString("base64url");
 
 test("job secrets must be sufficiently long, clean, and non-placeholder values", () => {
   assert.equal(isAcceptableJobSecret(validSecret), true);

@@ -27,6 +27,7 @@ test("テスト名でも外部ホストは拒否する", () => {
 });
 
 test("許可されたローカルテストDBだけ接続設定を返す", () => {
+  process.env.TEST_DATABASE_URL = "";
   process.env.DATABASE_URL =
     "mysql://127.0.0.1:3306/subsclist_ci?allowPublicKeyRetrieval=true";
   assert.deepEqual(testDatabaseConfig(), {

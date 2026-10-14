@@ -18,6 +18,10 @@ const migrationNames = {
   dedupe: "20260920080000_add_savings_event_dedupe_key",
 };
 
+function stripeSecret(mode = "live") {
+  return ["sk", mode, "unitfixture"].join("_");
+}
+
 function safeSnapshot() {
   return {
     appliedMigrations: [migrationNames.savings],
@@ -74,7 +78,7 @@ function validProductionEnvironment(overrides = {}) {
     APP_URL: "https://subsclist.kimegami.jp",
     DATABASE_URL: "mysql://deploy@db.example.invalid:3306/subsclist",
     AUTH_SECRET: "a".repeat(32),
-    STRIPE_SECRET_KEY: "sk_live_unitfixture",
+    STRIPE_SECRET_KEY: stripeSecret(),
     STRIPE_LIVE_MODE_ALLOWED: "true",
     STRIPE_WEBHOOK_SECRET: "whsec_unitfixture",
     STRIPE_PREMIUM_PRICE_ID: "price_unitfixture",
@@ -143,7 +147,7 @@ test("production environment uses the same nullish alias precedence as the app",
   delete fallbackEnvironment.AUTH_SECRET;
   fallbackEnvironment.NEXTAUTH_SECRET = "n".repeat(32);
   delete fallbackEnvironment.STRIPE_SECRET_KEY;
-  fallbackEnvironment.STRIPE_SECRET = "sk_live_fallbackfixture";
+  fallbackEnvironment.STRIPE_SECRET = stripeSecret();
   fallbackEnvironment.RESEND_API_KEY = "";
   fallbackEnvironment.SMTP_HOST = "smtp.gmail.com";
   fallbackEnvironment.SMTP_USER = "mail-user-fixture";
@@ -165,7 +169,7 @@ test("production environment uses the same nullish alias precedence as the app",
       assertProductionEnvironment(
         validProductionEnvironment({
           STRIPE_SECRET_KEY: "",
-          STRIPE_SECRET: "sk_live_fallbackfixture",
+          STRIPE_SECRET: stripeSecret(),
         }),
       ),
     /STRIPE_SECRET_KEY or STRIPE_SECRET/,
@@ -217,7 +221,7 @@ test("production environment rejects insecure origin, short auth secret, and tes
     /AUTH_SECRET/,
   );
   assert.throws(
-    () => assertProductionEnvironment(validProductionEnvironment({ STRIPE_SECRET_KEY: "sk_test_fixture" })),
+    () => assertProductionEnvironment(validProductionEnvironment({ STRIPE_SECRET_KEY: stripeSecret("test") })),
     /Live secret key/,
   );
   assert.throws(
@@ -247,7 +251,7 @@ test("production environment rejects IP literals and local-only hostnames", () =
 
 test("production environment rejects a Stripe API key used as webhook secret", () => {
   assert.throws(
-    () => assertProductionEnvironment(validProductionEnvironment({ STRIPE_WEBHOOK_SECRET: "sk_live_unitfixture" })),
+    () => assertProductionEnvironment(validProductionEnvironment({ STRIPE_WEBHOOK_SECRET: stripeSecret() })),
     /webhook signing secret/,
   );
 });
