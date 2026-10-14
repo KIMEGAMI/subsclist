@@ -3,6 +3,6 @@ title = "SubscList Gitleaks configuration"
 [extend]
 useDefault = true
 
-[[allowlists]]
+[allowlist]
 description = "Ignore only synthetic test fixtures from the initial portfolio commit"
 stopwords = ["unitfixture", "fallbackfixture", "0123456789abcdef"]
