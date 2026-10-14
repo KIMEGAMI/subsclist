@@ -17,7 +17,9 @@
 
 # next.js
 /.next/
+/.next-*/
 /.next-e2e/
+/.tmp-vitest/
 /out/
 
 # production
@@ -28,6 +30,7 @@
 *.pem
 
 # debug
+*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*

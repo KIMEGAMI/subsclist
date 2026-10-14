@@ -11,10 +11,10 @@ on:
         options:
           - master
           - main
-      run_database_migrations:
-        description: "Run prisma migrate deploy on the server"
+      production_backup_verified:
+        description: "A restorable production database backup exists and has been verified"
         required: true
-        default: true
+        default: false
         type: boolean
 
 permissions:
@@ -28,25 +28,24 @@ env:
   NODE_VERSION: "24"
   CI: "true"
   DATABASE_URL: mysql://ci:ci@127.0.0.1:3306/subsclist_ci
+  TEST_DATABASE_URL: mysql://ci:ci@127.0.0.1:3306/subsclist_ci
   APP_URL: http://localhost:3000
   NEXTAUTH_URL: http://localhost:3000
-  AUTH_SECRET: ci-auth-secret-at-least-32-characters-long
-  NEXTAUTH_SECRET: ci-auth-secret-at-least-32-characters-long
   MAIL_FROM: SubscList CI <ci@example.com>
   SMTP_HOST: localhost
   SMTP_PORT: "1025"
   SMTP_SECURE: "false"
   SMTP_USER: ci@example.com
-  SMTP_PASS: ci-placeholder
   ADMIN_USER_EMAIL: admin@example.com
   DEMO_USER_EMAIL: user@example.com
-  NOTIFICATION_JOB_SECRET: ci-notification-secret
 
 jobs:
   verify:
     name: Verify before deploy
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    outputs:
+      verified_sha: ${{ steps.capture-sha.outputs.sha }}
     services:
       mysql:
         image: mysql:8.4
@@ -65,18 +64,36 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           ref: ${{ inputs.ref }}
 
+      - name: Generate ephemeral test credentials
+        shell: bash
+        run: |
+          {
+            printf 'AUTH_SECRET=%s\n' "$(openssl rand -hex 32)"
+            printf 'NEXTAUTH_SECRET=%s\n' "$(openssl rand -hex 32)"
+            printf 'SMTP_PASS=%s\n' "$(openssl rand -hex 32)"
+            printf 'NOTIFICATION_JOB_SECRET=%s\n' "$(openssl rand -hex 32)"
+            printf 'NEWS_JOB_SECRET=%s\n' "$(openssl rand -hex 32)"
+          } >> "$GITHUB_ENV"
+
+      - name: Capture verified commit
+        id: capture-sha
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Set up Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
 
       - name: Install dependencies
         run: npm ci --ignore-scripts
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chrome
 
       - name: Generate Prisma Client
         run: npm run prisma:generate
@@ -93,25 +110,44 @@ jobs:
       - name: Run usage tests
         run: npm run test:usage
 
-      - name: Audit Node dependencies
-        run: npm audit --audit-level=high
+      - name: Verify test database safety guard
+        run: npm run test:db-guard
+
+      - name: Verify savings event migration backfill
+        run: npm run test:migration-backfill
+
+      - name: Run API route security tests with coverage
+        run: npm run test:routes:coverage
+
+      - name: Verify multi-user data isolation
+        run: npm run test:db-isolation
+
+      - name: Audit Stripe identifiers
+        run: npm run audit:stripe
 
       - name: Build application
         run: npm run build
 
+      - name: Run end-to-end browser tests
+        run: npm run test:e2e
+
+      - name: Audit all Node dependencies
+        run: npm audit --audit-level=high
   deploy:
     name: Deploy over SSH
     needs: verify
+    if: ${{ inputs.production_backup_verified }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment: production
     env:
       DEPLOY_REF: ${{ inputs.ref }}
-      RUN_DATABASE_MIGRATIONS: ${{ inputs.run_database_migrations }}
+      DEPLOY_SHA: ${{ needs.verify.outputs.verified_sha }}
       PRODUCTION_SSH_HOST: ${{ secrets.PRODUCTION_SSH_HOST }}
       PRODUCTION_SSH_PORT: ${{ secrets.PRODUCTION_SSH_PORT }}
       PRODUCTION_SSH_USER: ${{ secrets.PRODUCTION_SSH_USER }}
       PRODUCTION_APP_DIR: ${{ secrets.PRODUCTION_APP_DIR }}
+      PRODUCTION_APP_PORT: ${{ secrets.PRODUCTION_APP_PORT }}
       PRODUCTION_PM2_NAME: ${{ secrets.PRODUCTION_PM2_NAME }}
       PRODUCTION_SSH_PRIVATE_KEY: ${{ secrets.PRODUCTION_SSH_PRIVATE_KEY }}
       PRODUCTION_SSH_KNOWN_HOSTS: ${{ secrets.PRODUCTION_SSH_KNOWN_HOSTS }}
@@ -123,6 +159,7 @@ jobs:
           test -n "$PRODUCTION_APP_DIR"
           test -n "$PRODUCTION_SSH_PRIVATE_KEY"
           test -n "$PRODUCTION_SSH_KNOWN_HOSTS"
+          test -n "$DEPLOY_SHA"
 
       - name: Prepare SSH
         run: |
@@ -135,31 +172,67 @@ jobs:
       - name: Deploy application
         run: |
           port="${PRODUCTION_SSH_PORT:-22}"
+          app_port="${PRODUCTION_APP_PORT:-3000}"
           pm2_name="${PRODUCTION_PM2_NAME:-subsclist}"
-          ssh -i ~/.ssh/subsclist_deploy_key -p "$port" "$PRODUCTION_SSH_USER@$PRODUCTION_SSH_HOST" bash -s -- "$DEPLOY_REF" "$RUN_DATABASE_MIGRATIONS" "$PRODUCTION_APP_DIR" "$pm2_name" <<'REMOTE'
+          ssh -i ~/.ssh/subsclist_deploy_key -p "$port" "$PRODUCTION_SSH_USER@$PRODUCTION_SSH_HOST" bash -s -- "$DEPLOY_REF" "$DEPLOY_SHA" "$PRODUCTION_APP_DIR" "$pm2_name" "$app_port" <<'REMOTE'
           set -Eeuo pipefail
           deploy_ref="$1"
-          run_database_migrations="$2"
+          deploy_sha="$2"
           app_dir="$3"
           pm2_name="$4"
+          app_port="$5"
 
           case "$deploy_ref" in
             master|main) ;;
             *) echo "Deploy ref must be master or main." >&2; exit 1 ;;
           esac
+          if [[ ! "$deploy_sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Verified commit SHA is invalid." >&2
+            exit 1
+          fi
+          if [[ ! "$app_port" =~ ^[0-9]{1,5}$ ]] || (( app_port < 1 || app_port > 65535 )); then
+            echo "Production app port must be an integer from 1 to 65535." >&2
+            exit 1
+          fi
+          if ! command -v pm2 >/dev/null 2>&1; then
+            echo "PM2 is not installed for the deployment user; refusing before changing production." >&2
+            exit 1
+          fi
+
+          # Check before checkout, install, build, or migrations: this SSH
+          # user's PM2 may not own the already-running production listener.
+          if ! pm2 describe "$pm2_name" >/dev/null 2>&1; then
+            if ! command -v ss >/dev/null 2>&1; then
+              echo "Cannot verify production app port: install iproute2 (ss) before deployment." >&2
+              exit 1
+            fi
+            if ss -H -ltn "sport = :$app_port" | grep -q .; then
+              ss -ltnp "sport = :$app_port" || true
+              echo "Production app port is already listening, but PM2 does not know $pm2_name. Resolve the process owner before deployment." >&2
+              exit 1
+            fi
+          fi
 
           cd "$app_dir"
-          git fetch --prune origin "$deploy_ref"
-          git checkout "$deploy_ref"
-          git pull --ff-only origin "$deploy_ref"
-          npm ci --ignore-scripts
-          npm run prisma:generate
-          if [ "$run_database_migrations" = "true" ]; then
-            npm run prisma:deploy
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "Application worktree is dirty; refusing deployment." >&2
+            exit 1
           fi
+          git fetch --prune origin "$deploy_ref"
+          git cat-file -e "$deploy_sha^{commit}"
+          git checkout --detach "$deploy_sha"
+          test "$(git rev-parse HEAD)" = "$deploy_sha"
+          echo "Deploying verified commit $deploy_sha"
+          node scripts/check-node-version.cjs
+          npm ci --ignore-scripts
+          PRODUCTION_MIGRATION_PREFLIGHT=1 node --env-file=.env scripts/preflight-production-migrations.cjs
+          npm run prisma:generate
           npm run build
+          npm run prisma:deploy
+          npm prune --omit=dev
+          export APP_DIR="$app_dir" APP_NAME="$pm2_name" APP_PORT="$app_port" APP_HOST=127.0.0.1
           if pm2 describe "$pm2_name" >/dev/null 2>&1; then
-            pm2 reload "$pm2_name" --update-env
+            pm2 startOrReload ecosystem.config.cjs --only "$pm2_name" --update-env
           else
             pm2 start ecosystem.config.cjs --only "$pm2_name" --update-env
           fi
@@ -169,9 +242,13 @@ jobs:
       - name: Verify deployed endpoint
         run: |
           port="${PRODUCTION_SSH_PORT:-22}"
-          ssh -i ~/.ssh/subsclist_deploy_key -p "$port" "$PRODUCTION_SSH_USER@$PRODUCTION_SSH_HOST" bash -s -- "$PRODUCTION_APP_DIR" <<'REMOTE'
+          app_port="${PRODUCTION_APP_PORT:-3000}"
+          ssh -i ~/.ssh/subsclist_deploy_key -p "$port" "$PRODUCTION_SSH_USER@$PRODUCTION_SSH_HOST" bash -s -- "$PRODUCTION_APP_DIR" "$app_port" <<'REMOTE'
           set -Eeuo pipefail
           app_dir="$1"
+          app_port="$2"
           cd "$app_dir"
-          curl -fsS -I http://127.0.0.1:3000 >/dev/null
+          app_url="$(node --env-file=.env -e 'const value=process.env.APP_URL||process.env.NEXTAUTH_URL;if(!value)process.exit(1);const url=new URL(value);if(url.protocol!=="https:")process.exit(1);process.stdout.write(url.origin)')"
+          curl -fsS "http://127.0.0.1:${app_port}/api/system/status" >/dev/null
+          curl --fail --silent --show-error --max-time 30 "${app_url}/api/system/status" >/dev/null
           REMOTE

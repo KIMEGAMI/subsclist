@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import {
   MAX_BUSINESS_USE_PERCENT,
   MIN_BUSINESS_USE_PERCENT,
@@ -27,6 +27,7 @@ export function SubscriptionBulkEditor({
   paymentMethods: Option[];
 }) {
   const router = useRouter();
+  const idPrefix = useId();
   const [selectedIds, setSelectedIds] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -116,14 +117,14 @@ export function SubscriptionBulkEditor({
           現在の検索結果から契約を選び、共通する項目だけをまとめて変更します。選択しない項目は変更されません。
         </p>
         <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/80">
-          <label className="flex cursor-pointer items-center gap-3 border-b border-slate-200 px-4 py-3 text-sm font-black text-slate-800">
-            <input type="checkbox" checked={allSelected} onChange={toggleAll} className="size-4 accent-blue-600" />
+          <label htmlFor={`${idPrefix}-all`} className="flex cursor-pointer items-center gap-3 border-b border-slate-200 px-4 py-3 text-sm font-black text-slate-800">
+            <input id={`${idPrefix}-all`} type="checkbox" checked={allSelected} onChange={toggleAll} className="size-4 accent-blue-600" />
             表示中の{subscriptions.length}件をすべて選択
           </label>
           <div className="grid max-h-64 overflow-y-auto md:grid-cols-2 xl:grid-cols-3">
             {subscriptions.map((item) => (
-              <label key={item.id} className="flex cursor-pointer items-start gap-3 border-b border-slate-100 px-4 py-3 text-sm transition hover:bg-blue-50/70">
-                <input type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleOne(item.id)} className="mt-0.5 size-4 shrink-0 accent-blue-600" />
+              <label key={item.id} htmlFor={`${idPrefix}-${item.id}`} aria-label={`${item.name}を選択`} className="flex cursor-pointer items-start gap-3 border-b border-slate-100 px-4 py-3 text-sm transition hover:bg-blue-50/70">
+                <input id={`${idPrefix}-${item.id}`} type="checkbox" checked={selectedIds.has(item.id)} onChange={() => toggleOne(item.id)} className="mt-0.5 size-4 shrink-0 accent-blue-600" />
                 <span className="min-w-0">
                   <span className="block truncate font-bold text-slate-900">{item.name}</span>
                   <span className="mt-1 block truncate text-xs font-semibold text-slate-500">{item.categoryName ?? "カテゴリ未設定"} / {item.paymentMethodName ?? "支払い方法未設定"}</span>

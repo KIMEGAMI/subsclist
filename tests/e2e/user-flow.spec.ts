@@ -1,8 +1,22 @@
 import { expect, test } from "@playwright/test";
+import { AUTH_FLOW_TIMEOUT_MS } from "./constants";
 
 async function openDemo(page: import("@playwright/test").Page) {
   await page.goto("/");
   await page.getByRole("button", { name: "デモを開く", exact: true }).click();
+  await expect(page).toHaveURL(/\/dashboard$/, { timeout: AUTH_FLOW_TIMEOUT_MS });
+}
+
+async function openMember(page: import("@playwright/test").Page) {
+  const email = process.env.E2E_MEMBER_EMAIL ?? "";
+  const password = process.env.E2E_USER_PASSWORD ?? "";
+  expect(email).not.toBe("");
+  expect(password).not.toBe("");
+
+  await page.goto("/login");
+  await page.getByRole("textbox", { name: "メールアドレス" }).fill(email);
+  await page.getByRole("textbox", { name: "パスワード" }).fill(password);
+  await page.getByRole("button", { name: "ログイン", exact: true }).click();
   await expect(page).toHaveURL(/\/dashboard$/);
 }
 
@@ -51,8 +65,8 @@ test("ナビゲーションに一般ユーザー項目だけを表示する", as
   await expect(menu.getByRole("link", { name: /管理者メニュー/ })).toHaveCount(0);
 });
 
-test("サブスクの項目別エラーを表示し、登録・編集・削除できる", async ({ page }) => {
-  await openDemo(page);
+test("通常ユーザーは項目別エラーを確認してサブスクを登録・編集・削除できる", async ({ page }) => {
+  await openMember(page);
   await page.goto("/subscriptions/new");
   await page.getByRole("button", { name: "保存する" }).click();
   const alert = page.getByRole("alert").filter({ hasText: "入力内容を確認してください" });

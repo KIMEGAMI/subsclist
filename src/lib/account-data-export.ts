@@ -1,4 +1,4 @@
-export const ACCOUNT_DATA_EXPORT_VERSION = 2;
+export const ACCOUNT_DATA_EXPORT_VERSION = 3;
 
 export const SENSITIVE_ACCOUNT_EXPORT_KEYS = new Set([
   "passwordHash",

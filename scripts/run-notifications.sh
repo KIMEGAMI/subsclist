@@ -28,11 +28,16 @@ case "$notification_secret" in
 esac
 
 response_file="$(mktemp)"
-trap 'rm -f "$response_file"' EXIT
+curl_config="$(mktemp)"
+chmod 600 "$response_file" "$curl_config"
+trap 'rm -f "$response_file" "$curl_config"' EXIT
+escaped_secret="${notification_secret//\\/\\\\}"
+escaped_secret="${escaped_secret//\"/\\\"}"
+printf 'header = "Authorization: Bearer %s"\n' "$escaped_secret" > "$curl_config"
 
 if ! curl --fail --silent --show-error --max-time 60 --retry 2 --retry-delay 5 \
+  --config "$curl_config" \
   --request POST \
-  --header "Authorization: Bearer ${notification_secret}" \
   --header "Accept: application/json" \
   --output "$response_file" \
   "http://127.0.0.1:${APP_PORT}/api/notifications/send"; then

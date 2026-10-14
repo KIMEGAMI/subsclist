@@ -43,9 +43,30 @@ describe("カテゴリ・支払い方法", () => {
     await prisma.category.createMany({
       data: Array.from({ length: 5 }, (_, index) => ({ userId: owner.id, name: `Limit${index}`, color: "#2563eb" })),
     });
-    authState.user = owner;
+    authState.user = { ...owner, plan: "PREMIUM" };
     const response = await createCategory(request("/api/categories", { name: uniqueLabel("OverLimit"), color: "#2563eb" }));
     expect(response.status).toBe(403);
+    expect(await prisma.category.count({ where: { userId: owner.id } })).toBe(5);
+  });
+
+  it("同時作成でもFreeプランのカテゴリ上限を超えない", async () => {
+    const owner = await createTestUser({ plan: "FREE" });
+    createdUserIds.push(owner.id);
+    await prisma.category.createMany({
+      data: Array.from({ length: 4 }, (_, index) => ({
+        userId: owner.id,
+        name: `ConcurrentLimit${index}`,
+        color: "#2563eb",
+      })),
+    });
+    authState.user = owner;
+
+    const responses = await Promise.all([
+      createCategory(request("/api/categories", { name: "ConcurrentA", color: "#2563eb" })),
+      createCategory(request("/api/categories", { name: "ConcurrentB", color: "#16a34a" })),
+    ]);
+
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 403]);
     expect(await prisma.category.count({ where: { userId: owner.id } })).toBe(5);
   });
 

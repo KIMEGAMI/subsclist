@@ -6,7 +6,7 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   timeout: 30_000,
-  outputDir: "test-results/playwright",
+  outputDir: process.env.PLAYWRIGHT_OUTPUT_DIR ?? "test-results/playwright",
   globalSetup: "./tests/e2e/global-setup.ts",
   globalTeardown: "./tests/e2e/global-teardown.ts",
   use: {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import nextConfig, { privateRouteSources } from "../../next.config.ts";
+import nextConfig, { privateRouteSources, sensitiveTokenRouteSources } from "../../next.config.ts";
 
 const authenticatedPageSources = [
   "/admin/:path*",
@@ -17,6 +17,7 @@ const authenticatedPageSources = [
   "/payment-totals/:path*",
   "/payments/:path*",
   "/review/:path*",
+  "/savings/:path*",
   "/settings/:path*",
   "/simulation/:path*",
   "/subscriptions/:path*",
@@ -42,6 +43,35 @@ test("個人データを表示する全ページを検索対象外にする", as
       entry?.headers.some((header: { key: string; value: string }) => header.key === "X-Robots-Tag" && header.value.includes("noindex")),
       true,
       `${source} にX-Robots-Tagがありません`,
+    );
+  }
+
+  const apiEntry = entries.find((candidate: HeaderEntry) => candidate.source === "/api/:path*");
+  assert.equal(
+    apiEntry?.headers.some((header: { key: string; value: string }) => header.key === "Cache-Control" && header.value === "private, no-store"),
+    true,
+    "個人情報を返すAPIにCache-Control: private, no-storeがありません",
+  );
+});
+
+test("ワンタイムトークンを含むURLと認証APIをキャッシュ・Refererから保護する", async () => {
+  const configHeaders = nextConfig.headers;
+  assert.ok(configHeaders);
+  const entries = await configHeaders() as HeaderEntry[];
+
+  for (const source of sensitiveTokenRouteSources) {
+    const matchingHeaders = entries
+      .filter((candidate) => candidate.source === source)
+      .flatMap((candidate) => candidate.headers);
+    assert.equal(
+      matchingHeaders.some((header) => header.key === "Cache-Control" && header.value === "private, no-store"),
+      true,
+      `${source} に no-store がありません`,
+    );
+    assert.equal(
+      matchingHeaders.some((header) => header.key === "Referrer-Policy" && header.value === "no-referrer"),
+      true,
+      `${source} に no-referrer がありません`,
     );
   }
 });

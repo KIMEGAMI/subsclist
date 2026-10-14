@@ -130,6 +130,26 @@ describe("Gemini比較分析", () => {
     expect(geminiMock).not.toHaveBeenCalled();
   });
 
+  it("同時要求でも日次上限を超えてGeminiへ送信しない", async () => {
+    const owner = await user({ plan: "PREMIUM" });
+    await subscription(owner.id);
+    await prisma.geminiAnalysisRequest.createMany({
+      data: Array.from({ length: GEMINI_DAILY_REQUEST_LIMIT - 1 }, (_, index) => ({
+        userId: owner.id,
+        createdAt: new Date(Date.now() - 2 * 60 * 60 * 1_000 - index * 1_000),
+      })),
+    });
+    authState.user = owner;
+
+    const responses = await Promise.all(
+      Array.from({ length: 5 }, () => analyzeWithGemini(jsonRequest("/gemini", { consent: true }))),
+    );
+
+    expect(responses.map((response) => response.status).sort()).toEqual([200, 429, 429, 429, 429]);
+    expect(geminiMock).toHaveBeenCalledOnce();
+    expect(await prisma.geminiAnalysisRequest.count({ where: { userId: owner.id } })).toBe(GEMINI_DAILY_REQUEST_LIMIT);
+  });
+
   it("外部分析失敗時に内部エラーを露出しない", async () => {
     const owner = await user({ plan: "PREMIUM" });
     await subscription(owner.id);

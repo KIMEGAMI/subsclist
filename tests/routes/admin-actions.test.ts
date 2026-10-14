@@ -6,7 +6,6 @@ const adminMocks = vi.hoisted(() => ({
   updateAnnouncement: vi.fn(async () => undefined),
   deleteAnnouncement: vi.fn(async () => undefined),
   setMaintenance: vi.fn(async () => undefined),
-  cookieSet: vi.fn(),
   revalidatePath: vi.fn(),
 }));
 
@@ -18,9 +17,6 @@ vi.mock("@/lib/admin", () => ({
   setMaintenanceMode: adminMocks.setMaintenance,
 }));
 vi.mock("next/cache", () => ({ revalidatePath: adminMocks.revalidatePath }));
-vi.mock("next/headers", () => ({
-  cookies: async () => ({ set: adminMocks.cookieSet }),
-}));
 
 import {
   createAnnouncement,
@@ -98,14 +94,9 @@ describe("メンテナンスモード", () => {
   it.each([
     ["enabled", true, "enabled"],
     ["disabled", false, "disabled"],
-  ])("%sへ切り替えて管理者Cookieを同期する", async (mode, enabled, cookieValue) => {
+  ])("%sへ切り替え、サーバー側の状態だけを更新する", async (mode, enabled) => {
     await updateMaintenanceMode(form({ mode }));
     expect(adminMocks.setMaintenance).toHaveBeenCalledWith(enabled);
-    expect(adminMocks.cookieSet).toHaveBeenCalledWith(
-      expect.any(String),
-      cookieValue,
-      expect.objectContaining({ httpOnly: true, sameSite: "lax", path: "/" }),
-    );
     expect(adminMocks.revalidatePath).toHaveBeenCalledWith("/admin");
     expect(adminMocks.revalidatePath).toHaveBeenCalledWith("/");
   });

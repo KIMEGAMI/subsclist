@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { MAX_CONTACT_MESSAGE_LENGTH, MAX_EMAIL_LENGTH, MAX_USER_NAME_LENGTH } from "@/lib/app-constants";
+import { MAX_CONTACT_MESSAGE_LENGTH, MAX_CONTACT_REQUEST_BODY_BYTES, MAX_EMAIL_LENGTH, MAX_USER_NAME_LENGTH } from "@/lib/app-constants";
 import { getContactClientKey, hasContactNgPhrase, isContactRateLimited, recordContactAttempt } from "@/lib/contact-guard";
 import { assertMailEnv, env } from "@/lib/env";
 import { sendContactEmail } from "@/lib/mail";
 import { requestClientIdentifier } from "@/lib/request-client";
+import { readJsonBodyWithLimit } from "@/lib/request-body";
 
 const schema = z.object({
   name: z.string().trim().min(1).max(MAX_USER_NAME_LENGTH),
@@ -22,14 +23,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "不正な送信元です。ページを再読み込みして、もう一度お試しください。" }, { status: 403 });
   }
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
+  const body = await readJsonBodyWithLimit(request, MAX_CONTACT_REQUEST_BODY_BYTES);
+  if (!body.ok && body.reason === "too_large") {
+    return NextResponse.json({ message: "お問い合わせ内容が大きすぎます。内容を短くして、もう一度お試しください。" }, { status: 413 });
+  }
+  if (!body.ok) {
     return NextResponse.json({ message: "入力内容を確認してください。" }, { status: 400 });
   }
 
-  const parsed = schema.safeParse(body);
+  const parsed = schema.safeParse(body.value);
   if (!parsed.success) {
     return NextResponse.json({ message: "お名前、メールアドレス、お問い合わせ内容を確認してください。" }, { status: 400 });
   }

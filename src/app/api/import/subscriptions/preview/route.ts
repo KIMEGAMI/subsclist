@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import { getVerifiedApiUser } from "@/lib/api-auth";
 import {
   MAX_CSV_IMPORT_FILE_BYTES,
+  MAX_CSV_IMPORT_REQUEST_BODY_BYTES,
   MAX_CSV_IMPORT_ROWS,
 } from "@/lib/app-constants";
 import { isPremiumPlan } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
+import { readFormDataWithLimit } from "@/lib/request-body";
 import { stripePaymentMethodTypes } from "@/lib/stripe-payment-methods";
 import {
   buildSubscriptionImportPreview,
@@ -23,7 +25,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const form = await request.formData();
+  const formResult = await readFormDataWithLimit(request, MAX_CSV_IMPORT_REQUEST_BODY_BYTES);
+  if (!formResult.ok) {
+    const tooLarge = formResult.reason === "too_large";
+    return NextResponse.json(
+      { message: tooLarge ? "CSVファイルは1MB以下にしてください。" : "CSVファイルの形式を確認してください。" },
+      { status: tooLarge ? 413 : 400 },
+    );
+  }
+  const form = formResult.value;
   const file = form.get("file");
   if (!(file instanceof File)) {
     return NextResponse.json(

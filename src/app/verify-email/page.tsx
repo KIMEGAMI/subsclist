@@ -1,8 +1,14 @@
+import type { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { Card } from "@/components/app-shell";
-import { ResendVerificationButton } from "@/components/auth-views";
+import { ResendVerificationButton, VerifyEmailView } from "@/components/auth-views";
 import { getCurrentUser } from "@/lib/auth";
+
+export const metadata: Metadata = {
+  title: "メール認証 | SubscList",
+  robots: { index: false, follow: false },
+  referrer: "no-referrer",
+};
 
 function statusMessage(status?: string) {
   if (status === "success") {
@@ -23,9 +29,7 @@ export default async function VerifyEmailPage({
   searchParams: Promise<{ token?: string; mail?: string; status?: string }>;
 }) {
   const { token, mail, status } = await searchParams;
-  if (token) {
-    redirect(`/api/auth/verify-email?token=${encodeURIComponent(token)}`);
-  }
+  if (token) return <VerifyEmailView token={token} />;
 
   const result = statusMessage(status);
   const user = await getCurrentUser();

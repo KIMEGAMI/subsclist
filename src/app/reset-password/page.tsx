@@ -1,6 +1,13 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { ResetPasswordView } from "@/components/auth-views";
 import { getCurrentUser, isAdminEmail } from "@/lib/auth";
+
+export const metadata: Metadata = {
+  title: "パスワード再設定 | SubscList",
+  robots: { index: false, follow: false },
+  referrer: "no-referrer",
+};
 
 type ResetPasswordPageProps = {
   searchParams?: Promise<{ token?: string }>;

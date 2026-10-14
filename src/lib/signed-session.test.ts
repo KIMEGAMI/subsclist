@@ -11,6 +11,7 @@ const secret = "test-session-secret-that-is-at-least-32-characters";
 const payload: SessionPayload = {
   userId: "test-user",
   emailVerified: true,
+  demoReadOnly: false,
   sessionVersion: 2,
   exp: 2_000,
 };
@@ -50,4 +51,18 @@ test("有効期限の時刻に達したセッションを拒否する", () => {
   const encoded = encodeSignedSession(payload, secret);
   assert.equal(decodeSignedSession(encoded, secret, payload.exp), null);
   assert.equal(decodeSignedSession(encoded, secret, payload.exp + 1), null);
+});
+
+test("デモ専用フラグを署名付きで保持し、旧形式のCookieは拒否する", () => {
+  const demoPayload = { ...payload, demoReadOnly: true };
+  const encodedDemo = encodeSignedSession(demoPayload, secret);
+  assert.equal(decodeSignedSession(encodedDemo, secret, 1_000)?.demoReadOnly, true);
+
+  const oldBody = Buffer.from(JSON.stringify({
+    userId: "test-user",
+    emailVerified: true,
+    sessionVersion: 2,
+    exp: 2_000,
+  })).toString("base64url");
+  assert.equal(decodeSignedSession(`${oldBody}.${signBody(oldBody)}`, secret, 1_000), null);
 });

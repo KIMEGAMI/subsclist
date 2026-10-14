@@ -4,6 +4,7 @@ import {
   CSV_CONFIDENCE_WEIGHTS,
   CSV_EXISTING_PRICE_TOLERANCE,
   MAX_CSV_IMPORT_FILE_BYTES,
+  MAX_CSV_IMPORT_REQUEST_BODY_BYTES,
   CSV_MAX_CANDIDATE_COUNT,
   CSV_MAX_CONFIDENCE,
   CSV_MAX_MONTHLY_GAP_DAYS,
@@ -25,6 +26,7 @@ import { parseIsoCalendarDate } from "@/lib/calendar-date";
 import { candidateBillingCycle, candidateNextBillingDate } from "@/lib/csv-candidate";
 import { isPremiumPlan } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
+import { readFormDataWithLimit } from "@/lib/request-body";
 import {
   buildStatementPaymentMatches,
   normalizeStatementMerchant,
@@ -71,7 +73,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ message: "CSV明細の解析はPremium限定です。" }, { status: 403 });
   }
 
-  const form = await request.formData();
+  const formResult = await readFormDataWithLimit(request, MAX_CSV_IMPORT_REQUEST_BODY_BYTES);
+  if (!formResult.ok) {
+    const tooLarge = formResult.reason === "too_large";
+    return NextResponse.json(
+      { message: tooLarge ? "CSVファイルは1MB以下にしてください。" : "CSVファイルの形式を確認してください。" },
+      { status: tooLarge ? 413 : 400 },
+    );
+  }
+  const form = formResult.value;
   const file = form.get("file");
   if (!(file instanceof File)) {
     return NextResponse.json({ message: "CSVファイルを選択してください。" }, { status: 400 });

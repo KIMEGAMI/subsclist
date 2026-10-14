@@ -21,7 +21,9 @@ CDは最初から自動実行にしません。まず GitHub Actions の `Deploy
 - Stripe customer / subscription ID監査
 - 本番ビルド
 - E2Eブラウザテスト
-- `npm audit --audit-level=high`
+- `npm audit --audit-level=high`（開発依存を含む全依存のリリースゲート）
+
+Lint設定は `eslint-config-next` に依存しません。開発依存を含む全依存監査をCI・本番デプロイ双方の必須ゲートにしています。
 
 `.github/workflows/security.yml` で以下を実行します。
 
@@ -42,9 +44,10 @@ Dependabotでnpm依存とGitHub Actionsの更新PRも週次で作成します。
 1. GitHub Actions上でデプロイ前検証を実行する。
 2. `production` environment の承認を待つ。
 3. SSHで本番サーバーへ接続する。
-4. サーバー上で `git pull --ff-only`、`npm ci`、Prisma Client生成、必要ならmigration、本番buildを実行する。
-5. PM2で `subsclist` を reload または start する。
-6. サーバー内から `http://127.0.0.1:3000` の応答を確認する。
+4. CIが検証した完全なコミットSHAをサーバーでcheckoutし、作業ツリーがdirtyなら中断する。
+5. `npm ci --ignore-scripts`、読み取り専用の本番migration preflight、Prisma Client生成、本番buildを順に実行する。
+6. preflightとbuildが成功した後に `prisma migrate deploy` を実行し、PM2で `subsclist` をreloadまたはstartする。
+7. `PRODUCTION_APP_PORT`で指定したloopbackポートと公開HTTPS URLの応答を確認する。
 
 ## GitHub Environment の作成
 
@@ -95,7 +98,7 @@ sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
 次にローカルPCから取得したfingerprintと一致するか確認します。
 
 ```powershell
-ssh-keyscan -t ed25519 subsclist.shinji.work > .\known_hosts_subsclist
+ssh-keyscan -t ed25519 $env:PRODUCTION_SSH_HOST > .\known_hosts_subsclist
 ssh-keygen -lf .\known_hosts_subsclist
 ```
 
@@ -107,9 +110,10 @@ ssh-keygen -lf .\known_hosts_subsclist
 
 | Secret名 | 内容 |
 |---|---|
-| `PRODUCTION_SSH_HOST` | 本番サーバーのホスト名。例: `subsclist.shinji.work` |
+| `PRODUCTION_SSH_HOST` | SSH接続先のホスト名またはIPアドレス。公開サイトのドメインとは別に確認してください |
 | `PRODUCTION_SSH_PORT` | SSHポート。通常は `22` |
-| `PRODUCTION_SSH_USER` | SSHユーザー。例: `ubuntu` |
+| `PRODUCTION_SSH_USER` | SSHユーザー。現在の本番デプロイユーザーは `deploy-subsclist` |
+| `PRODUCTION_APP_PORT` | Next.jsのloopback待受ポート。現在の本番は `3001` |
 | `PRODUCTION_SSH_PRIVATE_KEY` | `subsclist_deploy` の中身 |
 | `PRODUCTION_SSH_KNOWN_HOSTS` | `known_hosts_subsclist` の中身 |
 | `PRODUCTION_APP_DIR` | サーバー上のアプリ配置先。例: `/var/www/subsclist` |
@@ -143,9 +147,9 @@ git branch --show-current
 2. `Deploy production` を選択する。
 3. `Run workflow` を押す。
 4. `ref` は通常 `master` を選ぶ。
-5. DB migrationを実行する場合は `run_database_migrations` を `true` にする。
-6. `production` environment の承認を行う。
-7. workflowが成功したら `https://subsclist.shinji.work` を確認する。
+5. `production` environment の承認を行う。
+6. workflowは検証・ビルド成功後に必ず `prisma migrate deploy` を実行する。スキーマ変更のあるリリースでmigrationだけを飛ばす選択肢はありません。
+7. workflowが成功したら `https://subsclist.kimegami.jp` を確認する。
 
 ## 本番で問題が出た場合の確認コマンド
 
@@ -153,11 +157,11 @@ git branch --show-current
 cd /var/www/subsclist
 pm2 status
 pm2 logs subsclist --lines 100 --nostream
-curl -I http://127.0.0.1:3000
+curl -I http://127.0.0.1:3001
 sudo tail -n 100 /var/log/apache2/subsclist_error.log
 ```
 
-Apacheが503を返す場合は、まず `curl -I http://127.0.0.1:3000` が成功するか確認します。失敗する場合はNext.js/PM2側、成功する場合はApache reverse proxy側を確認します。
+Apacheが503を返す場合は、まず `curl -I http://127.0.0.1:3001` が成功するか確認します。失敗する場合はNext.js/PM2側、成功する場合はApache reverse proxy側を確認します。
 
 ## 自動デプロイへ進む条件
 
@@ -166,5 +170,5 @@ Apacheが503を返す場合は、まず `curl -I http://127.0.0.1:3000` が成�
 - CIが3回以上連続で成功する。
 - 手動CDが3回以上連続で成功する。
 - migrationあり・なしの両方で運用手順が確認できている。
-- PM2再起動後も `curl -I http://127.0.0.1:3000` が成功する。
+- PM2再起動後も `curl -I http://127.0.0.1:3001` が成功する。
 - rollback手順が確認済み。

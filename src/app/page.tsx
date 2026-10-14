@@ -50,26 +50,37 @@ export default function Home() {
   return (
     <main className="bg-white text-slate-950">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }} />
+      <header className="home-header mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
+        <Link href="/" className="text-lg font-black text-slate-950" aria-label="SubscList トップページ">
+          SubscList
+        </Link>
+        <Link
+          href="/login"
+          className="inline-flex min-h-11 items-center justify-center rounded-md border border-slate-300 bg-white px-5 text-sm font-bold text-slate-800 transition hover:border-blue-500 hover:text-blue-700"
+        >
+          ログイン
+        </Link>
+      </header>
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-[linear-gradient(180deg,#ffffff_0%,#f5f8ff_100%)]" />
-        <div className="relative mx-auto grid min-h-[92vh] max-w-7xl items-center gap-10 px-4 py-8 sm:px-6 lg:grid-cols-[0.92fr_1.08fr] lg:px-8">
+        <div className="relative mx-auto grid min-h-[80vh] max-w-7xl items-center gap-6 px-4 py-8 sm:gap-10 sm:px-6 lg:min-h-[92vh] lg:grid-cols-[0.92fr_1.08fr] lg:px-8">
           <div className="z-10 max-w-xl">
             <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-white px-3 py-2 text-sm font-semibold text-blue-700 shadow-sm">
               <span className="size-2 rounded-full bg-fuchsia-500" />
               サブスクリプション管理システム
             </div>
-            <h1 className="text-4xl font-black leading-tight tracking-tight sm:text-6xl">
+            <h1 className="text-3xl font-black leading-tight tracking-tight sm:text-5xl lg:text-6xl">
               仕事のサブスクを、判断できる台帳へ。
             </h1>
             <p className="mt-6 text-lg leading-8 text-slate-600">
               SaaSやAI、クラウドが増えたフリーランス・副業者・個人事業主へ。仕事利用分、更新日、利用実績、解約期限を一元化し、月末の整理と継続判断を早くします。
             </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link href="/login" className="rounded-full bg-gradient-to-r from-blue-600 via-cyan-500 to-fuchsia-500 px-7 py-4 text-center font-black text-white shadow-lg shadow-blue-200 transition hover:-translate-y-0.5 hover:shadow-xl">
+            <div className="mt-8 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+              <Link href="/login" className="inline-flex min-h-12 items-center justify-center rounded-full bg-gradient-to-r from-blue-600 via-cyan-500 to-fuchsia-500 px-7 py-3 text-center font-black text-white shadow-lg shadow-blue-200 transition hover:-translate-y-0.5 hover:shadow-xl">
                 今すぐはじめる
               </Link>
               <DemoLoginButton />
-              <Link href="/pricing" className="rounded-full border border-slate-200 bg-white/85 px-7 py-4 text-center font-black text-slate-800 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:text-blue-700">
+              <Link href="/pricing" className="inline-flex min-h-12 items-center justify-center rounded-full border border-slate-200 bg-white/85 px-7 py-3 text-center font-black text-slate-800 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:text-blue-700">
                 料金を見る
               </Link>
             </div>
@@ -77,7 +88,7 @@ export default function Home() {
               Premiumは初回のみ{STRIPE_TRIAL_PERIOD_DAYS}日間お試し無料。無料期間中に解約すれば料金はかかりません。
             </p>
           </div>
-          <div className="relative min-h-[430px] lg:min-h-[620px]">
+          <div className="relative min-h-[260px] sm:min-h-[360px] lg:min-h-[620px]">
             <Image src="/hero-subsclist.png" alt="SubscListの画面イメージ" fill unoptimized priority className="object-contain object-center" sizes="(min-width: 1024px) 58vw, 100vw" />
           </div>
         </div>

@@ -1,49 +1,6 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
-const fs = require("node:fs");
-const path = require("node:path");
 const mariadb = require("mariadb");
-
-function databaseUrlFromEnvironment() {
-  if (process.env.DATABASE_URL) return process.env.DATABASE_URL;
-  const envPath = path.join(process.cwd(), ".env");
-  if (!fs.existsSync(envPath)) return "";
-  const line = fs
-    .readFileSync(envPath, "utf8")
-    .replace(/^\uFEFF/, "")
-    .split(/\r?\n/)
-    .find((candidate) => /^\s*DATABASE_URL\s*=/.test(candidate));
-  if (!line) return "";
-  return line
-    .slice(line.indexOf("=") + 1)
-    .trim()
-    .replace(/^(['"])(.*)\1$/, "$2");
-}
-
-function databaseConfig() {
-  const databaseUrl = databaseUrlFromEnvironment();
-  if (!databaseUrl) throw new Error("DATABASE_URLが設定されていません。");
-  const url = new URL(databaseUrl);
-  const config = {
-    host: url.hostname,
-    port: Number(url.port || "3306"),
-    user: decodeURIComponent(url.username),
-    password: decodeURIComponent(url.password),
-    database: url.pathname.replace(/^\//, ""),
-    charset: "utf8mb4",
-  };
-
-  const allowPublicKeyRetrieval = url.searchParams.get("allowPublicKeyRetrieval");
-  if (allowPublicKeyRetrieval) {
-    config.allowPublicKeyRetrieval = allowPublicKeyRetrieval === "true";
-  }
-
-  const cachingRsaPublicKey = url.searchParams.get("cachingRsaPublicKey");
-  if (cachingRsaPublicKey) {
-    config.cachingRsaPublicKey = cachingRsaPublicKey;
-  }
-
-  return config;
-}
+const { testDatabaseConfig } = require("./lib/test-database-config.cjs");
 
 function duplicateResult(rows) {
   return {
@@ -103,7 +60,7 @@ async function identifierStateSummary(connection) {
 }
 
 async function main() {
-  const connection = await mariadb.createConnection(databaseConfig());
+  const connection = await mariadb.createConnection(testDatabaseConfig());
   try {
     const [customerIds, subscriptionIds, states] = await Promise.all([
       customerIdDuplicateSummary(connection),

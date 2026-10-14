@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 const { spawnSync } = require("node:child_process");
 
-const fallbackDatabaseUrl = "mysql://prisma_generate:prisma_generate@127.0.0.1:3306/prisma_generate";
+const fallbackDatabaseUrl = "mysql://127.0.0.1:3306/prisma_generate";
 
 if (!process.env.DATABASE_URL) {
   process.env.DATABASE_URL = fallbackDatabaseUrl;

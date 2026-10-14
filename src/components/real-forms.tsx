@@ -1706,16 +1706,15 @@ export function PaymentMethodForm() {
 export function CsvDownloadButton({ disabled }: { disabled: boolean }) {
   return (
     <div className="mt-5 flex flex-wrap items-center gap-3">
-      <a
-        href={disabled ? undefined : "/api/export"}
-        aria-disabled={disabled}
-        onClick={(event) => {
-          if (disabled) event.preventDefault();
-        }}
-        className={`btn-primary ${disabled ? "pointer-events-none opacity-50" : ""}`}
-      >
-        CSVをダウンロード
-      </a>
+      {disabled ? (
+        <button type="button" disabled className="btn-primary cursor-not-allowed opacity-50">
+          CSVをダウンロード
+        </button>
+      ) : (
+        <a href="/api/export" className="btn-primary">
+          CSVをダウンロード
+        </a>
+      )}
       <CsvHelpPopover
         title="CSV出力の見方"
         note="出力されるCSVは1行目がヘッダです。列の意味を確認して、そのまま別の表計算ソフトに取り込めます。"
@@ -2528,19 +2527,20 @@ export function PaymentHistoryForm({
           defaultValue={selectedAccountingLabel}
         />
       </Field>
-      <label className="flex min-h-12 items-start gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 md:col-span-2">
+      <div className="flex min-h-12 items-start gap-3 rounded-lg border border-slate-200 bg-white px-4 py-3 md:col-span-2">
         <input type="hidden" name="rememberAccountingLabel" value="false" />
         <input
+          id="remember-accounting-label"
           name="rememberAccountingLabel"
           type="checkbox"
           value="true"
           className="mt-0.5 size-5 accent-blue-600"
         />
-        <span>
+        <label htmlFor="remember-accounting-label" className="cursor-pointer">
           <span className="block text-sm font-bold text-slate-800">この科目を次回以降の初期値にする</span>
           <span className="mt-1 block text-xs font-medium leading-5 text-slate-500">契約に保存し、次回の支払い登録と明細CSV取込へ引き継ぎます。税務上の扱いは必要に応じて税理士等へ確認してください。</span>
-        </span>
-      </label>
+        </label>
+      </div>
       <Field label="領収書・請求書番号（任意）">
         <input
           name="referenceNumber"

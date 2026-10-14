@@ -8,5 +8,9 @@ export default async function RegisterPage() {
     redirect(user.emailVerified ? "/dashboard" : "/verify-email");
   }
 
-  return <RegisterView />;
+  const googleLoginEnabled = Boolean(
+    process.env.GOOGLE_CLIENT_ID?.trim() &&
+      process.env.GOOGLE_CLIENT_SECRET?.trim(),
+  );
+  return <RegisterView googleLoginEnabled={googleLoginEnabled} />;
 }

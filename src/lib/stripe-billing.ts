@@ -5,6 +5,7 @@ import {
 } from "@/lib/app-constants";
 import { prisma } from "@/lib/prisma";
 import { stripe } from "@/lib/stripe";
+import { isStripeRecoveryCandidate } from "@/lib/stripe-customer-ownership";
 import {
   activePlan,
   canApplyStripeSubscription,
@@ -156,6 +157,7 @@ export async function syncStripeCheckoutSession(
       data: {
         plan: "PREMIUM",
         stripeCustomerId: customerId,
+        stripeCheckoutSessionId: null,
         stripeSubscriptionId: null,
         stripeSubscriptionStatus: null,
         stripeTrialStartAt: null,
@@ -186,7 +188,12 @@ export async function syncStripeCheckoutSession(
   if (subscription.metadata?.userId && subscription.metadata.userId !== userId)
     return false;
 
-  return syncStripeSubscription(subscription);
+  const synced = await syncStripeSubscription(subscription);
+  await prisma.user.updateMany({
+    where: { id: userId, stripeCheckoutSessionId: session.id },
+    data: { stripeCheckoutSessionId: null },
+  });
+  return synced;
 }
 
 export async function syncStripeCheckoutSessionById(
@@ -218,7 +225,7 @@ export async function syncStripeCheckoutSessionById(
 export async function syncLatestStripeSubscriptionForUser(userId: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { plan: true, stripeCustomerId: true, stripeSubscriptionId: true },
+    select: { plan: true, email: true, stripeCustomerId: true, stripeSubscriptionId: true },
   });
   if (user?.plan === "LIFETIME") {
     await prisma.user.update({
@@ -227,8 +234,47 @@ export async function syncLatestStripeSubscriptionForUser(userId: string) {
     });
     return "premium" as const;
   }
-  if (!user?.stripeCustomerId && !user?.stripeSubscriptionId)
-    return "not_found" as const;
+  if (!user) return "not_found" as const;
+  if (!user.stripeCustomerId && !user.stripeSubscriptionId) {
+    const client = stripe();
+    const customers = await client.customers.list({ email: user.email, limit: 10 });
+    for (const customer of customers.data) {
+      const subscriptions = await client.subscriptions.list({
+        customer: customer.id,
+        status: STRIPE_SUBSCRIPTION_STATUS_ALL,
+        limit: STRIPE_TRIAL_LOOKBACK_SUBSCRIPTION_LIMIT,
+      });
+      const existing = subscriptions.data.find(
+        (subscription) =>
+          activePlan(subscription.status) === "PREMIUM" &&
+          isStripeRecoveryCandidate(
+            {
+              customerUserId: customer.metadata.userId,
+              subscriptionUserId: subscription.metadata.userId,
+            },
+            userId,
+          ),
+      );
+      if (!existing) continue;
+
+      const synced = await syncStripeSubscription(existing);
+      if (!synced) return "not_found" as const;
+      return stripeBillingSyncOutcome(existing.status);
+    }
+    if (user.plan === "FREE") {
+      await prisma.user.updateMany({
+        where: {
+          id: userId,
+          plan: "FREE",
+          stripeCustomerId: null,
+          stripeSubscriptionId: null,
+        },
+        data: { stripeSubscriptionStatus: null },
+      });
+      return "free" as const;
+    }
+    return "stripe_account_mismatch" as const;
+  }
 
   const client = stripe();
   if (user.stripeSubscriptionId) {
@@ -237,18 +283,6 @@ export async function syncLatestStripeSubscriptionForUser(userId: string) {
       .catch(async (error) => {
         const stripeError = error as { code?: string };
         if (stripeError.code !== "resource_missing") throw error;
-        await prisma.user.update({
-          where: { id: userId },
-          data: {
-            stripeSubscriptionId: null,
-            stripeSubscriptionStatus: null,
-            stripeTrialStartAt: null,
-            stripeTrialEndAt: null,
-            stripeCurrentPeriodEnd: null,
-            stripeCancelAt: null,
-            stripeCancelAtPeriodEnd: false,
-          },
-        });
         return null;
       });
     if (subscription) {
@@ -257,11 +291,7 @@ export async function syncLatestStripeSubscriptionForUser(userId: string) {
       return stripeBillingSyncOutcome(subscription.status);
     }
     if (!user.stripeCustomerId) {
-      await prisma.user.update({
-        where: { id: userId },
-        data: { plan: "FREE" },
-      });
-      return "stale_subscription" as const;
+      return "stripe_account_mismatch" as const;
     }
   }
 
@@ -283,23 +313,9 @@ export async function syncLatestStripeSubscriptionForUser(userId: string) {
         stripeError.raw?.param !== "customer"
       )
         throw error;
-      await prisma.user.update({
-        where: { id: userId },
-        data: {
-          plan: "FREE",
-          stripeCustomerId: null,
-          stripeSubscriptionId: null,
-          stripeSubscriptionStatus: null,
-          stripeTrialStartAt: null,
-          stripeTrialEndAt: null,
-          stripeCurrentPeriodEnd: null,
-          stripeCancelAt: null,
-          stripeCancelAtPeriodEnd: false,
-        },
-      });
       return null;
     });
-  if (!subscriptions) return "stale_customer" as const;
+  if (!subscriptions) return "stripe_account_mismatch" as const;
   if (subscriptions.data.some(hasStripeTrial))
     await markTrialUsedByUserId(userId);
   const active =

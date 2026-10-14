@@ -2,10 +2,12 @@ import type { Prisma } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { getAdminApiUser } from "@/lib/api-auth";
+import { MAX_ADMIN_EMAIL_REQUEST_BODY_BYTES } from "@/lib/app-constants";
 import { assertMailEnv } from "@/lib/env";
 import { userErrorMessage } from "@/lib/error-messages";
 import { sendAdminBulkEmail } from "@/lib/mail";
 import { prisma } from "@/lib/prisma";
+import { readJsonBodyWithLimit } from "@/lib/request-body";
 
 const schema = z.object({
   subject: z.string().trim().min(1).max(120),
@@ -17,17 +19,24 @@ export async function POST(request: Request) {
   const access = await getAdminApiUser();
   if (!access.ok) return access.response;
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
+  const body = await readJsonBodyWithLimit(
+    request,
+    MAX_ADMIN_EMAIL_REQUEST_BODY_BYTES,
+  );
+  if (!body.ok && body.reason === "too_large") {
+    return NextResponse.json(
+      { message: "メールの内容が大きすぎます。本文を短くして、もう一度お試しください。" },
+      { status: 413 },
+    );
+  }
+  if (!body.ok) {
     return NextResponse.json(
       { message: "入力内容を確認してください。" },
       { status: 400 },
     );
   }
 
-  const parsed = schema.safeParse(body);
+  const parsed = schema.safeParse(body.value);
   if (!parsed.success) {
     return NextResponse.json(
       { message: "件名、本文、送信対象を確認してください。" },

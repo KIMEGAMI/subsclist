@@ -43,6 +43,7 @@ function redirectToLogin(status: string) {
 async function fetchGoogleProfile(
   code: string,
   codeVerifier: string,
+  onStage: (stage: "google_token_exchange" | "google_profile_fetch") => void,
 ): Promise<GoogleProfile> {
   const redirectUri = new URL(
     GOOGLE_OAUTH_CALLBACK_PATH,
@@ -57,6 +58,7 @@ async function fetchGoogleProfile(
     code_verifier: codeVerifier,
   });
 
+  onStage("google_token_exchange");
   const tokenResponse = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -68,6 +70,7 @@ async function fetchGoogleProfile(
     throw new Error("Google認証トークンの取得に失敗しました。");
   }
 
+  onStage("google_profile_fetch");
   const profileResponse = await fetch(
     "https://openidconnect.googleapis.com/v1/userinfo",
     {
@@ -104,22 +107,45 @@ export async function GET(request: NextRequest) {
     return redirectToLogin("invalid");
   }
 
+  let failureStage: string = "google_token_exchange";
   try {
-    const profile = await fetchGoogleProfile(code, codeVerifier);
+    const profile = await fetchGoogleProfile(code, codeVerifier, (stage) => {
+      failureStage = stage;
+    });
     const email = profile.email.toLowerCase();
+    failureStage = "user_lookup";
     const existing = await prisma.user.findUnique({ where: { email } });
 
     if (!existing && isProtectedAccountEmail(email)) {
       return redirectToLogin("failed");
     }
 
+    failureStage = "user_upsert";
     const user = existing
-      ? await prisma.user.update({
-          where: { id: existing.id },
-          data: {
-            emailVerified: existing.emailVerified ?? new Date(),
-            name: existing.name ?? profile.name ?? null,
-          },
+      ? await prisma.$transaction(async (transaction) => {
+          const wasUnverified = existing.emailVerified === null;
+          if (wasUnverified) {
+            await transaction.emailVerificationToken.updateMany({
+              where: { userId: existing.id, usedAt: null },
+              data: { usedAt: new Date() },
+            });
+          }
+          return transaction.user.update({
+            where: { id: existing.id },
+            data: {
+              emailVerified: existing.emailVerified ?? new Date(),
+              name: existing.name ?? profile.name ?? null,
+              ...(wasUnverified
+                ? {
+                    passwordHash: await bcrypt.hash(
+                      `google:${profile.sub}:${crypto.randomUUID()}`,
+                      12,
+                    ),
+                    sessionVersion: { increment: 1 },
+                  }
+                : {}),
+            },
+          });
         })
       : await prisma.user.create({
           data: {
@@ -139,7 +165,9 @@ export async function GET(request: NextRequest) {
           },
         });
 
+    failureStage = "login_security";
     const loginSecurity = await recordSuccessfulLogin(user.id, request);
+    failureStage = "session_creation";
     await setSession(user.id, true);
     if (loginSecurity.newDevice && user.email.toLowerCase() !== env.demoUserEmail.toLowerCase()) {
       try {
@@ -155,8 +183,21 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(
       new URL(isAdminEmail(user.email) ? "/admin" : "/dashboard", env.appUrl),
     );
-  } catch {
-    console.error("Google login failed.");
+  } catch (error) {
+    const errorType = error instanceof Error ? error.name : "UnknownError";
+    const rawCode =
+      typeof error === "object" && error !== null && "code" in error
+        ? error.code
+        : undefined;
+    const errorCode =
+      typeof rawCode === "string" && /^[A-Z]\d{4}$/.test(rawCode)
+        ? rawCode
+        : undefined;
+    console.error("Google login failed.", {
+      stage: failureStage,
+      errorType,
+      ...(errorCode ? { errorCode } : {}),
+    });
     return redirectToLogin("failed");
   }
 }

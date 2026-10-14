@@ -5,10 +5,12 @@ import {
   CSV_IMPORT_TRANSACTION_TIMEOUT_MS,
   MAX_CSV_IMPORT_ERROR_COUNT,
   MAX_CSV_IMPORT_FILE_BYTES,
+  MAX_CSV_IMPORT_REQUEST_BODY_BYTES,
   MAX_CSV_IMPORT_ROWS,
 } from "@/lib/app-constants";
 import { isPremiumPlan } from "@/lib/plans";
 import { prisma } from "@/lib/prisma";
+import { readFormDataWithLimit } from "@/lib/request-body";
 import { stripePaymentMethodTypes } from "@/lib/stripe-payment-methods";
 import {
   normalizeSubscriptionImportName,
@@ -26,7 +28,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const form = await request.formData();
+  const formResult = await readFormDataWithLimit(request, MAX_CSV_IMPORT_REQUEST_BODY_BYTES);
+  if (!formResult.ok) {
+    const tooLarge = formResult.reason === "too_large";
+    return NextResponse.json(
+      { message: tooLarge ? "CSVファイルは1MB以下にしてください。" : "CSVファイルの形式を確認してください。" },
+      { status: tooLarge ? 413 : 400 },
+    );
+  }
+  const form = formResult.value;
   const file = form.get("file");
   if (!(file instanceof File)) {
     return NextResponse.json(
@@ -63,15 +73,11 @@ export async function POST(request: Request) {
     );
   }
 
-  const [preference, existingSubscriptions, paymentMethods] =
+  const [preference, paymentMethods] =
     await Promise.all([
       prisma.userPreference.findUnique({
         where: { userId: user.id },
         select: { defaultNotifyDaysBefore: true },
-      }),
-      prisma.subscription.findMany({
-        where: { userId: user.id, deletedAt: null },
-        select: { name: true },
       }),
       prisma.paymentMethod.findMany({
         where: {
@@ -83,9 +89,6 @@ export async function POST(request: Request) {
     ]);
   const defaultNotifyDaysBefore =
     preference?.defaultNotifyDaysBefore ?? DEFAULT_NOTIFY_DAYS_BEFORE;
-  const existingNames = new Set(
-    existingSubscriptions.map((item) => normalizeSubscriptionImportName(item.name)),
-  );
   const paymentMethodsByName = new Map(
     paymentMethods.map((item) => [normalizeSubscriptionImportName(item.name), item]),
   );
@@ -95,6 +98,14 @@ export async function POST(request: Request) {
   const errors: string[] = [];
   try {
     await prisma.$transaction(async (transaction) => {
+      await transaction.$queryRaw<Array<{ id: string }>>`SELECT id FROM \`User\` WHERE id = ${user.id} FOR UPDATE`;
+      const existingSubscriptions = await transaction.subscription.findMany({
+        where: { userId: user.id, deletedAt: null },
+        select: { name: true },
+      });
+      const existingNames = new Set(
+        existingSubscriptions.map((item) => normalizeSubscriptionImportName(item.name)),
+      );
       for (const row of parsed.rows) {
         const data = row.data;
         if (!data) {

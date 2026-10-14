@@ -2,8 +2,26 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildCompletedSavingsTimeline,
+  japanMonthInterval,
+  recentJapanMonthIntervals,
   summarizeCompletedSavings,
 } from "./subscription-savings.ts";
+
+test("月の集計境界は日本時間の月初から翌月初まで", () => {
+  const interval = japanMonthInterval(2026, 3);
+  assert.equal(interval.start.toISOString(), "2026-02-28T15:00:00.000Z");
+  assert.equal(interval.end.toISOString(), "2026-03-31T15:00:00.000Z");
+  assert.equal(interval.end.getTime() - interval.start.getTime(), 31 * 24 * 60 * 60 * 1_000);
+});
+
+test("直近月一覧は日本時間の基準年月で年をまたぐ", () => {
+  const intervals = recentJapanMonthIntervals(new Date("2026-01-31T14:00:00.000Z"), 3);
+  assert.deepEqual(intervals.map(({ year, month }) => ({ year, month })), [
+    { year: 2025, month: 11 },
+    { year: 2025, month: 12 },
+    { year: 2026, month: 1 },
+  ]);
+});
 
 test("指定年に解約完了した契約だけを削減実績へ集計する", () => {
   const result = summarizeCompletedSavings(

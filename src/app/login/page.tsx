@@ -13,5 +13,15 @@ export default async function LoginPage({ searchParams }: LoginPageProps) {
   }
 
   const params = await searchParams;
-  return <LoginView googleStatus={params?.google} notice={params?.notice} />;
+  const googleLoginEnabled = Boolean(
+    process.env.GOOGLE_CLIENT_ID?.trim() &&
+      process.env.GOOGLE_CLIENT_SECRET?.trim(),
+  );
+  return (
+    <LoginView
+      googleStatus={params?.google}
+      notice={params?.notice}
+      googleLoginEnabled={googleLoginEnabled}
+    />
+  );
 }

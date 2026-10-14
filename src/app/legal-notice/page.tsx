@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { PREMIUM_MONTHLY_PRICE_YEN, STRIPE_TRIAL_PERIOD_DAYS } from "@/lib/app-constants";
+import { publicSiteUrl } from "@/lib/site-url";
 
 export const metadata: Metadata = {
   title: "特定商取引法に基づく表記 | SubscList",
@@ -10,12 +11,12 @@ export const metadata: Metadata = {
 
 const rows = [
   ["Premium無料体験", `初回のみ${STRIPE_TRIAL_PERIOD_DAYS}日間お試し無料。無料期間中に解約した場合、Premium料金は請求されません。無料期間終了後は月額${PREMIUM_MONTHLY_PRICE_YEN}円（税込）で自動更新されます。`],
-  ["販売事業者", "SubscList 運営者"],
-  ["運営責任者", "Shinji"],
+  ["販売事業者", "神田靖雄"],
+  ["運営責任者", "神田靖雄"],
   ["所在地", "請求があった場合、法令に基づき遅滞なく開示します。"],
   ["電話番号", "請求があった場合、法令に基づき遅滞なく開示します。"],
-  ["メールアドレス", "saas.system.shinji@gmail.com"],
-  ["販売URL", "https://subsclist.shinji.work"],
+  ["お問い合わせ先", "お問い合わせフォームをご利用ください。"],
+  ["販売URL", publicSiteUrl.origin],
   ["販売価格", `Premiumプラン 月額${PREMIUM_MONTHLY_PRICE_YEN}円（税込）`],
   ["商品代金以外の必要料金", "インターネット接続料金、通信料金、振込手数料その他の利用環境に応じた費用はお客様の負担となります。"],
   ["支払い方法", "Stripe Checkoutの決済画面に表示されるクレジットカードその他の支払い方法"],
@@ -49,7 +50,7 @@ export default function LegalNoticePage() {
             </dl>
           </div>
           <p className="mt-6 text-xs leading-6 text-slate-500">
-            所在地および電話番号について開示請求がある場合は、上記メールアドレス宛にご連絡ください。請求者の本人確認および取引内容の確認後、法令に基づき遅滞なく提供します。
+            所在地および電話番号について開示請求がある場合は、<Link href="/contact" className="font-bold text-blue-700 underline">お問い合わせフォーム</Link>からご連絡ください。請求者の本人確認および取引内容の確認後、法令に基づき遅滞なく提供します。
           </p>
         </section>
       </div>

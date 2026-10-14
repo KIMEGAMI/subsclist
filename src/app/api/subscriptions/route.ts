@@ -126,24 +126,10 @@ export async function POST(request: Request) {
       { status: 400 },
     );
 
-  const [subscriptionCount, preference] = await Promise.all([
-    prisma.subscription.count({
-      where: { userId: user.id, deletedAt: null },
-    }),
-    prisma.userPreference.findUnique({
-      where: { userId: user.id },
-      select: { defaultNotifyDaysBefore: true },
-    }),
-  ]);
-  if (user.plan === "FREE" && subscriptionCount >= FREE_SUBSCRIPTION_LIMIT) {
-    return NextResponse.json(
-      {
-        message:
-          "Freeプランではサブスク登録は10件までです。Premiumに変更すると無制限に登録できます。",
-      },
-      { status: 403 },
-    );
-  }
+  const preference = await prisma.userPreference.findUnique({
+    where: { userId: user.id },
+    select: { defaultNotifyDaysBefore: true },
+  });
 
   const data = parsed.data;
   if (data.billingCycle === "CUSTOM" && !data.customCycleDays) {
@@ -175,7 +161,18 @@ export async function POST(request: Request) {
     data.notifyDaysBefore
     ?? preference?.defaultNotifyDaysBefore
     ?? DEFAULT_NOTIFY_DAYS_BEFORE;
-  const subscription = await prisma.$transaction(async (transaction) => {
+  const result = await prisma.$transaction(async (transaction) => {
+    const [lockedUser] = await transaction.$queryRaw<Array<{ id: string; plan: string }>>`
+      SELECT id, plan FROM User WHERE id = ${user.id} FOR UPDATE
+    `;
+    if (lockedUser?.plan === "FREE") {
+      const subscriptionCount = await transaction.subscription.count({
+        where: { userId: user.id, deletedAt: null },
+      });
+      if (subscriptionCount >= FREE_SUBSCRIPTION_LIMIT) {
+        return { limited: true as const };
+      }
+    }
     const created = await transaction.subscription.create({
       data: {
         userId: user.id,
@@ -221,8 +218,18 @@ export async function POST(request: Request) {
         enabled: data.notificationsEnabled,
       },
     });
-    return created;
+    return { limited: false as const, subscription: created };
   });
 
-  return NextResponse.json({ id: subscription.id });
+  if (result.limited) {
+    return NextResponse.json(
+      {
+        message:
+          "Freeプランではサブスク登録は10件までです。Premiumに変更すると無制限に登録できます。",
+      },
+      { status: 403 },
+    );
+  }
+
+  return NextResponse.json({ id: result.subscription.id });
 }

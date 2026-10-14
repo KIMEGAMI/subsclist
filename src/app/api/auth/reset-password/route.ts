@@ -1,13 +1,21 @@
 ﻿import bcrypt from "bcryptjs";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { clearSession, hashToken } from "@/lib/auth";
-import { MAX_PASSWORD_LENGTH, MIN_PASSWORD_LENGTH } from "@/lib/app-constants";
+import { clearSession, findTokenRecord } from "@/lib/auth";
+import { env } from "@/lib/env";
+import { authTokenLookupKey, claimAuthTokenLookup } from "@/lib/auth-token-rate-limit";
+import {
+  MAX_AUTH_REQUEST_BODY_BYTES,
+  MAX_PASSWORD_LENGTH,
+  MIN_PASSWORD_LENGTH,
+  ONE_TIME_TOKEN_MAX_LENGTH,
+} from "@/lib/app-constants";
 import { prisma } from "@/lib/prisma";
-import { readJsonBody } from "@/lib/request-body";
+import { readJsonBodyWithLimit } from "@/lib/request-body";
+import { requestClientIdentifier } from "@/lib/request-client";
 
 const schema = z.object({
-  token: z.string().min(20),
+  token: z.string().min(20).max(ONE_TIME_TOKEN_MAX_LENGTH),
   newPassword: z.string().min(MIN_PASSWORD_LENGTH).max(MAX_PASSWORD_LENGTH),
   newPasswordConfirm: z
     .string()
@@ -16,7 +24,23 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
-  const parsed = schema.safeParse(await readJsonBody(request));
+  const body = await readJsonBodyWithLimit(
+    request,
+    MAX_AUTH_REQUEST_BODY_BYTES,
+  );
+  if (!body.ok) {
+    const tooLarge = body.reason === "too_large";
+    return NextResponse.json(
+      {
+        message: tooLarge
+          ? "リクエストが大きすぎます。入力内容を確認してください。"
+          : "入力内容を確認してください。",
+      },
+      { status: tooLarge ? 413 : 400 },
+    );
+  }
+
+  const parsed = schema.safeParse(body.value);
   if (!parsed.success) {
     return NextResponse.json(
       { message: "再設定URLまたはパスワードの入力内容を確認してください。" },
@@ -31,10 +55,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const record = await prisma.passwordResetToken.findFirst({
-    where: { tokenHash: hashToken(parsed.data.token) },
-    include: { user: { select: { id: true, passwordHash: true } } },
-  });
+  const lookupKey = authTokenLookupKey(requestClientIdentifier(request), env.authSecret);
+
+  const record = await findTokenRecord(parsed.data.token, (tokenHash) =>
+    prisma.passwordResetToken.findFirst({
+      where: { tokenHash },
+      include: { user: { select: { id: true, passwordHash: true } } },
+    }),
+    () => claimAuthTokenLookup(lookupKey),
+  );
 
   const now = new Date();
   if (!record || record.usedAt || record.expiresAt <= now) {

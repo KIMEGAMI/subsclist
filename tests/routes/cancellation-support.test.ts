@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { MAX_CANCELLATION_CHECKLIST_REQUEST_BODY_BYTES } from "@/lib/app-constants";
 import { prisma } from "@/lib/prisma";
 import { createTestUser, deleteTestUsers, type TestUser, uniqueLabel } from "../helpers/database";
 
@@ -108,6 +109,25 @@ describe("解約支援の所有者境界", () => {
     await prisma.user.update({ where: { id: owner.id }, data: { plan: "PREMIUM" } });
     authState.user = { ...owner, plan: "PREMIUM" };
     expect((await updateChecklist(request({ completed: false }, "PATCH"), { params: Promise.resolve({ id: checklist.id }) })).status).toBe(200);
+    expect((await prisma.cancellationChecklistItem.findUniqueOrThrow({ where: { id: checklist.id } })).completedAt).toBeNull();
+  });
+
+  it("上限を超えるJSONでチェックリストを更新しない", async () => {
+    const owner = await user();
+    const item = await subscription(owner.id);
+    const checklist = await prisma.cancellationChecklistItem.create({
+      data: { userId: owner.id, subscriptionId: item.id, label: "容量制限テスト" },
+    });
+    authState.user = owner;
+    const oversized = new Request(`http://127.0.0.1:3100/api/cancellation-checklist/${checklist.id}`, {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ completed: true, extra: "x".repeat(MAX_CANCELLATION_CHECKLIST_REQUEST_BODY_BYTES) }),
+    });
+
+    const response = await updateChecklist(oversized, { params: Promise.resolve({ id: checklist.id }) });
+
+    expect(response.status).toBe(413);
     expect((await prisma.cancellationChecklistItem.findUniqueOrThrow({ where: { id: checklist.id } })).completedAt).toBeNull();
   });
 

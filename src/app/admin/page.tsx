@@ -1,9 +1,13 @@
-import { createAnnouncement, deleteAnnouncement, updateAnnouncementStatus, updateMaintenanceMode } from "@/app/admin/actions";
+import { createAnnouncement, createServiceAlternative, deleteAnnouncement, updateAnnouncementStatus, updateMaintenanceMode } from "@/app/admin/actions";
+import Link from "next/link";
 import { AppShell, Card, PageHeader } from "@/components/app-shell";
 import { AdminBulkEmailForm } from "@/components/contact-form";
+import { NewsSyncButton } from "@/components/news-sync-button";
+import { PriceSyncButton } from "@/components/price-sync-button";
 import { getAllAnnouncements, getMaintenanceMode } from "@/lib/admin";
 import { requireAdminUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { env } from "@/lib/env";
 import {
   NOTIFICATION_JOB_STATUS_KEY,
   notificationJobHealth,
@@ -39,7 +43,7 @@ function notificationHealthClass(health: NotificationJobHealth) {
 export default async function AdminPage() {
   await requireAdminUser();
 
-  const [users, announcements, maintenanceMode, notificationJobSetting] = await Promise.all([
+  const [users, announcements, maintenanceMode, notificationJobSetting, newsItemCount, serviceMasters] = await Promise.all([
     prisma.user.findMany({
       orderBy: { createdAt: "desc" },
       select: { id: true, name: true, email: true, plan: true, emailVerified: true, createdAt: true },
@@ -50,16 +54,19 @@ export default async function AdminPage() {
       where: { key: NOTIFICATION_JOB_STATUS_KEY },
       select: { value: true, updatedAt: true },
     }),
+    prisma.newsItem.count({ where: { trustLevel: "OFFICIAL" } }),
+    prisma.serviceMaster.findMany({ where: { status: "ACTIVE" }, orderBy: { name: "asc" }, select: { id: true, name: true } }),
   ]);
   const notificationJobStatus = parseNotificationJobStatus(notificationJobSetting?.value);
   const notificationHealth = notificationJobHealth(notificationJobStatus);
   const notificationReferenceAt = notificationJobStatus
     ? new Date(notificationJobStatus.completedAt ?? notificationJobStatus.startedAt)
     : null;
+  const mailReady = Boolean(env.mailFrom && (env.resendApiKey || (env.smtpHost && env.smtpUser && env.smtpPass)));
 
   return (
     <AppShell>
-      <PageHeader title="管理者メニュー" description="お知らせ、一斉メール、ユーザー、メンテナンス状態を管理します。" />
+      <PageHeader title="管理者メニュー" description="お知らせ、一斉メール、ユーザー、メンテナンス状態を管理します。" action={<Link href="/manual#admin" className="btn-secondary">管理者向け手順</Link>} />
       <div className="grid gap-5 xl:grid-cols-[minmax(0,0.95fr)_minmax(0,1.05fr)]">
         <div className="space-y-5">
           <Card className="scroll-mt-6" id="maintenance">
@@ -120,12 +127,53 @@ export default async function AdminPage() {
             )}
           </Card>
 
+          <Card className="scroll-mt-6" id="official-news-sync">
+            <h2 className="text-lg font-black">契約ニュースの手動取得</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">
+                定期実行は行いません。必要なときに公式RSSと日本語ニュースを取得し、各ユーザーが契約中のサービスに関係する記事だけを表示します。
+            </p>
+            <p className="mt-3 text-sm font-black text-slate-950">保存済みの公式更新: {newsItemCount}件</p>
+            <NewsSyncButton />
+          </Card>
+
+          <Card className="scroll-mt-6" id="mail-config">
+            <h2 className="text-lg font-black">メール送信設定</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">認証メール、パスワード再設定、問い合わせ通知の送信元を確認します。パスワードやAPIキーは表示しません。</p>
+            <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-lg border border-slate-100 bg-slate-50 p-3"><dt className="text-xs font-bold text-slate-500">送信元</dt><dd className="mt-1 break-all font-black text-slate-950">{env.mailFrom || "未設定"}</dd></div>
+              <div className="rounded-lg border border-slate-100 bg-slate-50 p-3"><dt className="text-xs font-bold text-slate-500">送信方式</dt><dd className="mt-1 break-all font-black text-slate-950">{env.resendApiKey ? "Resend API" : env.smtpHost ? `SMTP ${env.smtpHost}:${env.smtpPort}` : "未設定"}</dd></div>
+            </dl>
+            {!mailReady ? (
+              <p className="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm font-bold leading-6 text-red-800">メール設定が不足しています。Resendを使う場合はRESEND_API_KEYとRESEND_FROM、SMTPを使う場合はMAIL_HOST、MAIL_USERNAME、MAIL_PASSWORDを確認してください。</p>
+            ) : (
+              <p className="mt-4 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm font-bold leading-6 text-emerald-900">メール送信設定済みです。Resendを使う場合は、送信元ドメインがResend側で認証済みであることを確認してください。</p>
+            )}
+          </Card>
+
+          <Card className="scroll-mt-6" id="official-prices">
+            <h2 className="text-lg font-black">公式価格監視</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">料金ページの構造化データだけを確認します。取得できないサービスの既存履歴は変更しません。</p>
+            <PriceSyncButton />
+          </Card>
+
+          <Card className="scroll-mt-6" id="alternatives">
+            <h2 className="text-lg font-black">代替サービス登録</h2>
+            <p className="mt-2 text-sm leading-6 text-slate-600">管理者が確認した候補だけを登録します。価格は価格監視で確認できた場合のみ表示されます。</p>
+            <form action={createServiceAlternative} className="mt-4 space-y-3">
+              <select name="serviceId" className="input" required defaultValue=""><option value="" disabled>現在のサービス</option>{serviceMasters.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}</select>
+              <select name="alternativeServiceId" className="input" required defaultValue=""><option value="" disabled>代替候補</option>{serviceMasters.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}</select>
+              <div className="grid gap-3 sm:grid-cols-2"><input name="categoryMatch" className="input" type="number" min="0" max="100" placeholder="カテゴリ一致率（任意）" /><input name="featureSimilarity" className="input" type="number" min="0" max="100" placeholder="機能一致率（任意）" /></div>
+              <input name="note" className="input" maxLength={500} placeholder="比較メモ（任意）" />
+              <button className="btn-primary" type="submit">代替候補を保存</button>
+            </form>
+          </Card>
+
           <Card className="scroll-mt-6" id="bulk-email">
             <h2 className="text-lg font-black">一斉メール送信</h2>
             <p className="mt-2 text-sm leading-6 text-slate-600">
-              ユーザーへ個別送信します。送信元は SubscList &lt;saas.system.shinji@gmail.com&gt; です。
+              登録者へ1人ずつ個別送信します。送信元は「メール送信設定」に表示されるアドレスです。
             </p>
-            <AdminBulkEmailForm />
+            <AdminBulkEmailForm from={env.mailFrom} />
           </Card>
 
           <Card className="scroll-mt-6" id="announcements">

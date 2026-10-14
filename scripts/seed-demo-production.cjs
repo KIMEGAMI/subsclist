@@ -3,8 +3,10 @@ const fs = require("node:fs");
 const path = require("node:path");
 const bcrypt = require("bcryptjs");
 const mariadb = require("mariadb");
+const { assertDemoEmailIsNotAdmin, assertSeedRecordOwner } = require("./lib/demo-account-guard.cjs");
 
-const demoEmail = process.env.DEMO_USER_EMAIL || "user@shinji.work";
+const defaultDemoEmail = "user@shinji.work";
+const defaultAdminEmail = "admin@shinji.work";
 const demoUserId = "demo_user_shinji_work";
 
 function readEnv() {
@@ -40,7 +42,7 @@ async function one(connection, sql, params) {
   return rows[0] || null;
 }
 
-async function ensureUser(connection, demoPassword) {
+async function ensureUser(connection, demoPassword, demoEmail) {
   const passwordHash = await bcrypt.hash(demoPassword, 12);
   const existing = await one(connection, "SELECT id FROM User WHERE email = ? LIMIT 1", [demoEmail]);
   if (existing) {
@@ -61,7 +63,7 @@ async function ensureUser(connection, demoPassword) {
 async function upsertCategory(connection, userId, id, name, color) {
   const existing = await one(connection, "SELECT id FROM Category WHERE userId = ? AND name = ? LIMIT 1", [userId, name]);
   if (existing) {
-    await connection.query("UPDATE Category SET color = ?, updatedAt = NOW() WHERE id = ?", [color, existing.id]);
+    await connection.query("UPDATE Category SET color = ?, updatedAt = NOW() WHERE id = ? AND userId = ?", [color, existing.id, userId]);
     return existing.id;
   }
   await connection.query(
@@ -72,9 +74,10 @@ async function upsertCategory(connection, userId, id, name, color) {
 }
 
 async function upsertPaymentMethod(connection, userId, id, name, type, memo = null) {
-  const existing = await one(connection, "SELECT id FROM PaymentMethod WHERE id = ? LIMIT 1", [id]);
+  const existing = await one(connection, "SELECT id, userId FROM PaymentMethod WHERE id = ? LIMIT 1", [id]);
   if (existing) {
-    await connection.query("UPDATE PaymentMethod SET name = ?, type = ?, memo = ?, updatedAt = NOW() WHERE id = ?", [name, type, memo, id]);
+    assertSeedRecordOwner(existing, userId, "Demo payment method");
+    await connection.query("UPDATE PaymentMethod SET name = ?, type = ?, memo = ?, updatedAt = NOW() WHERE id = ? AND userId = ?", [name, type, memo, id, userId]);
     return id;
   }
   await connection.query(
@@ -85,7 +88,8 @@ async function upsertPaymentMethod(connection, userId, id, name, type, memo = nu
 }
 
 async function upsertSubscription(connection, userId, item) {
-  const existing = await one(connection, "SELECT id FROM Subscription WHERE id = ? LIMIT 1", [item.id]);
+  const existing = await one(connection, "SELECT id, userId FROM Subscription WHERE id = ? LIMIT 1", [item.id]);
+  assertSeedRecordOwner(existing, userId, "Demo subscription");
   const values = [
     item.categoryId,
     item.paymentMethodId,
@@ -112,8 +116,8 @@ async function upsertSubscription(connection, userId, item) {
   ];
   if (existing) {
     await connection.query(
-      "UPDATE Subscription SET categoryId = ?, paymentMethodId = ?, name = ?, price = ?, billingCycle = ?, nextBillingDate = ?, status = ?, memo = ?, serviceUrl = ?, cancellationUrl = ?, trialEndsAt = ?, cancellationDeadline = ?, lastReviewedAt = ?, notifyDaysBefore = ?, usageFrequency = ?, priority = ?, businessUsePercent = ?, logoUrl = ?, cancellationStatus = ?, plannedCancelAt = ?, cancellationMemo = ?, cancellationCompletedAt = ?, deletedAt = NULL, updatedAt = NOW() WHERE id = ?",
-      [...values, item.id],
+      "UPDATE Subscription SET categoryId = ?, paymentMethodId = ?, name = ?, price = ?, billingCycle = ?, nextBillingDate = ?, status = ?, memo = ?, serviceUrl = ?, cancellationUrl = ?, trialEndsAt = ?, cancellationDeadline = ?, lastReviewedAt = ?, notifyDaysBefore = ?, usageFrequency = ?, priority = ?, businessUsePercent = ?, logoUrl = ?, cancellationStatus = ?, plannedCancelAt = ?, cancellationMemo = ?, cancellationCompletedAt = ?, deletedAt = NULL, updatedAt = NOW() WHERE id = ? AND userId = ?",
+      [...values, item.id, userId],
     );
     return item.id;
   }
@@ -158,8 +162,9 @@ async function seedPaymentHistories(connection, userId, subscriptions) {
     for (const month of months) {
       if (!shouldCreatePayment(subscription, month)) continue;
       const id = `demo_hist_${subscription.id}_${month.year}${String(month.month).padStart(2, "0")}`;
-      const existing = await one(connection, "SELECT id FROM PaymentHistory WHERE id = ? LIMIT 1", [id]);
+      const existing = await one(connection, "SELECT id, userId FROM PaymentHistory WHERE id = ? LIMIT 1", [id]);
       if (existing) {
+        assertSeedRecordOwner(existing, userId, "Demo payment history");
         skipped++;
         continue;
       }
@@ -177,9 +182,10 @@ async function seedCancellationWorkflow(connection, userId, subscriptionId) {
   const labels = ["契約アカウントを確認", "更新日前に解約手続き", "解約完了メールを保存", "次回請求が止まったか確認"];
   for (let index = 0; index < labels.length; index++) {
     const id = `demo_cancel_check_${index + 1}`;
-    const existing = await one(connection, "SELECT id FROM CancellationChecklistItem WHERE id = ? LIMIT 1", [id]);
+    const existing = await one(connection, "SELECT id, userId FROM CancellationChecklistItem WHERE id = ? LIMIT 1", [id]);
     if (existing) {
-      await connection.query("UPDATE CancellationChecklistItem SET label = ?, sortOrder = ?, updatedAt = NOW() WHERE id = ?", [labels[index], index, id]);
+      assertSeedRecordOwner(existing, userId, "Demo cancellation checklist");
+      await connection.query("UPDATE CancellationChecklistItem SET label = ?, sortOrder = ?, updatedAt = NOW() WHERE id = ? AND userId = ?", [labels[index], index, id, userId]);
       continue;
     }
     await connection.query(
@@ -189,9 +195,10 @@ async function seedCancellationWorkflow(connection, userId, subscriptionId) {
   }
 
   const evidenceId = "demo_cancel_evidence_1";
-  const existingEvidence = await one(connection, "SELECT id FROM CancellationEvidence WHERE id = ? LIMIT 1", [evidenceId]);
+  const existingEvidence = await one(connection, "SELECT id, userId FROM CancellationEvidence WHERE id = ? LIMIT 1", [evidenceId]);
   if (existingEvidence) {
-    await connection.query("UPDATE CancellationEvidence SET title = ?, kind = ?, memo = ?, updatedAt = NOW() WHERE id = ?", ["解約手順ページ確認", "URL", "demo evidence", evidenceId]);
+    assertSeedRecordOwner(existingEvidence, userId, "Demo cancellation evidence");
+    await connection.query("UPDATE CancellationEvidence SET title = ?, kind = ?, memo = ?, updatedAt = NOW() WHERE id = ? AND userId = ?", ["解約手順ページ確認", "URL", "demo evidence", evidenceId, userId]);
     return;
   }
   await connection.query(
@@ -203,18 +210,31 @@ async function seedCancellationWorkflow(connection, userId, subscriptionId) {
 async function main() {
   const env = { ...readEnv(), ...process.env };
   const demoPassword = env.DEMO_USER_PASSWORD;
+  const demoEmail = env.DEMO_USER_EMAIL || defaultDemoEmail;
+  const adminEmail = env.ADMIN_USER_EMAIL || defaultAdminEmail;
   if (!demoPassword) throw new Error("DEMO_USER_PASSWORD is not set.");
+  assertDemoEmailIsNotAdmin(demoEmail, adminEmail);
   if (!env.DATABASE_URL) throw new Error("DATABASE_URL is not set.");
   const connection = await mariadb.createConnection(databaseConfig(env.DATABASE_URL));
 
   try {
     await connection.beginTransaction();
-    const userId = await ensureUser(connection, demoPassword);
+    const userId = await ensureUser(connection, demoPassword, demoEmail);
 
-    await connection.query(
-      "INSERT INTO UserPreference (id, userId, monthlyBudget, defaultNotifyDaysBefore, notificationHour, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, NOW(), NOW()) ON DUPLICATE KEY UPDATE monthlyBudget = VALUES(monthlyBudget), defaultNotifyDaysBefore = VALUES(defaultNotifyDaysBefore), notificationHour = VALUES(notificationHour), updatedAt = NOW()",
-      ["demo_pref_shinji", userId, 18000, 7, 9],
-    );
+    const preference = await one(connection, "SELECT id FROM UserPreference WHERE userId = ? LIMIT 1", [userId]);
+    if (preference) {
+      await connection.query(
+        "UPDATE UserPreference SET monthlyBudget = ?, defaultNotifyDaysBefore = ?, notificationHour = ?, updatedAt = NOW() WHERE userId = ?",
+        [18000, 7, 9, userId],
+      );
+    } else {
+      const preferenceIdOwner = await one(connection, "SELECT userId FROM UserPreference WHERE id = ? LIMIT 1", ["demo_pref_shinji"]);
+      assertSeedRecordOwner(preferenceIdOwner, userId, "Demo preference");
+      await connection.query(
+        "INSERT INTO UserPreference (id, userId, monthlyBudget, defaultNotifyDaysBefore, notificationHour, createdAt, updatedAt) VALUES (?, ?, ?, ?, ?, NOW(), NOW())",
+        ["demo_pref_shinji", userId, 18000, 7, 9],
+      );
+    }
 
     const categoryIds = {
       entertainment: await upsertCategory(connection, userId, "demo_cat_entertainment", "エンタメ", "#7c3aed"),
@@ -264,9 +284,10 @@ async function main() {
       subscription.businessUsePercent = businessUseBySubscriptionId.get(subscription.id) ?? 0;
       await upsertSubscription(connection, userId, subscription);
       const noticeId = `demo_notice_${subscription.id}`;
-      const existingNotice = await one(connection, "SELECT id FROM NotificationSetting WHERE id = ? LIMIT 1", [noticeId]);
+      const existingNotice = await one(connection, "SELECT id, userId FROM NotificationSetting WHERE id = ? LIMIT 1", [noticeId]);
       if (existingNotice) {
-        await connection.query("UPDATE NotificationSetting SET daysBefore = ?, enabled = true, updatedAt = NOW() WHERE id = ?", [subscription.notifyDaysBefore ?? 7, noticeId]);
+        assertSeedRecordOwner(existingNotice, userId, "Demo notification setting");
+        await connection.query("UPDATE NotificationSetting SET daysBefore = ?, enabled = true, updatedAt = NOW() WHERE id = ? AND userId = ?", [subscription.notifyDaysBefore ?? 7, noticeId, userId]);
       } else {
         await connection.query(
           "INSERT INTO NotificationSetting (id, userId, subscriptionId, daysBefore, enabled, createdAt, updatedAt) VALUES (?, ?, ?, ?, true, NOW(), NOW())",
@@ -279,7 +300,7 @@ async function main() {
     await seedCancellationWorkflow(connection, userId, "demo_sub_adobe");
     await connection.commit();
 
-    console.log(JSON.stringify({ user: demoEmail, subscriptions: subscriptions.length, paymentHistories: historyResult }, null, 2));
+    console.log(JSON.stringify({ subscriptions: subscriptions.length, paymentHistories: historyResult }, null, 2));
   } catch (error) {
     await connection.rollback();
     throw error;

@@ -1,4 +1,6 @@
 import { NextRequest } from "next/server";
+import bcrypt from "bcryptjs";
+import { hashToken } from "@/lib/auth";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { prisma } from "@/lib/prisma";
 import { createTestUser, deleteTestUsers, type TestUser, uniqueLabel } from "../helpers/database";
@@ -107,6 +109,14 @@ describe("Google OAuth", () => {
   it("既存ユーザーを検証済みにし、新端末通知失敗でもログインを完了する", async () => {
     const owner = await createTestUser({ verified: false, name: "既存ユーザー" });
     createdUserIds.push(owner.id);
+    const outstandingToken = uniqueLabel("OutstandingEmailVerification");
+    await prisma.emailVerificationToken.create({
+      data: {
+        userId: owner.id,
+        tokenHash: hashToken(outstandingToken),
+        expiresAt: new Date(Date.now() + 60_000),
+      },
+    });
     await prisma.trustedLoginDevice.create({
       data: { userId: owner.id, tokenHash: uniqueLabel("known-device-hash"), clientLabel: "既存端末" },
     });
@@ -120,7 +130,11 @@ describe("Google OAuth", () => {
 
     const response = await googleCallback(new NextRequest(`http://127.0.0.1:3100/api/auth/google/callback?code=code&state=${state}`));
     expect(response.headers.get("location")).toBe("http://127.0.0.1:3100/dashboard");
-    expect((await prisma.user.findUniqueOrThrow({ where: { id: owner.id } })).emailVerified).toBeInstanceOf(Date);
+    const updated = await prisma.user.findUniqueOrThrow({ where: { id: owner.id } });
+    expect(updated.emailVerified).toBeInstanceOf(Date);
+    expect(updated.sessionVersion).toBe(owner.sessionVersion + 1);
+    expect(await bcrypt.compare(owner.password, updated.passwordHash)).toBe(false);
+    expect(await prisma.emailVerificationToken.count({ where: { userId: owner.id, usedAt: null } })).toBe(0);
     expect(sessionMock).toHaveBeenCalledWith(owner.id, true);
     expect(newDeviceMailMock).toHaveBeenCalledOnce();
   });
@@ -135,8 +149,7 @@ describe("Stripe課金状態同期", () => {
     ["premium", 200, false],
     ["attention", 200, true],
     ["free", 200, false],
-    ["stale_subscription", 409, false],
-    ["stale_customer", 409, false],
+    ["stripe_account_mismatch", 409, false],
     ["missing", 404, false],
   ] as const)("同期結果 %s を日本語応答へ変換する", async (status, expectedStatus, attention) => {
     const owner = await createTestUser();

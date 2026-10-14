@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { MAX_CSV_IMPORT_REQUEST_BODY_BYTES } from "@/lib/app-constants";
 import { prisma } from "@/lib/prisma";
 import { createTestUser, deleteTestUsers, type TestUser, uniqueLabel } from "../helpers/database";
 
@@ -65,6 +66,32 @@ describe("CSV Subscription importとMySQL", () => {
     expect(saved.notificationSettings).toEqual([
       expect.objectContaining({ userId: owner.id, enabled: true }),
     ]);
+  });
+
+  it("multipart本文の上限超過をCSV解析前に拒否する", async () => {
+    const owner = await user({ plan: "PREMIUM" });
+    authState.user = owner;
+    const response = await POST(new Request("http://127.0.0.1:3100/api/import/subscriptions", {
+      method: "POST",
+      headers: { "content-type": "multipart/form-data; boundary=test-boundary" },
+      body: "x".repeat(MAX_CSV_IMPORT_REQUEST_BODY_BYTES + 1),
+    }));
+
+    expect(response.status).toBe(413);
+    expect(await prisma.subscription.count({ where: { userId: owner.id } })).toBe(0);
+  });
+
+  it("同時CSVインポートで同一契約を二重登録しない", async () => {
+    const owner = await user({ plan: "PREMIUM" });
+    authState.user = owner;
+    const name = uniqueLabel("ConcurrentCsv");
+    const csv = `${header}\n${name},1480,MONTHLY,2026-10-01,,`;
+    const responses = await Promise.all([POST(request(csv)), POST(request(csv))]);
+
+    expect(responses.map((response) => response.status)).toEqual([200, 200]);
+    const results = await Promise.all(responses.map((response) => response.json()));
+    expect(results.reduce((sum, result) => sum + result.created, 0)).toBe(1);
+    expect(await prisma.subscription.count({ where: { userId: owner.id, name } })).toBe(1);
   });
 
   it("他ユーザーだけが持つ支払い方法名を参照せず行をスキップする", async () => {

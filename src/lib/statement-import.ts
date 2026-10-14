@@ -56,7 +56,7 @@ export type StatementPaymentMatch = {
 };
 
 function normalizedHeader(value: string) {
-  return value.normalize("NFKC").toLocaleLowerCase("ja-JP").replace(/[\s　_\-（）()]/g, "");
+  return value.normalize("NFKC").toLocaleLowerCase("ja-JP").replace(/[\s\u3000_（）()-]/g, "");
 }
 
 function valueFor(row: Record<string, string>, candidates: readonly string[]) {
@@ -93,7 +93,7 @@ function parseDate(value: string): string | null {
   const matched = value
     .normalize("NFKC")
     .trim()
-    .match(/^(\d{4})[年/.\-](\d{1,2})[月/.\-](\d{1,2})日?$/);
+    .match(/^(\d{4})[年/.-](\d{1,2})[月/.-](\d{1,2})日?$/);
   if (!matched) return null;
   const iso = `${matched[1]}-${matched[2].padStart(2, "0")}-${matched[3].padStart(2, "0")}`;
   return parseIsoCalendarDate(iso) ? iso : null;

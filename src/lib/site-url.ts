@@ -1,4 +1,4 @@
-const DEFAULT_PUBLIC_SITE_URL = "https://subsclist.shinji.work";
+const DEFAULT_PUBLIC_SITE_URL = "https://subsclist.kimegami.jp";
 
 function configuredSiteUrl() {
   const value = process.env.APP_URL ?? process.env.NEXTAUTH_URL ?? DEFAULT_PUBLIC_SITE_URL;

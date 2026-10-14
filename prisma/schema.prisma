@@ -94,6 +94,18 @@ enum PaymentMethodType {
   OTHER
 }
 
+enum ServiceMasterStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum InformationTrustLevel {
+  OFFICIAL
+  VERIFIED
+  INFERRED
+  UNKNOWN
+}
+
 model User {
   id                         String                      @id @default(cuid())
   name                       String?
@@ -108,6 +120,9 @@ model User {
   plan                       Plan                        @default(FREE)
   stripeCustomerId           String?                     @unique
   stripeSubscriptionId       String?                     @unique
+  stripeCheckoutSessionId    String?                     @unique
+  stripeCheckoutLockToken    String?                     @unique
+  stripeCheckoutLockUntil    DateTime?
   stripeSubscriptionStatus   String?
   stripeTrialStartAt         DateTime?
   stripeTrialEndAt           DateTime?
@@ -134,12 +149,15 @@ model User {
   weeklyUsageReviews         WeeklyUsageReview[]
   subscriptionPriceHistories SubscriptionPriceHistory[]
   savingChallenges           SavingChallenge[]
+  savingsEvents              SavingsEvent[]
   monthlyCloses              MonthlyClose[]
   statementMerchantAliases   StatementMerchantAlias[]
   statementPaymentImports    StatementPaymentImport[]
   trustedLoginDevices        TrustedLoginDevice[]
   loginSecurityEvents        LoginSecurityEvent[]
   geminiAnalysisRequests     GeminiAnalysisRequest[]
+  serviceWatchlist           ServiceWatchlist[]
+  newsFeedback               UserNewsFeedback[]
 }
 
 model GeminiAnalysisRequest {
@@ -224,6 +242,7 @@ model Subscription {
   userId                   String
   categoryId               String?
   paymentMethodId          String?
+  serviceMasterId          String?
   billingProvider          String                      @default("DIRECT") @db.VarChar(30)
   name                     String
   price                    Int
@@ -264,14 +283,154 @@ model Subscription {
   notificationDeliveries   NotificationDelivery[]
   paymentHistories         PaymentHistory[]
   paymentMethod            PaymentMethod?              @relation(fields: [paymentMethodId], references: [id], onDelete: SetNull)
+  serviceMaster            ServiceMaster?              @relation(fields: [serviceMasterId], references: [id], onDelete: SetNull)
   usageRecords             SubscriptionUsage[]
   weeklyUsageReviews       WeeklyUsageReview[]
   priceHistories           SubscriptionPriceHistory[]
   savingChallenges         SavingChallenge[]
+  savingsEvents            SavingsEvent[]
   statementMerchantAliases StatementMerchantAlias[]
   user                     User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, status, nextBillingDate])
+  @@index([serviceMasterId])
+}
+
+model ServiceMaster {
+  id             String              @id @default(cuid())
+  slug           String              @unique @db.VarChar(100)
+  name           String              @db.VarChar(100)
+  category       String              @db.VarChar(50)
+  officialUrl    String              @db.Text
+  pricingUrl     String?             @db.Text
+  newsUrl        String?             @db.Text
+  status         ServiceMasterStatus @default(ACTIVE)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  subscriptions  Subscription[]
+  watchlistItems ServiceWatchlist[]
+  newsItems      NewsItem[]
+  priceSnapshots ServicePriceSnapshot[]
+  priceChanges   ServicePriceChange[]
+  alternativesFrom ServiceAlternative[] @relation("ServiceAlternatives")
+  alternativesTo   ServiceAlternative[] @relation("ServiceAlternativeTargets")
+
+  @@index([status, name])
+}
+
+model ServicePriceSnapshot {
+  id          String                @id @default(cuid())
+  serviceId   String
+  planName    String                @db.VarChar(100)
+  billingCycle String               @db.VarChar(30)
+  currency    String                @db.Char(3)
+  amount      Int
+  taxIncluded Boolean?
+  sourceUrl   String                @db.Text
+  trustLevel  InformationTrustLevel @default(OFFICIAL)
+  fetchedAt   DateTime              @default(now())
+  effectiveAt DateTime?
+  createdAt   DateTime              @default(now())
+  service     ServiceMaster         @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId, planName, fetchedAt])
+}
+
+model ServicePriceChange {
+  id            String        @id @default(cuid())
+  serviceId     String
+  planName      String        @db.VarChar(100)
+  oldAmount     Int
+  newAmount     Int
+  changeAmount  Int
+  changePercent Float?
+  currency      String        @db.Char(3)
+  sourceUrl     String        @db.Text
+  verified      Boolean       @default(true)
+  effectiveAt   DateTime?
+  createdAt     DateTime      @default(now())
+  service       ServiceMaster @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([serviceId, createdAt])
+}
+
+model ServiceAlternative {
+  id                 String        @id @default(cuid())
+  serviceId          String
+  alternativeServiceId String
+  categoryMatch      Int?
+  featureSimilarity  Int?
+  note               String?       @db.VarChar(500)
+  createdAt          DateTime      @default(now())
+  service            ServiceMaster @relation("ServiceAlternatives", fields: [serviceId], references: [id], onDelete: Cascade)
+  alternativeService ServiceMaster @relation("ServiceAlternativeTargets", fields: [alternativeServiceId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceId, alternativeServiceId])
+  @@index([alternativeServiceId])
+}
+
+model NewsItem {
+  id          String                @id @default(cuid())
+  serviceId   String?
+  title       String                @db.VarChar(300)
+  summaryBase String?               @db.Text
+  sourceUrl   String                @db.Text
+  sourceName  String                @db.VarChar(100)
+  sourceType  String                @db.VarChar(50)
+  publishedAt DateTime?
+  fetchedAt   DateTime              @default(now())
+  category    String                @db.VarChar(50)
+  importance  Int                   @default(0)
+  trustLevel  InformationTrustLevel @default(UNKNOWN)
+  contentHash String                @unique @db.Char(64)
+  service     ServiceMaster?        @relation(fields: [serviceId], references: [id], onDelete: SetNull)
+  feedback    UserNewsFeedback[]
+
+  @@index([serviceId, publishedAt])
+  @@index([publishedAt, importance])
+}
+
+model NewsGenerationRun {
+  id                   String   @id @default(cuid())
+  dayKey               DateTime @unique @db.Date
+  status               String   @db.VarChar(20)
+  officialImported     Int      @default(0)
+  generatedArticles    Int      @default(0)
+  failedArticleCount   Int      @default(0)
+  lastError            String?  @db.Text
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+}
+
+model UserNewsFeedback {
+  id         String   @id @default(cuid())
+  userId     String
+  newsItemId String
+  feedback   String   @db.VarChar(20)
+  clickedAt  DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  newsItem   NewsItem @relation(fields: [newsItemId], references: [id], onDelete: Cascade)
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, newsItemId])
+  @@index([newsItemId])
+}
+
+model ServiceWatchlist {
+  id           String        @id @default(cuid())
+  userId       String
+  serviceId    String
+  watchPrice   Boolean       @default(true)
+  watchNews    Boolean       @default(true)
+  watchNewPlan Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  service      ServiceMaster @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, serviceId])
+  @@index([serviceId])
 }
 
 model EmailChangeToken {
@@ -307,6 +466,26 @@ model SavingChallenge {
   @@unique([userId, subscriptionId, year, month])
   @@index([userId, decidedAt])
   @@index([subscriptionId])
+}
+
+model SavingsEvent {
+  id                  String       @id @default(cuid())
+  userId              String
+  subscriptionId      String
+  type                String       @db.VarChar(30)
+  beforeMonthlyAmount Int
+  afterMonthlyAmount  Int
+  monthlySaving       Int
+  annualSaving        Int
+  confirmedAt         DateTime     @default(now())
+  note                String?      @db.VarChar(500)
+  createdAt           DateTime     @default(now())
+  dedupeKey           String       @unique @db.VarChar(191)
+  subscription        Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  user                User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, confirmedAt])
+  @@index([subscriptionId, confirmedAt])
 }
 
 model MonthlyClose {
@@ -433,7 +612,9 @@ model NotificationDelivery {
   userId         String
   type           String
   scheduledFor   DateTime
-  sentAt         DateTime     @default(now())
+  sentAt         DateTime?
+  claimedAt      DateTime?
+  claimToken     String?      @unique
   subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -446,7 +627,9 @@ model UserNotificationDelivery {
   userId       String
   type         String
   scheduledFor DateTime
-  sentAt       DateTime @default(now())
+  sentAt       DateTime?
+  claimedAt    DateTime?
+  claimToken   String?  @unique
   user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, type, scheduledFor])
@@ -545,10 +728,11 @@ model NotificationSetting {
 }
 
 model StripeWebhookEvent {
-  id          String    @id @db.VarChar(255)
-  type        String    @db.VarChar(100)
-  createdAt   DateTime  @default(now())
-  processedAt DateTime?
+  id                   String    @id @db.VarChar(255)
+  type                 String    @db.VarChar(100)
+  createdAt            DateTime  @default(now())
+  processingStartedAt  DateTime  @default(now())
+  processedAt          DateTime?
 
   @@index([processedAt])
 }
