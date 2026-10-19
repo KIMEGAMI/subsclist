@@ -5,10 +5,8 @@ import { AUTH_FLOW_TIMEOUT_MS, REGISTRATION_E2E_CLIENT_IP } from "./constants";
 test("公開ページとPWA資産を取得できる", async ({ page, request }) => {
   const publicPages = [
     ["/", "仕事のサブスクを、判断できる台帳へ。"],
-    ["/pricing", "継続課金を、毎月判断できる状態に。"],
     ["/terms", "利用規約"],
     ["/privacy", "プライバシーポリシー"],
-    ["/legal-notice", "特定商取引法に基づく表記"],
     ["/faq", "よくある質問"],
     ["/manual", "SubscList 操作マニュアル"],
     ["/contact", "お問い合わせ"],
@@ -22,6 +20,16 @@ test("公開ページとPWA資産を取得できる", async ({ page, request }) 
   expect(manifest.ok()).toBe(true);
   expect((await manifest.json()) as { name: string }).toMatchObject({ name: "サブスクリスト" });
   expect((await request.get("/sw.js")).ok()).toBe(true);
+});
+
+test("料金と旧販売表記のURLは無料公開版トップへ案内する", async ({ page }) => {
+  for (const path of ["/pricing", "/legal-notice"]) {
+    const response = await page.goto(path);
+    expect(response?.ok(), path).toBe(true);
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole("heading", { name: "仕事のサブスクを、判断できる台帳へ。", exact: true })).toBeVisible();
+    await expect(page.getByText("ポートフォリオ版として、登録から全機能まで無料で利用できます。")).toBeVisible();
+  }
 });
 
 test("操作マニュアルの目次が各手順へ移動でき、スマートフォン幅では横にはみ出さない", async ({ page }) => {
@@ -38,13 +46,6 @@ test("操作マニュアルの目次が各手順へ移動でき、スマート�
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   await expect(page.getByText(/実際の請求、解約手続きは代行しません/)).toBeVisible();
-});
-
-test("特定商取引法ページに回答された販売者名を表示する", async ({ page }) => {
-  const response = await page.goto("/legal-notice");
-  expect(response?.ok()).toBe(true);
-  const sellerRow = page.locator("dl > div").filter({ has: page.getByText("販売事業者", { exact: true }) });
-  await expect(sellerRow.locator("dd")).toHaveText("神田靖雄");
 });
 
 test("スマートフォン幅でトップページのログイン導線が表示され横にはみ出さない", async ({ page }) => {
