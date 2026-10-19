@@ -3,7 +3,7 @@ import { z } from "zod";
 import { getVerifiedApiUser } from "@/lib/api-auth";
 import { MAX_CATEGORY_NAME_LENGTH } from "@/lib/app-constants";
 import { prisma } from "@/lib/prisma";
-import { FREE_CATEGORY_LIMIT } from "@/lib/plans";
+import { FREE_CATEGORY_LIMIT, isPremiumPlan } from "@/lib/plans";
 import { readJsonBody } from "@/lib/request-body";
 
 const schema = z.object({
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
       const [lockedUser] = await transaction.$queryRaw<Array<{ id: string; plan: string }>>`
         SELECT id, plan FROM User WHERE id = ${user.id} FOR UPDATE
       `;
-      if (lockedUser?.plan === "FREE") {
+      if (!isPremiumPlan(lockedUser?.plan)) {
         const count = await transaction.category.count({
           where: { userId: user.id },
         });

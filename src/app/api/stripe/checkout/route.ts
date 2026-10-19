@@ -32,6 +32,7 @@ import { validatePremiumStripePrice } from "@/lib/stripe-price";
 import { wantsStripeCheckoutRedirect } from "@/lib/stripe-checkout-response";
 import { readJsonBodyWithLimit } from "@/lib/request-body";
 import { STRIPE_LIVE_MODE_NOT_ALLOWED_ERROR } from "@/lib/stripe-secret-key";
+import { PORTFOLIO_FREE_MODE } from "@/lib/plans";
 
 class StripeConfigError extends Error {
   constructor(message: string, status = 500) {
@@ -256,6 +257,12 @@ async function customerSubscriptionState(client: Stripe, user: CheckoutUser) {
 export async function POST(request: Request) {
   const access = await getVerifiedApiUser();
   if (!access.ok) return access.response;
+  if (PORTFOLIO_FREE_MODE) {
+    return NextResponse.json(
+      { message: "現在はポートフォリオ版として全機能を無料で公開しているため、新規の有料契約は受け付けていません。" },
+      { status: 410 },
+    );
+  }
   const { user } = access;
   let confirmWithoutTrial = false;
   if (

@@ -1891,11 +1891,13 @@ export function PlanSettingsForm({
   stripeTestMode,
   canManageStripe,
   protectedAccount = false,
+  portfolioFreeMode = false,
 }: {
   plan: "FREE" | "PREMIUM" | "LIFETIME";
   stripeTestMode?: boolean;
   canManageStripe: boolean;
   protectedAccount?: boolean;
+  portfolioFreeMode?: boolean;
 }) {
   const router = useRouter();
   const [message, setMessage] = useState("");
@@ -2001,6 +2003,33 @@ export function PlanSettingsForm({
     } finally {
       setLoading("");
     }
+  }
+
+  if (portfolioFreeMode) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-950">
+          <p className="font-black">全機能を無料で利用できます</p>
+          <p className="mt-1">このポートフォリオ版では、サブスク登録数や分析・CSVなどの機能に制限はありません。新しい有料契約の受付も停止しています。</p>
+        </div>
+        {message && <p className="rounded-lg bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{message}</p>}
+        {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
+        {!protectedAccount && canManageStripe && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm leading-6 text-amber-950">
+            <p className="font-black">以前のStripe契約について</p>
+            <p className="mt-1">サービスの無料化でStripe契約は自動解約されません。継続課金の有無を確認し、必要ならStripeの契約管理画面で解約してください。</p>
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button type="button" disabled={Boolean(loading)} onClick={() => openStripe("/api/stripe/portal", "portal")} className="btn-secondary">
+                {loading === "portal" ? "Stripeを開いています..." : "既存契約・請求を確認"}
+              </button>
+              <button type="button" disabled={Boolean(loading)} onClick={syncBilling} className="btn-secondary">
+                {loading === "sync" ? "確認中..." : "Stripe契約状態を再確認"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
   }
 
   return (

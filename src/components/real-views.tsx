@@ -35,7 +35,7 @@ import {
 } from "@/lib/billing-reconciliation";
 import { prisma } from "@/lib/prisma";
 import { env, isProtectedAccountEmail } from "@/lib/env";
-import { FREE_SUBSCRIPTION_LIMIT, hiddenByPlan, isPremiumPlan, limitByPlan } from "@/lib/plans";
+import { FREE_SUBSCRIPTION_LIMIT, PORTFOLIO_FREE_MODE, hiddenByPlan, isPremiumPlan, limitByPlan } from "@/lib/plans";
 import { getPublishedAnnouncements } from "@/lib/admin";
 import { buildForecastSeries } from "@/lib/premium-insights";
 import { estimatedMonthlySaving, reviewScore } from "@/lib/subscription-insights";
@@ -63,7 +63,6 @@ import {
   summarizeCompletedSavings,
 } from "@/lib/subscription-savings";
 import { stripePlanTrialDisplay } from "@/lib/stripe-trial";
-import { stripeSubscriptionCanBeManaged } from "@/lib/stripe-entitlement";
 import { stripeCancellationScheduled } from "@/lib/stripe-subscription-period";
 import { UNUSED_USAGE_WINDOWS } from "@/lib/subscription-unused";
 import { syncStripeCheckoutSessionById } from "@/lib/stripe-billing";
@@ -1471,7 +1470,6 @@ export async function DashboardView() {
       </div>
       <footer className="mt-10 border-t border-slate-200 pt-5 pb-2" aria-label="サポート・法務情報">
         <nav className="flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold text-slate-600" aria-label="公開ページ">
-          <Link href="/legal-notice" className="hover:text-slate-950">特定商取引法に基づく表記</Link>
           <Link href="/privacy" className="hover:text-slate-950">プライバシーポリシー</Link>
           <Link href="/terms" className="hover:text-slate-950">利用規約</Link>
           <Link href="/faq" className="hover:text-slate-950">よくある質問</Link>
@@ -3949,7 +3947,7 @@ export async function BillingView({ checkoutStatus, checkoutSessionId }: Billing
     <AppShell>
       <PageHeader
         title="契約・解約"
-        description="プランの確認、Premium申込み、支払い方法の変更、解約、請求書の確認をまとめて行えます。"
+        description="SubscListは現在、全機能を無料で利用できます。過去にStripeで契約した場合は、下から請求状況の確認や解約を行えます。"
       />
       {checkoutNotice && (
         <div className={checkoutNotice.type === "success" ? "mb-5 rounded-lg bg-emerald-50 p-4 text-sm font-semibold text-emerald-700" : "mb-5 rounded-lg bg-red-50 p-4 text-sm font-semibold text-red-700"}>
@@ -3961,36 +3959,43 @@ export async function BillingView({ checkoutStatus, checkoutSessionId }: Billing
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h2 className="text-lg font-bold">プランと契約状態</h2>
-              <p className="mt-2 text-sm leading-6 text-slate-600">Freeと月額Premiumの違いを確認し、Stripeを通じて安全に契約・解約できます。</p>
+              <p className="mt-2 text-sm leading-6 text-slate-600">全機能を無料で利用できます。以前に開始したStripe契約はこの無料化によって自動解約されません。</p>
             </div>
             <span className="w-fit rounded-full bg-blue-50 px-3 py-1.5 text-sm font-black text-blue-800">
-              現在: {planLabel(user.plan)}
+              現在: {PORTFOLIO_FREE_MODE ? "Premium（無料公開版）" : planLabel(user.plan)}
             </span>
           </div>
-          <StripeTrialStatusCard
-            plan={user.plan}
-            stripeSubscriptionStatus={user.stripeCustomerId ? user.stripeSubscriptionStatus : null}
-            stripeTrialEndAt={user.stripeTrialEndAt}
-            trialUsedAt={user.trialUsedAt}
-          />
-          <StripeContractPeriodCard
-            plan={user.plan}
-            currentPeriodEnd={user.stripeCurrentPeriodEnd}
-            cancelAt={user.stripeCancelAt}
-            cancelAtPeriodEnd={user.stripeCancelAtPeriodEnd}
-          />
+          {(!PORTFOLIO_FREE_MODE || user.stripeCustomerId) && (
+            <>
+              <StripeTrialStatusCard
+                plan={user.plan}
+                stripeSubscriptionStatus={user.stripeCustomerId ? user.stripeSubscriptionStatus : null}
+                stripeTrialEndAt={user.stripeTrialEndAt}
+                trialUsedAt={user.trialUsedAt}
+              />
+              <StripeContractPeriodCard
+                plan={user.plan}
+                currentPeriodEnd={user.stripeCurrentPeriodEnd}
+                cancelAt={user.stripeCancelAt}
+                cancelAtPeriodEnd={user.stripeCancelAtPeriodEnd}
+              />
+            </>
+          )}
           <div className="mt-5">
             <PlanSettingsForm
               plan={user.plan}
               stripeTestMode={env.stripeTestMode}
-              canManageStripe={Boolean(user.stripeCustomerId) && stripeSubscriptionCanBeManaged(user.stripeSubscriptionStatus)}
+              canManageStripe={Boolean(user.stripeCustomerId)}
               protectedAccount={protectedAccount}
+              portfolioFreeMode={PORTFOLIO_FREE_MODE}
             />
           </div>
         </Card>
-        <div className="xl:col-span-2">
-          <StripeInvoicesCard result={stripeInvoicesResult} />
-        </div>
+        {(!PORTFOLIO_FREE_MODE || user.stripeCustomerId) && (
+          <div className="xl:col-span-2">
+            <StripeInvoicesCard result={stripeInvoicesResult} />
+          </div>
+        )}
       </div>
     </AppShell>
   );
@@ -4019,6 +4024,7 @@ export async function SettingsView({ emailChangeStatus }: { emailChangeStatus?: 
       email: true,
       emailVerified: true,
       createdAt: true,
+      stripeCustomerId: true,
     },
   });
   if (!user) return null;
@@ -4034,6 +4040,13 @@ export async function SettingsView({ emailChangeStatus }: { emailChangeStatus?: 
   return (
     <AppShell>
       <PageHeader title="設定" description="プロフィール、メールアドレス、パスワード、予算、通知、セキュリティを変更できます。" action={<LogoutButton />} />
+      {PORTFOLIO_FREE_MODE && user.stripeCustomerId && (
+        <Card className="mb-5 border-amber-300 bg-amber-50/95">
+          <h2 className="font-bold text-amber-950">以前のStripe契約をご確認ください</h2>
+          <p className="mt-2 text-sm leading-6 text-amber-900">SubscListは無料公開版になりましたが、過去に開始したStripe契約は自動解約されません。継続課金を止める場合は、契約内容を確認して解約してください。</p>
+          <Link href="/billing" className="btn-secondary mt-4 inline-flex">Stripe契約・請求を確認</Link>
+        </Card>
+      )}
       {emailChangeNotice && (
         <div className={emailChangeNotice.type === "success" ? "mb-5 rounded-lg bg-emerald-50 p-4 text-sm font-semibold text-emerald-700" : "mb-5 rounded-lg bg-red-50 p-4 text-sm font-semibold text-red-700"}>
           {emailChangeNotice.message}
@@ -4112,7 +4125,7 @@ export async function SettingsView({ emailChangeStatus }: { emailChangeStatus?: 
               完全削除を行うと、アカウントに紐づくサブスク、カテゴリ、支払い方法、通知設定、証跡、履歴をDBから削除します。取り消しはできません。
             </p>
             <p className="mt-2 text-sm font-semibold leading-6 text-rose-950">
-              Premium契約中の場合は、先に「契約管理・解約（Stripe）」で解約を完了してください。継続中または再開可能な契約がある間はアカウントを削除できません。
+              以前のStripe契約が継続中の場合は、先にStripe契約管理画面で解約を完了してください。継続中または再開可能な契約がある間はアカウントを削除できません。
             </p>
             <div className="mt-5"><AccountDeleteForm email={user.email} /></div>
           </Card>

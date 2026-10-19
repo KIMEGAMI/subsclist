@@ -17,7 +17,7 @@ import {
 } from "@/lib/app-constants";
 import { parseIsoCalendarDate } from "@/lib/calendar-date";
 import { prisma } from "@/lib/prisma";
-import { FREE_SUBSCRIPTION_LIMIT } from "@/lib/plans";
+import { FREE_SUBSCRIPTION_LIMIT, isPremiumPlan } from "@/lib/plans";
 import { readJsonBody } from "@/lib/request-body";
 import { ownsSubscriptionRelations } from "@/lib/subscription-relations";
 import {
@@ -165,7 +165,7 @@ export async function POST(request: Request) {
     const [lockedUser] = await transaction.$queryRaw<Array<{ id: string; plan: string }>>`
       SELECT id, plan FROM User WHERE id = ${user.id} FOR UPDATE
     `;
-    if (lockedUser?.plan === "FREE") {
+    if (!isPremiumPlan(lockedUser?.plan)) {
       const subscriptionCount = await transaction.subscription.count({
         where: { userId: user.id, deletedAt: null },
       });

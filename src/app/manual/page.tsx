@@ -1,7 +1,6 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
-import { FREE_CATEGORY_LIMIT, FREE_SUBSCRIPTION_LIMIT, PREMIUM_MONTHLY_PRICE_YEN, STRIPE_TRIAL_PERIOD_DAYS } from "@/lib/app-constants";
 
 export const metadata: Metadata = {
   title: "操作マニュアル | SubscList",
@@ -22,7 +21,7 @@ const contents = [
   ["savings", "節約実績"],
   ["notifications", "通知"],
   ["csv", "CSV入出力"],
-  ["billing", "Free・Premiumと契約・解約"],
+  ["billing", "無料公開版と以前のStripe契約"],
   ["settings", "設定・ログアウト・アカウント削除"],
   ["admin", "管理者の操作"],
   ["trouble", "困ったとき"],
@@ -201,18 +200,18 @@ export default function ManualPage() {
               "保存したファイルを開き、1行目のヘッダーと各列の説明を確認します。",
               "ファイルには契約や支払い情報が含まれます。共有先を確認し、安全な場所に保管してください。",
             ]} />
-            <p className="rounded-md bg-amber-50 p-3 text-amber-950">CSV取込でデータが二重にならないよう、実行前のプレビューを必ず確認してください。CSV入出力や明細候補検出はプランによって利用制限があります。</p>
+            <p className="rounded-md bg-amber-50 p-3 text-amber-950">CSV取込でデータが二重にならないよう、実行前のプレビューを必ず確認してください。</p>
           </ManualSection>
 
-          <ManualSection id="billing" title="13. Free・Premiumと契約・解約">
-            <p>Freeではサブスク{FREE_SUBSCRIPTION_LIMIT}件・カテゴリ{FREE_CATEGORY_LIMIT}件まで利用できます。Premiumは月額{PREMIUM_MONTHLY_PRICE_YEN}円で、初回のみ{STRIPE_TRIAL_PERIOD_DAYS}日間の無料期間が設定されている場合があります。申込前に「契約・解約」画面に表示される条件を確認してください。</p>
+          <ManualSection id="billing" title="13. 無料公開版と以前のStripe契約">
+            <p>現在はポートフォリオ用の無料公開版です。サブスク・カテゴリの登録数に上限はなく、CSV、分析、通知、解約支援を含む全機能を利用できます。新しい有料契約の申込みはできません。</p>
             <Steps items={[
-              "「契約・解約」を開き、現在のプラン、無料期間の終了日、次回請求日を確認します。",
-              "Premiumに申し込むときは申込ボタンを押し、Stripeの決済画面で支払い方法と条件を確認して手続きを完了します。",
-              "申込後にPremiumへ切り替わらない場合は、同画面の「課金状態を再確認」を押します。それでも変わらなければお問い合わせください。",
-              "解約するときは「Stripeの契約管理」を開き、Stripe側で解約を完了します。画面上で解約状態とPremium利用終了日を確認してください。",
+              "新しい利用者は、アカウント登録後すぐに全機能を無料で使えます。カード登録は不要です。",
+              "過去にStripe契約を開始した利用者は、「設定」に表示されるStripe契約・請求リンクを開きます。",
+              "Stripe上で契約状態、次回請求日、支払い方法を確認します。継続課金を止める場合はStripe側で解約を完了してください。",
+              "無料公開版への変更だけではStripe契約は解約されません。解約完了と請求停止をStripe側で確認してください。",
             ]} />
-            <p className="rounded-md bg-amber-50 p-3 text-amber-950">無料期間や次回請求の有無は個別の契約状態で異なります。申込画面とStripeの契約画面に表示される日付・金額を最終確認してください。</p>
+            <p className="rounded-md bg-amber-50 p-3 text-amber-950">SubscList側では既存Stripe契約を自動解約しません。請求停止を希望する場合は、Stripe上の契約状態を必ず確認してください。</p>
           </ManualSection>
 
           <ManualSection id="settings" title="14. 設定・ログアウト・アカウント削除">
@@ -224,7 +223,7 @@ export default function ManualPage() {
               "アカウントデータはJSONでダウンロードできます。アカウント削除は同じ設定画面の下部から行います。削除は取り消せません。",
               "ログアウトは設定画面上部の「ログアウト」を押します。共有端末では、利用後に必ずログアウトしてください。",
             ]} />
-            <p className="rounded-md bg-rose-50 p-3 font-semibold text-rose-950">Premium契約が継続中の場合は、先に契約を解約してください。デモアカウントと管理者アカウントは削除できません。</p>
+            <p className="rounded-md bg-rose-50 p-3 font-semibold text-rose-950">以前のStripe契約が継続中の場合は、先にStripe側で解約してください。デモアカウントと管理者アカウントは削除できません。</p>
           </ManualSection>
 
           <ManualSection id="admin" title="15. 管理者の操作（管理者のみ）">
@@ -254,7 +253,6 @@ export default function ManualPage() {
         <footer className="mt-5 flex flex-wrap gap-x-5 gap-y-2 px-1 text-sm font-semibold text-slate-700">
           <Link href="/terms" className="underline underline-offset-4">利用規約</Link>
           <Link href="/privacy" className="underline underline-offset-4">プライバシー</Link>
-          <Link href="/legal-notice" className="underline underline-offset-4">特定商取引法に基づく表記</Link>
           <Link href="/security" className="underline underline-offset-4">セキュリティ</Link>
         </footer>
       </div>

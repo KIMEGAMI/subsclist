@@ -6,7 +6,7 @@ import { useEffect, useState, type ReactNode } from "react";
 import { PwaInstallButton } from "@/components/pwa-install-button";
 
 const brand = "SubscList";
-const nav = [
+const nav: Array<{ label: string; href: string; icon: string; prefetch?: boolean }> = [
   { label: "Today", href: "/today", icon: "T" },
   { label: "ダッシュボード", href: "/dashboard", icon: "D" },
   { label: "契約ニュース", href: "/subscription-news", icon: "N" },
@@ -23,7 +23,6 @@ const nav = [
   { label: "節約実績", href: "/savings", icon: "S" },
   { label: "通知", href: "/notifications", icon: "N" },
   { label: "CSV", href: "/export", icon: "E" },
-  { label: "契約・解約", href: "/billing", icon: "B", prefetch: false },
   { label: "設定", href: "/settings", icon: "G" },
 ];
 

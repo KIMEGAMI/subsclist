@@ -8,6 +8,7 @@ import { getAllAnnouncements, getMaintenanceMode } from "@/lib/admin";
 import { requireAdminUser } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { env } from "@/lib/env";
+import { PORTFOLIO_FREE_MODE } from "@/lib/plans";
 import {
   NOTIFICATION_JOB_STATUS_KEY,
   notificationJobHealth,
@@ -22,7 +23,7 @@ const dateTimeFormatter = new Intl.DateTimeFormat("ja-JP", {
 });
 
 function planLabel(plan: string) {
-  return plan === "FREE" ? "Free" : "Premium";
+  return PORTFOLIO_FREE_MODE || plan !== "FREE" ? "Premium（無料公開版）" : "Free";
 }
 
 function notificationHealthLabel(health: NotificationJobHealth) {
@@ -217,7 +218,7 @@ export default async function AdminPage() {
                         <p className="text-xs text-slate-500">{user.email}</p>
                       </td>
                       <td className="py-3 pr-4">
-                        <span className={`rounded-full px-2 py-1 text-xs font-black ${user.plan === "FREE" ? "bg-slate-100 text-slate-700" : "bg-blue-50 text-blue-700"}`}>
+                        <span className={`rounded-full px-2 py-1 text-xs font-black ${!PORTFOLIO_FREE_MODE && user.plan === "FREE" ? "bg-slate-100 text-slate-700" : "bg-blue-50 text-blue-700"}`}>
                           {planLabel(user.plan)}
                         </span>
                       </td>

@@ -27,17 +27,11 @@
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
+    "**/*.mts",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
-    "**/*.mts",
-    ".next-codex-dev/types/**/*.ts",
-    ".next-codex-dev/dev/types/**/*.ts",
-    ".next-release-safe-20261012/types/**/*.ts",
-    ".next-release-safe-20261012/dev/types/**/*.ts",
-    ".next-codex-start-20261012/types/**/*.ts",
-    ".next-codex-start-20261012/dev/types/**/*.ts",
-    ".next-codex-start2-20261012/types/**/*.ts",
-    ".next-codex-start2-20261012/dev/types/**/*.ts"
+    ".next-dev/types/**/*.ts",
+    ".next-dev/dev/types/**/*.ts"
   ],
   "exclude": ["node_modules"]
 }

@@ -3,7 +3,6 @@ import Link from "next/link";
 import type { Metadata } from "next";
 import { Card } from "@/components/app-shell";
 import { DemoLoginButton } from "@/components/demo-login-button";
-import { FREE_SUBSCRIPTION_LIMIT, PREMIUM_MONTHLY_PRICE_YEN, STRIPE_TRIAL_PERIOD_DAYS } from "@/lib/app-constants";
 
 export const metadata: Metadata = {
   title: { absolute: "SubscList | サブスクリプション管理システム" },
@@ -34,17 +33,7 @@ export default function Home() {
     operatingSystem: "Web",
     description:
       "フリーランス・副業者・個人事業主の契約、更新日、仕事利用分、見直し候補をまとめて管理するサービスです。",
-    offers: [
-      { "@type": "Offer", name: "Free", price: "0", priceCurrency: "JPY" },
-      {
-        "@type": "Offer",
-        name: "Premium",
-        price: String(PREMIUM_MONTHLY_PRICE_YEN),
-        priceCurrency: "JPY",
-        billingDuration: "P1M",
-        description: `初回のみ${STRIPE_TRIAL_PERIOD_DAYS}日間お試し無料`,
-      },
-    ],
+    offers: { "@type": "Offer", name: "無料公開版", price: "0", priceCurrency: "JPY" },
   };
 
   return (
@@ -80,12 +69,9 @@ export default function Home() {
                 今すぐはじめる
               </Link>
               <DemoLoginButton />
-              <Link href="/pricing" className="inline-flex min-h-12 items-center justify-center rounded-full border border-slate-200 bg-white/85 px-7 py-3 text-center font-black text-slate-800 shadow-sm transition hover:-translate-y-0.5 hover:border-blue-200 hover:text-blue-700">
-                料金を見る
-              </Link>
             </div>
             <p className="mt-5 text-sm font-bold text-blue-700">
-              Premiumは初回のみ{STRIPE_TRIAL_PERIOD_DAYS}日間お試し無料。無料期間中に解約すれば料金はかかりません。
+              ポートフォリオ版として、登録から全機能まで無料で利用できます。
             </p>
           </div>
           <div className="relative min-h-[260px] sm:min-h-[360px] lg:min-h-[620px]">
@@ -135,22 +121,11 @@ export default function Home() {
       </section>
 
       <section className="bg-slate-950 px-4 py-16 text-white sm:px-6 lg:px-8">
-        <div className="mx-auto grid max-w-7xl gap-5 md:grid-cols-2">
-          <Card className="border-slate-200 bg-white text-slate-950">
-            <h3 className="text-2xl font-bold">Free</h3>
-            <p className="mt-2 text-4xl font-black">お試し</p>
-            <p className="mt-3 text-sm text-slate-950">{FREE_SUBSCRIPTION_LIMIT}件まで登録、基本通知、基本集計を利用できます。</p>
-          </Card>
-          <Card className="border-fuchsia-300/40 bg-white text-slate-950">
-            <h3 className="text-2xl font-bold">Premium</h3>
-            <p className="mt-2 text-4xl font-black">月額{PREMIUM_MONTHLY_PRICE_YEN}円</p>
-            <p className="mt-2 text-sm font-black text-blue-700">初回のみ{STRIPE_TRIAL_PERIOD_DAYS}日間お試し無料</p>
-            <p className="mt-2 text-sm font-bold text-blue-700">まずは無料で、CSV・分析・解約支援までPremium機能を試せます。</p>
-            <p className="mt-3 text-sm text-slate-600">登録無制限、CSV入出力、CSV明細候補検出、高度分析、支払い累計、見直しレポート、解約支援。</p>
-          </Card>
+        <div className="mx-auto max-w-7xl">
+          <h2 className="text-2xl font-black">すべての機能を、無料で。</h2>
+          <p className="mt-3 max-w-2xl text-sm leading-7 text-slate-200">サブスク登録数の上限や有料プランへの誘導はありません。アカウントを作成すると、CSV、分析、更新管理、解約支援を含む機能を利用できます。</p>
         </div>
         <div className="mx-auto mt-8 flex max-w-7xl flex-wrap gap-4 text-sm font-bold text-slate-300">
-          <Link href="/legal-notice" className="hover:text-white">特定商取引法に基づく表記</Link>
           <Link href="/privacy" className="hover:text-white">プライバシーポリシー</Link>
           <Link href="/terms" className="hover:text-white">利用規約</Link>
           <Link href="/faq" className="hover:text-white">よくある質問</Link>
