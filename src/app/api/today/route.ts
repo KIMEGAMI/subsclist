@@ -81,6 +81,6 @@ export async function GET() {
       reasons: ["契約中のサブスク"],
       };
     }).filter((item): item is NonNullable<typeof item> => item !== null).sort((left, right) => right.score - left.score || (right.publishedAt ?? "").localeCompare(left.publishedAt ?? "")).slice(0, 5),
-    plan: { name: user.plan, premium: isPremiumPlan(user.plan) },
+    plan: { name: isPremiumPlan(user.plan) ? "PREMIUM" : "FREE", premium: isPremiumPlan(user.plan) },
   }, { headers: { "Cache-Control": "private, no-store" } });
 }
