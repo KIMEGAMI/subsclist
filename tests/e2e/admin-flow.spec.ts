@@ -48,6 +48,12 @@ test("管理者はメンテナンスを切り替え、一般ユーザーだけ�
       await expect(guestPage).toHaveURL(/\/maintenance$/);
       await expect(guestPage.getByRole("heading", { name: "ただいまメンテナンス中です" })).toBeVisible();
     }
+    await guestPage.goto("/maintenance");
+    await expect(guestPage.getByRole("link", { name: "管理画面へ" })).toHaveCount(0);
+    await guestPage.getByRole("link", { name: "管理者ログインへ" }).click();
+    await expect(guestPage).toHaveURL(/\/login\?admin=1$/);
+    await expect(guestPage.getByRole("heading", { name: "管理者ログイン" })).toBeVisible();
+    await expect(guestPage.getByRole("textbox", { name: "メールアドレス" })).toBeVisible();
     const contact = await guestContext.request.get("/api/contact");
     expect(contact.status()).toBe(503);
     const privateApi = await guestContext.request.get("/api/today");
@@ -68,10 +74,34 @@ test("管理者はメンテナンスを切り替え、一般ユーザーだけ�
     await memberPage.goto("/dashboard");
     await expect(memberPage).toHaveURL(/\/maintenance$/);
     await expect(memberPage.getByRole("heading", { name: "ただいまメンテナンス中です" })).toBeVisible();
+    await memberPage.getByRole("link", { name: "管理者ログインへ" }).click();
+    await expect(memberPage).toHaveURL(/\/login\?admin=1$/);
+    await expect(memberPage.getByRole("heading", { name: "管理者ログイン" })).toBeVisible();
+    await memberPage.getByRole("textbox", { name: "メールアドレス" }).fill(process.env.E2E_MEMBER_EMAIL ?? "");
+    await memberPage.getByRole("textbox", { name: "パスワード" }).fill(password);
+    await memberPage.getByRole("button", { name: "ログイン", exact: true }).click();
+    await expect(memberPage.getByText("ログイン情報が正しくありません。")).toBeVisible();
+    await expect(memberPage).toHaveURL(/\/login\?admin=1$/);
   } finally {
     await memberContext.close();
-    await page.goto("/admin");
-    await page.getByRole("button", { name: "通常モードに戻す" }).click();
-    await expect(page.getByText("通常モード", { exact: true }).first()).toBeVisible();
   }
+
+  await page.goto("/maintenance");
+  await expect(page).toHaveURL(/\/admin$/, { timeout: AUTH_FLOW_TIMEOUT_MS });
+  await expect(page.getByRole("button", { name: "通常モードに戻す" })).toBeVisible();
+
+  await page.goto("/settings");
+  await page.getByRole("button", { name: "ログアウト", exact: true }).click();
+  await expect(page).toHaveURL(/\/login$/, { timeout: AUTH_FLOW_TIMEOUT_MS });
+  await page.goto("/maintenance");
+  await page.getByRole("link", { name: "管理者ログインへ" }).click();
+  await expect(page).toHaveURL(/\/login\?admin=1$/);
+  await expect(page.getByRole("heading", { name: "管理者ログイン" })).toBeVisible();
+  await page.getByRole("textbox", { name: "メールアドレス" }).fill(email);
+  await page.getByRole("textbox", { name: "パスワード" }).fill(password);
+  await page.getByRole("button", { name: "ログイン", exact: true }).click();
+  await expect(page).toHaveURL(/\/admin$/, { timeout: AUTH_FLOW_TIMEOUT_MS });
+  await expect(page.getByRole("button", { name: "通常モードに戻す" })).toBeVisible();
+  await page.getByRole("button", { name: "通常モードに戻す" }).click();
+  await expect(page.getByText("通常モード", { exact: true }).first()).toBeVisible();
 });
