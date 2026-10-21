@@ -116,6 +116,17 @@ test("production environment accepts configured live billing and delivery servic
   );
 });
 
+test("free portfolio mode does not require enabling live billing", () => {
+  assert.doesNotThrow(() =>
+    assertProductionEnvironment(
+      validProductionEnvironment({
+        SUBSCLIST_FREE_PORTFOLIO: "true",
+        STRIPE_LIVE_MODE_ALLOWED: "false",
+      }),
+    ),
+  );
+});
+
 test("Google OAuth may be disabled only when both credentials are omitted", () => {
   const environment = validProductionEnvironment();
   delete environment.GOOGLE_CLIENT_ID;

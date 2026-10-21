@@ -79,7 +79,10 @@ function assertProductionEnvironment(environment) {
   if (!stripeSecret.startsWith("sk_live_") || hasPlaceholder(stripeSecret)) {
     block("A production Stripe Live secret key must be configured.");
   }
-  if (environment.STRIPE_LIVE_MODE_ALLOWED !== "true") {
+  if (
+    environment.STRIPE_LIVE_MODE_ALLOWED !== "true" &&
+    environment.SUBSCLIST_FREE_PORTFOLIO !== "true"
+  ) {
     block("STRIPE_LIVE_MODE_ALLOWED must be true for production billing.");
   }
 
