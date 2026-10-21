@@ -15,6 +15,7 @@ import { readJsonBodyWithLimit } from "@/lib/request-body";
 const schema = z.object({
   email: z.string().trim().email(),
   password: z.string().min(1),
+  adminOnly: z.boolean().optional(),
 });
 
 const invalidCredentialsMessage = "ログイン情報が正しくありません。";
@@ -62,6 +63,11 @@ export async function POST(request: Request) {
         console.error("Account lock security email failed.");
       }
     }
+    return NextResponse.json({ message: invalidCredentialsMessage }, { status: 401 });
+  }
+
+  if (parsed.data.adminOnly && !isAdminEmail(user.email)) {
+    recordFailedAuthAttempt(attemptKey);
     return NextResponse.json({ message: invalidCredentialsMessage }, { status: 401 });
   }
 

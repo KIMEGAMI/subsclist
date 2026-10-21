@@ -108,7 +108,7 @@ function GoogleLoginMessage({ status }: { status?: string }) {
   return <p className="mt-4 rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{message}</p>;
 }
 
-export function LoginView({ googleStatus, notice, googleLoginEnabled = false }: { googleStatus?: string; notice?: string; googleLoginEnabled?: boolean } = {}) {
+export function LoginView({ googleStatus, notice, adminMode = false, googleLoginEnabled = false }: { googleStatus?: string; notice?: string; adminMode?: boolean; googleLoginEnabled?: boolean } = {}) {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -123,7 +123,7 @@ export function LoginView({ googleStatus, notice, googleLoginEnabled = false }: 
 
     setLoading(true);
     try {
-      const data = await postJson("/api/auth/login", { email, password });
+      const data = await postJson("/api/auth/login", { email, password, adminOnly: adminMode });
       router.push(data.redirectTo ?? (data.emailVerified ? "/today" : "/verify-email"));
       router.refresh();
     } catch (err) {
@@ -134,11 +134,12 @@ export function LoginView({ googleStatus, notice, googleLoginEnabled = false }: 
   }
 
   return (
-    <AuthFrame title={t.login}>
+    <AuthFrame title={adminMode ? "管理者ログイン" : t.login}>
+      {adminMode && <p className="mt-4 text-sm text-slate-600">管理者アカウントでログインしてください。</p>}
       <GoogleLoginMessage status={googleStatus} />
       {notice === "verification" && <p className="mt-4 rounded-lg bg-amber-50 p-3 text-sm font-semibold text-amber-800">{t.verificationNotice}</p>}
-      {googleLoginEnabled && <GoogleLoginButton />}
-      {googleLoginEnabled && <div className="my-5 flex items-center gap-3 text-xs font-bold text-slate-400"><span className="h-px flex-1 bg-slate-200" />{t.or}<span className="h-px flex-1 bg-slate-200" /></div>}
+      {!adminMode && googleLoginEnabled && <GoogleLoginButton />}
+      {!adminMode && googleLoginEnabled && <div className="my-5 flex items-center gap-3 text-xs font-bold text-slate-400"><span className="h-px flex-1 bg-slate-200" />{t.or}<span className="h-px flex-1 bg-slate-200" /></div>}
       <form onSubmit={submit} noValidate className="space-y-4">
         {error && <p className="rounded-lg bg-red-50 p-3 text-sm font-semibold text-red-700">{error}</p>}
         <label className="grid gap-2 text-sm font-semibold">
@@ -159,12 +160,12 @@ export function LoginView({ googleStatus, notice, googleLoginEnabled = false }: 
         </button>
       </form>
 
-      <div className="mt-5 border-t border-slate-200 pt-5 text-center">
+      {!adminMode && <div className="mt-5 border-t border-slate-200 pt-5 text-center">
         <p className="text-sm text-slate-600">{t.firstTime}</p>
         <Link href="/register" className="btn-secondary mt-3 w-full">
           {t.register}
         </Link>
-      </div>
+      </div>}
     </AuthFrame>
   );
 }
