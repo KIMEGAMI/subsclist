@@ -8,7 +8,7 @@ SubscListは、そうした継続課金をまとめて管理し、支出や更�
 
 **現在はポートフォリオ兼公開サービスとして、全機能を無料で提供しています。** サブスクの登録件数にも上限はありません。
 
-**サービスURL：** https://subsclist.shinji.work/
+**サービスURL：** https://subsclist.kimegami.jp/
 
 ## 作ったきっかけ
 
