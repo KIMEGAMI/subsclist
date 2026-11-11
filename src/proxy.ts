@@ -19,7 +19,7 @@ const allowedPathPrefixes = [
 ];
 
 const publicFilePattern =
-  /\.(?:ico|png|jpg|jpeg|gif|webp|svg|css|js|txt|xml|webmanifest)$/;
+  /\.(?:ico|png|jpg|jpeg|gif|webp|svg|css|js|txt|xml|html|webmanifest)$/;
 
 async function isVerifiedAdmin(request: NextRequest) {
   const authSecret = process.env.AUTH_SECRET ?? process.env.NEXTAUTH_SECRET ?? "";

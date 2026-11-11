@@ -196,3 +196,8 @@ textarea {
     backdrop-filter: none !important;
   }
 }
+@media (display-mode: standalone) {
+  .pwa-install-button {
+    display: none;
+  }
+}
