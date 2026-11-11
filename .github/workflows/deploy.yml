@@ -38,12 +38,11 @@ env:
   SMTP_USER: ci@example.com
   ADMIN_USER_EMAIL: admin@example.com
   DEMO_USER_EMAIL: user@example.com
-  SUBSCLIST_FREE_PORTFOLIO: "true"
 
 jobs:
   verify:
     name: Verify before deploy
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     outputs:
       verified_sha: ${{ steps.capture-sha.outputs.sha }}
@@ -93,8 +92,10 @@ jobs:
       - name: Install dependencies
         run: npm ci --ignore-scripts
 
-      - name: Install Playwright browser
-        run: npx playwright install --with-deps chrome
+      - name: Verify preinstalled Google Chrome for Playwright
+        run: |
+          command -v google-chrome
+          google-chrome --version
 
       - name: Generate Prisma Client
         run: npm run prisma:generate
