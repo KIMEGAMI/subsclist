@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#2563eb" />
+    <title>オフライン | SubscList</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: system-ui, sans-serif;
+      }
+      body {
+        min-height: 100vh;
+        margin: 0;
+        display: grid;
+        place-items: center;
+        background: #f1f5f9;
+        color: #0f172a;
+      }
+      main {
+        width: min(100% - 2rem, 28rem);
+        padding: 2rem;
+        border: 1px solid #cbd5e1;
+        border-radius: 1rem;
+        background: #fff;
+        box-shadow: 0 16px 40px rgb(15 23 42 / 10%);
+      }
+      h1 {
+        margin: 0;
+        font-size: 1.5rem;
+      }
+      p {
+        margin: 1rem 0 0;
+        color: #334155;
+        line-height: 1.8;
+      }
+      a {
+        display: inline-flex;
+        min-height: 2.75rem;
+        align-items: center;
+        margin-top: 1.5rem;
+        padding: 0 1rem;
+        border-radius: 0.5rem;
+        background: #1d4ed8;
+        color: #fff;
+        font-weight: 700;
+        text-decoration: none;
+      }
+      a:focus-visible {
+        outline: 3px solid #0f172a;
+        outline-offset: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>インターネットに接続できません</h1>
+      <p>
+        接続が戻ったら、もう一度お試しください。契約情報や支払い情報は端末に保存していないため、オフライン中は表示できません。
+      </p>
+      <a href="/">接続を再試行</a>
+    </main>
+  </body>
+</html>

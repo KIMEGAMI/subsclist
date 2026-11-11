@@ -7,7 +7,8 @@
     "build": "node scripts/prisma-generate.cjs && next build --webpack",
     "start": "next start --hostname 127.0.0.1",
     "lint": "eslint",
-    "test": "npm run test:portfolio-mode && npm run test:billing && npm run test:billing-reconciliation && npm run test:notification-reliability && npm run test:insights && npm run test:business && npm run test:candidates && npm run test:engagement && npm run test:job-secret && npm run test:today && npm run test:saas-watch && npm run test:product-value && npm run test:stripe-period && npm run test:onboarding && npm run test:payment-export && npm run test:calendar-export && npm run test:account-data-export && npm run test:payment-organization && npm run test:action-inbox && npm run test:subscription-list && npm run test:subscription-bulk-update && npm run test:subscription-form-errors && npm run test:monthly-close && npm run test:operation-score && npm run test:renewal-decision && npm run test:mail && npm run test:db-guard",
+    "test": "npm run test:portfolio-mode && npm run test:billing && npm run test:billing-reconciliation && npm run test:notification-reliability && npm run test:insights && npm run test:business && npm run test:candidates && npm run test:engagement && npm run test:job-secret && npm run test:today && npm run test:saas-watch && npm run test:product-value && npm run test:stripe-period && npm run test:onboarding && npm run test:payment-export && npm run test:calendar-export && npm run test:account-data-export && npm run test:payment-organization && npm run test:action-inbox && npm run test:subscription-list && npm run test:subscription-bulk-update && npm run test:subscription-form-errors && npm run test:monthly-close && npm run test:operation-score && npm run test:renewal-decision && npm run test:mail && npm run test:db-guard && npm run test:pwa",
+    "test:pwa": "node --test scripts/lib/service-worker.test.mjs",
     "test:billing": "node --experimental-strip-types --test src/lib/billing.test.ts src/lib/stripe-trial-history.test.ts",
     "test:portfolio-mode": "node --experimental-strip-types --test src/lib/portfolio-mode.test.ts",
     "test:billing-reconciliation": "node --experimental-strip-types --test src/lib/billing-reconciliation.test.ts",
@@ -59,7 +60,7 @@
     "@types/nodemailer": "^8.0.1",
     "bcryptjs": "^3.0.3",
     "mariadb": "^3.5.4",
-    "next": "^16.3.4",
+    "next": "^16.4.5",
     "nodemailer": "^10.1.0",
     "prettier": "^3.9.0",
     "prisma": "^7.10.0",
@@ -75,7 +76,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
-    "@vitest/coverage-v8": "^4.1.11",
+    "@vitest/coverage-v8": "^4.1.12",
     "eslint": "^9",
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-jsx-a11y": "^6.10.2",
@@ -85,7 +86,7 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "typescript-eslint": "^8.62.0",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   },
   "overrides": {
     "mariadb": "$mariadb",
@@ -93,7 +94,7 @@
       "deepmerge-ts": "8.0.2"
     },
     "browserslist": "4.28.7",
-    "fast-uri": "3.1.8",
+    "fast-uri": "3.1.9",
     "mysql2": "3.24.3",
     "vite": "8.2.4"
   }

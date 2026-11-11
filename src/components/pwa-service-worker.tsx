@@ -5,12 +5,24 @@ import { useEffect } from "react";
 async function removeServiceWorkersAndCaches() {
   const registrations = await navigator.serviceWorker.getRegistrations();
   await Promise.all(
-    registrations.map((registration) => registration.unregister()),
+    registrations
+      .filter((registration) => {
+        const worker =
+          registration.active ??
+          registration.waiting ??
+          registration.installing;
+        return worker ? new URL(worker.scriptURL).pathname === "/sw.js" : false;
+      })
+      .map((registration) => registration.unregister()),
   );
 
   if ("caches" in window) {
     const cacheKeys = await caches.keys();
-    await Promise.all(cacheKeys.map((key) => caches.delete(key)));
+    await Promise.all(
+      cacheKeys
+        .filter((key) => key.startsWith("subsclist-shell-"))
+        .map((key) => caches.delete(key)),
+    );
   }
 }
 
